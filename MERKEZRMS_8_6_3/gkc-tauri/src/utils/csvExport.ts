@@ -1,0 +1,69 @@
+const YTBS_CSV_HEADERS = [
+  'Zaman',
+  'y1 (Frekans)',
+  'y2',
+  'y3 (Gerilim A)',
+  'y4 (Gerilim B)',
+  'y5 (Gerilim C)',
+  'y6',
+  'y7 (Akim A)',
+  'y8 (Akim B)',
+  'y9 (Akim C)',
+  'y10',
+  'y11 (Aktif Guc)',
+  'y12 (Reaktif Guc)',
+  'y13 (Gorunen Guc)',
+  'y14',
+  'y15',
+];
+
+const YTBS_CSV_KEYS = [
+  'zaman',
+  'y1',
+  'y2',
+  'y3',
+  'y4',
+  'y5',
+  'y6',
+  'y7',
+  'y8',
+  'y9',
+  'y10',
+  'y11',
+  'y12',
+  'y13',
+  'y14',
+  'y15',
+];
+
+const numericTextPattern = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+export function formatCsvCellForExcelTr(value: unknown): string {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+
+  let text: string;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    text = value.toString().replace('.', ',');
+  } else if (typeof value === 'string' && numericTextPattern.test(value.trim())) {
+    text = value.trim().replace('.', ',');
+  } else {
+    text = String(value);
+  }
+
+  if (/[;"\r\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+
+  return text;
+}
+
+export function buildYtbsCsv(rawData: Record<string, unknown>[]): string {
+  const headerRow = YTBS_CSV_HEADERS.map(formatCsvCellForExcelTr).join(';');
+  const dataRows = rawData.map(item =>
+    YTBS_CSV_KEYS.map(key => formatCsvCellForExcelTr(item[key])).join(';')
+  );
+
+  return `\uFEFFsep=;\r\n${headerRow}\r\n${dataRows.join('\r\n')}`;
+}

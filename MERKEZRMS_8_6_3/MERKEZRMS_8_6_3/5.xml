@@ -1,0 +1,1049 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<root ScreenHeight="1080" ScreenWidth="1780">
+  <children Hidden="false" Size="8.0" id="5" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>25_2_0_0</links>
+    <position x="196.0" y="404.0"/>
+  </children>
+  <children Hidden="false" Size="8.0" id="6" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>31_2_0_1</links>
+    <position x="144.0" y="459.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="7" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>10_2_0_0</links>
+    <position x="195.0" y="212.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="8" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>9_2_0_0 77_2_0_0</links>
+    <position x="196.0" y="650.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="9" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>8_2_0_0 29_2_0_1</links>
+    <position x="145.0" y="650.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="10" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>7_2_0_0 31_2_0_0</links>
+    <position x="144.0" y="212.0"/>
+  </children>
+  <children RelatedElementID="0" id="21" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="180.0" y="217.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="22" kind="DataLabel" text="2609">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="95.0" y="503.0"/>
+  </children>
+  <children RelatedElementID="0" id="23" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="180.0" y="336.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="24" kind="DataLabel" text="2605">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="216.0" y="499.0"/>
+  </children>
+  <children RelatedElementID="0" id="25" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>5_2_0_0</links>
+    <position x="181.0" y="463.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="26" kind="DataLabel" text="2607">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="221.0" y="620.0"/>
+  </children>
+  <children RelatedElementID="0" id="27" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="181.0" y="586.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="28" kind="DataLabel" text="2653">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="221.0" y="370.0"/>
+  </children>
+  <children RelatedElementID="0" id="29" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>9_2_1_0</links>
+    <position x="129.0" y="467.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="13" id="30" kind="DataLabel" text="2651">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="215.0" y="251.0"/>
+  </children>
+  <children RelatedElementID="0" id="31" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>6_2_1_0 10_2_0_0</links>
+    <position x="129.0" y="261.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="32" kind="DataLabel" text="2659">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="92.0" y="297.0"/>
+  </children>
+  <children RelatedElementID="standalone" id="33" kind="Kesici">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="186.0" y="525.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="34" kind="DataLabel" text="2606">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="213.0" y="560.0"/>
+  </children>
+  <children RelatedElementID="standalone" id="35" kind="Kesici">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="185.0" y="277.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="36" kind="DataLabel" text="2652">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="217.0" y="312.0"/>
+  </children>
+  <children RelatedElementID="0" id="37" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="270.0"/>
+    <color>RED</color>
+    <links>39_2_1_0</links>
+    <position x="215.0" y="182.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="38" kind="DataLabel" text="2650">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="209.0" y="188.0"/>
+  </children>
+  <children Size="3" id="39" kind="Toprak">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="90.0"/>
+    <color>RED</color>
+    <links>37_2_0_1</links>
+    <position x="280.0" y="187.0"/>
+  </children>
+  <children id="101" kind="Ok">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="188.0" y="178.0"/>
+  </children>
+  <children id="107" kind="Bara">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>6</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position P1x="-250.0" P2x="550.0" x="367.0" y="404.0"/>
+  </children>
+  <children id="104" kind="Bara">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>6</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position P1x="-260.0" P2x="560.0" x="372.0" y="459.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="760" kind="DataLabel" text="V_7">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="232.0" y="707.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="195" kind="DataLabel" text="V_8">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="517.0" y="877.0"/>
+  </children>
+  <children id="197" kind="Trafo">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="176.0" y="794.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="199" kind="DataLabel" text="MALTEPE">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="174.0" y="168.0"/>
+  </children>
+  <children Hidden="false" Size="8.0" id="228" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>248_2_0_0</links>
+    <position x="468.0" y="403.0"/>
+  </children>
+  <children Hidden="false" Size="8.0" id="230" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>260_2_0_1</links>
+    <position x="416.0" y="458.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="232" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>238_2_0_0</links>
+    <position x="467.0" y="211.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="234" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>236_2_0_0 578_2_0_0</links>
+    <position x="468.0" y="649.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="236" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>234_2_0_0 256_2_0_1</links>
+    <position x="417.0" y="649.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="238" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>232_2_0_0 260_2_0_0</links>
+    <position x="416.0" y="211.0"/>
+  </children>
+  <children RelatedElementID="0" id="240" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="452.0" y="216.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="242" kind="DataLabel" text="2649">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="367.0" y="504.0"/>
+  </children>
+  <children RelatedElementID="0" id="244" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="452.0" y="334.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="246" kind="DataLabel" text="2645">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="488.0" y="498.0"/>
+  </children>
+  <children RelatedElementID="0" id="248" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>228_2_0_0</links>
+    <position x="453.0" y="462.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="250" kind="DataLabel" text="2647">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="493.0" y="619.0"/>
+  </children>
+  <children RelatedElementID="0" id="252" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="360.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="453.0" y="585.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="254" kind="DataLabel" text="2623">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="490.0" y="372.0"/>
+  </children>
+  <children RelatedElementID="0" id="256" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>236_2_1_0</links>
+    <position x="401.0" y="466.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="258" kind="DataLabel" text="2621">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="482.0" y="252.0"/>
+  </children>
+  <children RelatedElementID="0" id="260" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>230_2_1_0 238_2_0_0</links>
+    <position x="401.0" y="252.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="262" kind="DataLabel" text="2629">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="360.0" y="283.0"/>
+  </children>
+  <children RelatedElementID="standalone" id="264" kind="Kesici">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="458.0" y="524.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="266" kind="DataLabel" text="2646">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="485.0" y="559.0"/>
+  </children>
+  <children RelatedElementID="standalone" id="268" kind="Kesici">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="457.0" y="276.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="270" kind="DataLabel" text="2622">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="489.0" y="311.0"/>
+  </children>
+  <children RelatedElementID="0" id="272" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="270.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="487.0" y="181.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="274" kind="DataLabel" text="2620">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="492.0" y="194.0"/>
+  </children>
+  <children id="276" kind="Ok">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="460.0" y="177.0"/>
+  </children>
+  <children id="278" kind="Trafo">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="447.0" y="792.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="280" kind="DataLabel" text="GÖLBAŞI">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="440.0" y="164.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="61" kind="DataLabel" text="I_7">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="236.0" y="730.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="62" kind="DataLabel" text="I_8">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="518.0" y="897.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="63" kind="DataLabel" text="P_7">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="233.0" y="752.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="64" kind="DataLabel" text="P_8">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="518.0" y="919.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="65" kind="DataLabel" text="Q_7">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="233.0" y="771.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="66" kind="DataLabel" text="Q_8">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="514.0" y="939.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="67" kind="DataLabel" text="V_270">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="223.0" y="886.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="68" kind="DataLabel" text="I_270">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="223.0" y="910.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="69" kind="DataLabel" text="P_270">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="219.0" y="934.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="70" kind="DataLabel" text="Q_270">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="219.0" y="954.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="76" kind="DataLabel" text="V_271">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="506.0" y="698.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="78" kind="DataLabel" text="I_271">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="507.0" y="718.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="80" kind="DataLabel" text="P_271">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="507.0" y="736.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="82" kind="DataLabel" text="Q_271">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="505.0" y="755.0"/>
+  </children>
+  <children id="83" kind="Trafo">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position x="176.0" y="813.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="77" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>8_2_0_0</links>
+    <position x="196.0" y="792.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="578" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>RED</color>
+    <links>234_2_0_0</links>
+    <position x="467.0" y="789.0"/>
+  </children>
+  <children id="577" kind="Trafo">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position x="447.0" y="815.0"/>
+  </children>
+  <children Size="3" id="580" kind="Toprak">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="90.0"/>
+    <color>RED</color>
+    <links/>
+    <position x="511.0" y="185.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="581" kind="DataLabel" text="TR-1">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="116.0" y="810.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="582" kind="DataLabel" text="ABB">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="117.0" y="827.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="583" kind="DataLabel" text="TR-2">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="392.0" y="807.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="584" kind="DataLabel" text="AEG-ETİ">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="380.0" y="826.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="169" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>1192_2_0_0</links>
+    <position x="197.0" y="855.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="170" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>1003_2_0_0</links>
+    <position x="467.0" y="857.0"/>
+  </children>
+  <children id="848" kind="Bara">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>6</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position P1x="-370.0" P2x="670.0" x="432.0" y="1068.0"/>
+  </children>
+  <children id="849" kind="Bara">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>6</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position P1x="-370.0" P2x="670.0" x="435.0" y="1094.0"/>
+  </children>
+  <children id="850" kind="Bara">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>6</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position P1x="-370.0" P2x="670.0" x="433.0" y="1118.0"/>
+  </children>
+  <children Hidden="false" Size="7.0" id="851" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>854_2_0_0</links>
+    <position x="286.0" y="1119.0"/>
+  </children>
+  <children Hidden="false" Size="7.0" id="852" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>856_2_0_0</links>
+    <position x="239.0" y="1095.0"/>
+  </children>
+  <children Hidden="false" Size="7.0" id="853" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>858_2_0_0</links>
+    <position x="195.0" y="1069.0"/>
+  </children>
+  <children RelatedElementID="0" id="854" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>851_2_0_0 972_2_1_0</links>
+    <position x="271.0" y="1201.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="855" kind="DataLabel" text="854">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="304.0" y="1232.0"/>
+  </children>
+  <children RelatedElementID="0" id="856" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>852_2_0_0</links>
+    <position x="224.0" y="1171.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="857" kind="DataLabel" text="856">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="250.0" y="1207.0"/>
+  </children>
+  <children RelatedElementID="0" id="858" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="360.0"/>
+    <color>GREEN</color>
+    <links>853_2_0_0 973_2_1_0</links>
+    <position x="179.0" y="1173.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="859" kind="DataLabel" text="858">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="154.0" y="1207.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="860" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>973_2_0_0</links>
+    <position x="238.0" y="1235.0"/>
+  </children>
+  <children RelatedElementID="standalone" id="861" kind="Kesici">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position x="228.0" y="1239.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="862" kind="DataLabel" text="855">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="190.0" y="1272.0"/>
+  </children>
+  <children Size="3" id="969" kind="Toprak">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="270.0"/>
+    <color>GREEN</color>
+    <links>970_2_0_0</links>
+    <position x="126.0" y="1352.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="970" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>969_2_0_0 972_2_0_0 1082_2_0_1</links>
+    <position x="238.0" y="1377.0"/>
+  </children>
+  <children id="971" kind="Ok">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="180.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position x="230.0" y="1380.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="972" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>854_2_0_1 970_2_0_0</links>
+    <position x="286.0" y="1377.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="973" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>858_2_0_1 860_2_0_0</links>
+    <position x="194.0" y="1235.0"/>
+  </children>
+  <children RelatedElementID="0" id="1082" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>970_2_1_0</links>
+    <position x="223.0" y="1300.0"/>
+  </children>
+  <children RelatedElementID="0" id="1192" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>169_2_0_0</links>
+    <position x="181.0" y="1002.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="1193" kind="DataLabel" text="809">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="155.0" y="1037.0"/>
+  </children>
+  <children Hidden="false" Size="7.0" id="580" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>586_2_0_0</links>
+    <position x="559.0" y="1118.0"/>
+  </children>
+  <children Hidden="false" Size="7.0" id="582" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>590_2_0_0</links>
+    <position x="512.0" y="1094.0"/>
+  </children>
+  <children Hidden="false" Size="7.0" id="584" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>594_2_0_0</links>
+    <position x="467.0" y="1069.0"/>
+  </children>
+  <children RelatedElementID="0" id="586" kind="Anahtar">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="360.0"/>
+    <color>GREEN</color>
+    <links>580_2_0_0 610_2_1_0</links>
+    <position x="544.0" y="1224.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="588" kind="DataLabel" text="784">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="581.0" y="1256.0"/>
+  </children>
+  <children RelatedElementID="0" id="590" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>582_2_0_0</links>
+    <position x="497.0" y="1170.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="592" kind="DataLabel" text="786">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="523.0" y="1206.0"/>
+  </children>
+  <children RelatedElementID="0" id="594" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="360.0"/>
+    <color>GREEN</color>
+    <links>584_2_0_0 612_2_1_0</links>
+    <position x="452.0" y="1172.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="596" kind="DataLabel" text="785">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="427.0" y="1206.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="598" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>612_2_0_0</links>
+    <position x="511.0" y="1234.0"/>
+  </children>
+  <children RelatedElementID="standalone" id="600" kind="Kesici">
+    <Active>Off</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position x="501.0" y="1238.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="602" kind="DataLabel" text="789">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="405.0" y="1283.0"/>
+  </children>
+  <children Size="3" id="604" kind="Toprak">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="270.0"/>
+    <color>GREEN</color>
+    <links>606_2_0_0</links>
+    <position x="399.0" y="1351.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="606" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>604_2_0_0 610_2_0_0 614_2_0_1</links>
+    <position x="511.0" y="1376.0"/>
+  </children>
+  <children id="608" kind="Ok">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="180.0"/>
+    <color>GREEN</color>
+    <links/>
+    <position x="503.0" y="1379.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="610" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>586_2_0_1 606_2_0_0</links>
+    <position x="559.0" y="1376.0"/>
+  </children>
+  <children Hidden="false" Size="4.0" id="612" kind="Birlestirici">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>594_2_0_1 598_2_0_0</links>
+    <position x="467.0" y="1234.0"/>
+  </children>
+  <children RelatedElementID="0" id="614" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>606_2_1_0</links>
+    <position x="496.0" y="1299.0"/>
+  </children>
+  <children RelatedElementID="standalone" fontSize="12" id="618" kind="DataLabel" text="810">
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>BLACK</color>
+    <links/>
+    <position x="428.0" y="1036.0"/>
+  </children>
+  <children RelatedElementID="0" id="1003" kind="Anahtar">
+    <Active>On</Active>
+    <Scale x="1.0" y="1.0"/>
+    <Stroke>2</Stroke>
+    <Rotation theAngle="0.0"/>
+    <color>GREEN</color>
+    <links>170_2_0_0</links>
+    <position x="452.0" y="1001.0"/>
+  </children>
+</root>
