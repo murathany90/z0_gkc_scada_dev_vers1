@@ -509,8 +509,13 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   },
 
   startListening: () => {
+    const tauriWindow = window as Window & { __TAURI_INTERNALS__?: unknown };
+    if (!tauriWindow.__TAURI_INTERNALS__) {
+      return;
+    }
+
     // Veri kaynağı değişikliğini dinle
-    listen<string>('data-source-changed', (event) => {
+    void listen<string>('data-source-changed', (event) => {
       const sourceMap: Record<string, DataSourceType> = {
         'Primary': 'primary',
         'YTBS': 'ytbs',
@@ -518,16 +523,20 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
         'None': 'none',
       };
       set({ dataSource: sourceMap[event.payload] || 'none' });
+    }).catch((error) => {
+      console.warn('YTBS veri kaynagi dinleyicisi baslatilamadi:', error);
     });
 
     // YTBS oturum süresi dolma olayını dinle
-    listen<string>('ytbs-session-expired', () => {
+    void listen<string>('ytbs-session-expired', () => {
       set({ status: 'expired' });
       useLogStore.getState().addLog({
         type: 'WARN',
         message: 'YTBS oturum süresi doldu. Yeniden giriş gerekli.',
         endpoint: 'ytbs.teias.gov.tr',
       });
+    }).catch((error) => {
+      console.warn('YTBS oturum dinleyicisi baslatilamadi:', error);
     });
   },
 }));

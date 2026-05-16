@@ -39,6 +39,7 @@ import { buildScadaDataRateSeries, formatDataRatePerMinute } from './utils/scada
 import { buildScadaQueryChunks } from './utils/scadaQueryChunks';
 import { buildYtbsChartGroups, type YtbsChartGroup, type YtbsTimeResolution } from './utils/ytbsPmu';
 import { buildYtbsQueryChunks } from './utils/ytbsQueryChunks';
+import { OscillationPage } from './features/oscillation/components/OscillationPage';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
 
@@ -900,6 +901,9 @@ function App() {
             <button className={`nav-item ${activeTab === 'ytbs_gkc' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_gkc')} title="YTBS GKÇ Veri" aria-label="YTBS GKÇ Veri">
               📡 <span className="nav-text">YTBS GKÇ Veri</span>
             </button>
+            <button className={`nav-item ${activeTab === 'oscillation' ? 'active' : ''}`} onClick={() => setActiveTab('oscillation')} title="Salınım Algılayıcı" aria-label="Salınım Algılayıcı">
+              <span className="nav-text">Salınım Algılayıcı</span>
+            </button>
             <button className={`nav-item ${activeTab === 'rms' ? 'active' : ''}`} onClick={() => setActiveTab('rms')} title="RMS Verileri" aria-label="RMS Verileri">
               📊 <span className="nav-text">RMS Verileri</span>
             </button>
@@ -1317,6 +1321,10 @@ function App() {
                 </div>
               )}
             </>
+          )}
+
+          {activeTab === 'oscillation' && (
+            <OscillationPage themeMode={themeMode} />
           )}
 
           {/* YTBS SCADA Veri — Tarih Aralığı Sorgusu */}

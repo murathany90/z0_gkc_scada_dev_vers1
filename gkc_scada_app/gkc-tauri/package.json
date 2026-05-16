@@ -18,6 +18,7 @@
     "test:scada-data-rate": "node scripts/scadaDataRate.test.ts",
     "test:scada-query-chunks": "node scripts/scadaQueryChunks.test.ts",
     "test:ytbs-pmu": "node scripts/ytbsPmu.test.ts",
+    "test:oscillation": "node scripts/oscillation.test.ts",
     "test:scada-quality-report": "node scripts/scadaQualityReport.test.ts",
     "test:scada-details": "node scripts/scadaPointDetails.test.ts"
   },
@@ -30,6 +31,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.15.0",
+    "tauri-plugin-mcp": "^0.1.0",
     "zustand": "^5.0.13"
   },
   "devDependencies": {

@@ -40,8 +40,13 @@ export const useRmsStore = create<RmsStore>((set, get) => ({
   maxSamples: 1200, // 1 saatlik veri (3 sn aralıkla)
 
   startListening: () => {
+    const tauriWindow = window as Window & { __TAURI_INTERNALS__?: unknown };
+    if (!tauriWindow.__TAURI_INTERNALS__) {
+      return;
+    }
+
     // RMS veri olayını dinle
-    listen<RmsData>('rms-data', (event) => {
+    void listen<RmsData>('rms-data', (event) => {
       const state = get();
       const newData = [...state.data, event.payload].slice(-state.maxSamples);
       set({
@@ -49,16 +54,20 @@ export const useRmsStore = create<RmsStore>((set, get) => ({
         latestData: event.payload,
         error: null,
       });
+    }).catch((error) => {
+      console.warn('RMS veri dinleyicisi baslatilamadi:', error);
     });
 
     // Bağlantı hatası olayını dinle
-    listen<string>('connection-error', (event) => {
+    void listen<string>('connection-error', (event) => {
       set({ error: event.payload });
       useLogStore.getState().addLog({
         type: 'ERROR',
         message: `Bağlantı hatası: ${event.payload}`,
         endpoint: 'WebSocket/IPC',
       });
+    }).catch((error) => {
+      console.warn('Baglanti hata dinleyicisi baslatilamadi:', error);
     });
   },
 
