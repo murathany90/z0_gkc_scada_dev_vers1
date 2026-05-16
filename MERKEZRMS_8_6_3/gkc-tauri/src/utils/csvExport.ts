@@ -36,6 +36,16 @@ const YTBS_CSV_KEYS = [
   'y15',
 ];
 
+const YTBS_SCADA_CSV_HEADERS = [
+  'Zaman',
+  'Deger',
+  'Birim',
+  'B1',
+  'B2',
+  'B3',
+  'Element',
+];
+
 const numericTextPattern = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
 export function formatCsvCellForExcelTr(value: unknown): string {
@@ -63,6 +73,26 @@ export function buildYtbsCsv(rawData: Record<string, unknown>[]): string {
   const headerRow = YTBS_CSV_HEADERS.map(formatCsvCellForExcelTr).join(';');
   const dataRows = rawData.map(item =>
     YTBS_CSV_KEYS.map(key => formatCsvCellForExcelTr(item[key])).join(';')
+  );
+
+  return `\uFEFFsep=;\r\n${headerRow}\r\n${dataRows.join('\r\n')}`;
+}
+
+export function buildYtbsScadaCsv(
+  rawData: Record<string, unknown>[],
+  context: { unit: string; b1: string; b2: string; b3: string; element: string },
+): string {
+  const headerRow = YTBS_SCADA_CSV_HEADERS.map(formatCsvCellForExcelTr).join(';');
+  const dataRows = rawData.map(item =>
+    [
+      item.zaman,
+      item.deger,
+      context.unit,
+      context.b1,
+      context.b2,
+      context.b3,
+      context.element,
+    ].map(formatCsvCellForExcelTr).join(';')
   );
 
   return `\uFEFFsep=;\r\n${headerRow}\r\n${dataRows.join('\r\n')}`;

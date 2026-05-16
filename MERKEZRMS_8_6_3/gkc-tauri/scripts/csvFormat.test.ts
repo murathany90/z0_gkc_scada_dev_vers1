@@ -1,4 +1,4 @@
-import { buildYtbsCsv, formatCsvCellForExcelTr } from '../src/utils/csvExport.js';
+import { buildYtbsCsv, buildYtbsScadaCsv, formatCsvCellForExcelTr } from '../src/utils/csvExport.ts';
 
 const assert = {
   equal(actual: unknown, expected: unknown) {
@@ -39,3 +39,16 @@ assert.ok(csv.includes('4065,14258926128'));
 assert.ok(csv.includes('68,569088'));
 assert.ok(csv.includes('-88,643684'));
 assert.ok(!csv.includes('4065.14258926128'));
+
+const scadaCsv = buildYtbsScadaCsv([
+  { zaman: '15.05.2026 17:00:17.000', deger: -9.68 },
+], {
+  unit: 'MVAr',
+  b1: 'CAYIRHA',
+  b2: '380',
+  b3: 'ADA-2',
+  element: 'Q',
+});
+
+assert.ok(scadaCsv.startsWith('\uFEFFsep=;\r\nZaman;Deger;Birim;B1;B2;B3;Element'));
+assert.ok(scadaCsv.includes('-9,68;MVAr;CAYIRHA;380;ADA-2;Q'));

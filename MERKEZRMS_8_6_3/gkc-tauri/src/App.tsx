@@ -5,8 +5,16 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRmsStore } from './stores/rmsStore';
 import { useLogStore } from './stores/logStore';
 import { useYtbsStore } from './stores/ytbsStore';
+import { findScadaPointById, parseYtbsScadaTimestamp, useYtbsScadaStore } from './stores/ytbsScadaStore';
 import { DEVICE_LIST, DEVICE_MAP } from './data/deviceList';
-import { buildYtbsCsv } from './utils/csvExport';
+import {
+  SCADA_ANALOG_MEASUREMENT_POINTS,
+  SCADA_DIGITAL_MEASUREMENT_POINTS,
+  SCADA_POINT_LIST,
+  formatScadaElementLabel,
+  type ScadaMeasurementKind,
+} from './data/scadaPointList';
+import { buildYtbsCsv, buildYtbsScadaCsv } from './utils/csvExport';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
 
@@ -114,8 +122,24 @@ function App() {
   const { data, latestData, isMonitoring, error, startListening, startMonitoring, stopMonitoring, clearData } = useRmsStore();
   const logs = useLogStore(state => state.logs);
   const ytbs = useYtbsStore();
+  const scada = useYtbsScadaStore();
   const [activeTab, setActiveTab] = useState('merkezrms');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [scadaPointFilters, setScadaPointFilters] = useState<{
+    kind: ScadaMeasurementKind | 'all';
+    b1Adi: string;
+    b2Adi: string;
+    b3Adi: string;
+    trafoMerkezi: string;
+    elementId: string;
+  }>({
+    kind: 'all',
+    b1Adi: '',
+    b2Adi: '',
+    b3Adi: '',
+    trafoMerkezi: '',
+    elementId: '',
+  });
 
   // YTBS Veri İşleme Optimizasyonu (En Üst Seviyede)
   const processedYtbsData = useMemo(() => {
@@ -160,6 +184,15 @@ function App() {
     }
   }, [ytbs.ytbsRawData]);
 
+  const processedScadaData = useMemo(() => {
+    if (scada.data.length === 0) return [];
+    return [{
+      data: scada.data.map(item => [parseYtbsScadaTimestamp(item.zaman), item.deger]),
+      color: '#111827',
+      label: scada.unit ? `Ölçüm (${scada.unit})` : 'Ölçüm',
+    }];
+  }, [scada.data, scada.unit]);
+
   // YTBS Filtreleri store'a taşındı
   const [isHealthScanning, setIsHealthScanning] = useState(false);
 
@@ -183,6 +216,51 @@ function App() {
   }, [filterGerilim, filterOlcum, filterSearch]);
 
   const selectedDevice = DEVICE_MAP.get(selectedDeviceId) || null;
+  const selectedScadaPoint = findScadaPointById(scada.filters.scadaId);
+  const selectedScadaB1Label = scada.options.b1.find(option => option.value === scada.filters.b1)?.label || scada.filters.b1;
+  const selectedScadaB2Label = scada.options.b2.find(option => option.value === scada.filters.b2)?.label || scada.filters.b2;
+  const selectedScadaB3Label = scada.options.b3.find(option => option.value === scada.filters.b3)?.label || scada.filters.b3;
+  const selectedScadaElementOptionLabel = scada.options.elements.find(option => option.value === scada.filters.scadaId)?.label;
+  const selectedScadaElementLabel = selectedScadaElementOptionLabel || (selectedScadaPoint
+    ? formatScadaElementLabel(selectedScadaPoint)
+    : scada.filters.scadaId);
+  const scadaQueryIsSessionError = Boolean(scada.queryError?.includes('YTBS oturumu aktif değil'));
+
+  const scadaCatalogTotals = useMemo(() => ({
+    total: SCADA_POINT_LIST.length,
+    analog: SCADA_ANALOG_MEASUREMENT_POINTS.length,
+    digital: SCADA_DIGITAL_MEASUREMENT_POINTS.length,
+    active: SCADA_POINT_LIST.filter(point => point.aktif).length,
+  }), []);
+
+  const scadaPointFilterOptions = useMemo(() => {
+    const unique = (values: string[]) =>
+      Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b, 'tr'));
+
+    return {
+      b1Adi: unique(SCADA_POINT_LIST.map(point => point.b1Adi)),
+      b2Adi: unique(SCADA_POINT_LIST.map(point => point.b2Adi)),
+      b3Adi: unique(SCADA_POINT_LIST.map(point => point.b3Adi)),
+      trafoMerkezi: unique(SCADA_POINT_LIST.map(point => point.trafoMerkezi)),
+      elementId: unique(SCADA_POINT_LIST.map(point => point.elementId)),
+    };
+  }, []);
+
+  const filteredScadaPoints = useMemo(() => {
+    return SCADA_POINT_LIST.filter(point => {
+      if (scadaPointFilters.kind !== 'all' && point.measurementKind !== scadaPointFilters.kind) return false;
+      if (scadaPointFilters.b1Adi && point.b1Adi !== scadaPointFilters.b1Adi) return false;
+      if (scadaPointFilters.b2Adi && point.b2Adi !== scadaPointFilters.b2Adi) return false;
+      if (scadaPointFilters.b3Adi && point.b3Adi !== scadaPointFilters.b3Adi) return false;
+      if (scadaPointFilters.trafoMerkezi && point.trafoMerkezi !== scadaPointFilters.trafoMerkezi) return false;
+      if (scadaPointFilters.elementId && point.elementId !== scadaPointFilters.elementId) return false;
+      return true;
+    });
+  }, [scadaPointFilters]);
+
+  const setScadaPointFilter = (key: keyof typeof scadaPointFilters, value: string) => {
+    setScadaPointFilters(filters => ({ ...filters, [key]: value }));
+  };
 
   // Cihaz seçildiğinde backend'e bildir
   const handleDeviceSelect = (devId: string) => {
@@ -192,7 +270,30 @@ function App() {
     clearData();
   };
 
-  useEffect(() => { startListening(); ytbs.startListening(); }, []);
+  const formatYtbsDateTime = (iso: string) => {
+    const d = new Date(iso);
+    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+
+  const handleScadaFilterChange = (key: keyof typeof scada.filters, value: string) => {
+    scada.setFilter(key, value);
+    if (ytbs.status === 'connected' && key !== 'scadaId') {
+      useYtbsScadaStore.getState().refreshOptions(true);
+    }
+  };
+
+  useEffect(() => {
+    startListening();
+    ytbs.startListening();
+    ytbs.checkStatus();
+    scada.refreshOptions(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'ytbs_scada') {
+      scada.refreshOptions(ytbs.status === 'connected');
+    }
+  }, [activeTab, ytbs.status]);
 
   // Grafik verileri
   const recentData = data.slice(-100);
@@ -252,7 +353,7 @@ function App() {
         {/* Sidebar */}
         <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
           <nav className="sidebar-nav">
-            <div className="nav-section-title">İzleme</div>
+            <div className="nav-section-title">GKÇ İzleme</div>
             <button className={`nav-item ${activeTab === 'merkezrms' ? 'active' : ''}`} onClick={() => setActiveTab('merkezrms')}>
               ⚡ <span className="nav-text">MerkezRMS Veri</span>
             </button>
@@ -268,9 +369,12 @@ function App() {
             <button className={`nav-item ${activeTab === 'pmux' ? 'active' : ''}`} onClick={() => setActiveTab('pmux')}>
               📉 <span className="nav-text">PMUX Verileri</span>
             </button>
-            <div className="nav-section-title">Şebeke</div>
-            <button className={`nav-item ${activeTab === 'tekhat' ? 'active' : ''}`} onClick={() => setActiveTab('tekhat')}>
-              🔌 <span className="nav-text">Tek-Hat Şeması</span>
+            <div className="nav-section-title">SCADA İzleme</div>
+            <button className={`nav-item ${activeTab === 'ytbs_scada' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada')}>
+              📡 <span className="nav-text">YTBS SCADA Veri</span>
+            </button>
+            <button className={`nav-item ${activeTab === 'ytbs_scada_points' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada_points')}>
+              📍 <span className="nav-text">YTBS SCADA Ölçüm Noktaları</span>
             </button>
             <div className="nav-section-title">Sistem</div>
             <button className={`nav-item ${activeTab === 'config' ? 'active' : ''}`} onClick={() => setActiveTab('config')}>
@@ -645,6 +749,298 @@ function App() {
             </>
           )}
 
+          {/* YTBS SCADA Veri — Tarih Aralığı Sorgusu */}
+          {activeTab === 'ytbs_scada' && (
+            <>
+              <div className="card" style={{ marginBottom: 12, flexShrink: 0 }}>
+                <div className="card-header">
+                  <span className="card-title">📡 SCADA Ölçüm Verileri</span>
+                  <span style={{ fontSize: 11, color: scada.optionsLoading ? 'var(--accent-yellow)' : 'var(--text-muted)' }}>
+                    {scada.optionsLoading ? 'Seçenekler güncelleniyor...' : scada.optionsSource === 'mixed' ? 'Kaynak: Yerel katalog + YTBS' : 'Kaynak: Yerel katalog'}
+                  </span>
+                </div>
+                <div className="card-body" style={{ padding: '8px 12px' }}>
+                  {ytbs.status !== 'connected' && (
+                    <div style={{ padding: '12px', background: 'rgba(245,158,11,0.1)', borderRadius: 6, color: 'var(--accent-yellow)', fontSize: 12, marginBottom: 10 }}>
+                      ⚠️ YTBS oturumu aktif değil — Ayarlar sekmesinden YTBS'ye bağlanın. Filtreler yerel katalogdan gösterilir.
+                    </div>
+                  )}
+                  {scada.optionsError && ytbs.status === 'connected' && (
+                    <div style={{ padding: '10px 12px', background: 'rgba(245,158,11,0.1)', borderRadius: 6, color: 'var(--accent-yellow)', fontSize: 12, marginBottom: 10 }}>
+                      YTBS seçenekleri alınamadı; filtreler yerel SCADA ölçüm noktaları kataloğundan gösteriliyor.
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 150 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>BAŞLANGIÇ ZAMANI</label>
+                      <input type="datetime-local" value={scada.filters.startTime} onChange={e => scada.setFilter('startTime', e.target.value)}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }} />
+                    </div>
+                    <div style={{ minWidth: 150 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>BİTİŞ ZAMANI</label>
+                      <input type="datetime-local" value={scada.filters.endTime} onChange={e => scada.setFilter('endTime', e.target.value)}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }} />
+                    </div>
+                    <div style={{ minWidth: 150 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>B1</label>
+                      <select value={scada.filters.b1} onChange={e => handleScadaFilterChange('b1', e.target.value)}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="">B1 seçin...</option>
+                        {scada.options.b1.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: 110 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>B2</label>
+                      <select value={scada.filters.b2} onChange={e => handleScadaFilterChange('b2', e.target.value)} disabled={!scada.filters.b1}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11, opacity: scada.filters.b1 ? 1 : 0.6 }}>
+                        <option value="">B2 seçin...</option>
+                        {scada.options.b2.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ minWidth: 140 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>B3</label>
+                      <select value={scada.filters.b3} onChange={e => handleScadaFilterChange('b3', e.target.value)} disabled={!scada.filters.b2}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11, opacity: scada.filters.b2 ? 1 : 0.6 }}>
+                        <option value="">B3 seçin...</option>
+                        {scada.options.b3.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: 220 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>ELEMENT</label>
+                      <select value={scada.filters.scadaId} onChange={e => handleScadaFilterChange('scadaId', e.target.value)} disabled={!scada.filters.b3}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11, opacity: scada.filters.b3 ? 1 : 0.6 }}>
+                        <option value="">Element seçin...</option>
+                        {scada.options.elements.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </div>
+                    <button className="btn btn-primary"
+                      disabled={scada.queryLoading || ytbs.status !== 'connected' || !scada.filters.b1 || !scada.filters.b2 || !scada.filters.b3 || !scada.filters.scadaId}
+                      onClick={() => scada.queryRange(formatYtbsDateTime(scada.filters.startTime), formatYtbsDateTime(scada.filters.endTime))}
+                      style={{ fontWeight: 600, fontSize: 12 }}>
+                      {scada.queryLoading ? '⏳ Sorgulanıyor...' : '📊 GÖSTER'}
+                    </button>
+                  </div>
+                  {scada.filters.b1 && (
+                    <div style={{ marginTop: 8, padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ color: '#3b82f6', fontSize: 16 }}>📍</span>
+                      <span style={{ fontSize: 11, fontWeight: 500, color: '#3b82f6', letterSpacing: '0.02em' }}>
+                        {[selectedScadaB1Label, selectedScadaB2Label, selectedScadaB3Label, selectedScadaElementLabel].filter(Boolean).join(' / ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {scada.data.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingBottom: '20px' }}>
+                  <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
+                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
+                      SCADA
+                    </div>
+                    <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative', minHeight: 420 }}>
+                      <TimeChart height={420} title={scada.title || (scada.unit ? `Ölçüm (${scada.unit})` : 'Ölçüm')} cssHeight="100%" series={processedScadaData} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <span>✅ {scada.data.length} veri noktası yüklendi</span>
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600 }}
+                        onClick={() => {
+                          try {
+                            if (!scada.data.length) { alert('İndirilecek veri bulunamadı.'); return; }
+                            const csvContent = buildYtbsScadaCsv(scada.data as unknown as Record<string, unknown>[], {
+                              unit: scada.unit || selectedScadaPoint?.unit || '',
+                              b1: selectedScadaB1Label,
+                              b2: selectedScadaB2Label,
+                              b3: selectedScadaB3Label,
+                              element: selectedScadaElementLabel,
+                            });
+                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement("a");
+                            link.setAttribute("href", url);
+                            link.setAttribute("download", `YTBS_SCADA_VERI_EKSPOR_${new Date().getTime()}.csv`);
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          } catch (err) {
+                            alert('CSV oluşturma hatası: ' + err);
+                          }
+                        }}
+                      >
+                        📥 SCADA CSV İNDİR
+                      </button>
+                    </div>
+                    <span>🔗 Kaynak: YTBS (ytbs.teias.gov.tr)</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="card">
+                  <div className="card-body" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                    {scada.queryLoading ? (
+                      <div>
+                        <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
+                        <div style={{ fontSize: 14 }}>YTBS'den SCADA verisi sorgulanıyor...</div>
+                        <div style={{ fontSize: 11, marginTop: 6 }}>Bu işlem birkaç saniye sürebilir.</div>
+                      </div>
+                    ) : scada.queryError ? (
+                      <div>
+                        <div style={{ fontSize: 32, marginBottom: 12 }}>{scadaQueryIsSessionError ? '🔐' : '❌'}</div>
+                        <div style={{ fontSize: 14, color: scadaQueryIsSessionError ? 'var(--accent-yellow)' : 'var(--accent-red)' }}>
+                          {scadaQueryIsSessionError ? 'YTBS Oturum Uyarısı' : 'Sorgu Hatası'}
+                        </div>
+                        <div style={{ fontSize: 11, marginTop: 6, color: scadaQueryIsSessionError ? 'var(--accent-yellow)' : 'var(--accent-red)', maxWidth: 500, margin: '6px auto', wordBreak: 'break-word' }}>{scada.queryError}</div>
+                      </div>
+                    ) : ytbs.status === 'connected' ? (
+                      <div>
+                        <div style={{ fontSize: 32, marginBottom: 12 }}>📡</div>
+                        <div style={{ fontSize: 14 }}>YTBS bağlantısı aktif</div>
+                        <div style={{ fontSize: 11, marginTop: 6 }}>B1, B2, B3 ve Element seçip <strong>GÖSTER</strong> butonuna basın.</div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 32, marginBottom: 12 }}>🔐</div>
+                        <div style={{ fontSize: 14 }}>YTBS oturumu aktif değil</div>
+                        <div style={{ fontSize: 11, marginTop: 6 }}>Önce <strong>Ayarlar</strong> sekmesinden YTBS'ye bağlanın.</div>
+                        <button className="btn btn-primary" style={{ marginTop: 12, fontSize: 11 }} onClick={() => setActiveTab('config')}>
+                          ⚙️ Ayarlar'a Git
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'ytbs_scada_points' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 20 }}>
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">📍 YTBS SCADA Ölçüm Noktaları</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    Kaynak: ytbs_scada/SCADA_OLCUM_NOKTASI.xlsx
+                  </span>
+                </div>
+                <div className="card-body" style={{ padding: '10px 12px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))', gap: 8, marginBottom: 12 }}>
+                    <div style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'rgba(255,255,255,0.03)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>TOPLAM</div>
+                      <div style={{ fontSize: 20, fontWeight: 700 }}>{scadaCatalogTotals.total}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'rgba(59,130,246,0.08)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>ANALOG ÖLÇÜM</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: '#60a5fa' }}>{scadaCatalogTotals.analog}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'rgba(245,158,11,0.08)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>DİJİTAL ÖLÇÜM</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent-yellow)' }}>{scadaCatalogTotals.digital}</div>
+                    </div>
+                    <div style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'rgba(16,185,129,0.08)' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>AKTİF</div>
+                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--accent-green)' }}>{scadaCatalogTotals.active}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(120px, 1fr)) auto', gap: 8, alignItems: 'end' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>ÖLÇÜM TİPİ</label>
+                      <select value={scadaPointFilters.kind} onChange={e => setScadaPointFilter('kind', e.target.value)}
+                        style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="all">Tümü</option>
+                        <option value="analog">Analog Ölçüm</option>
+                        <option value="digital">Dijital Ölçüm</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>B1 ADI</label>
+                      <select value={scadaPointFilters.b1Adi} onChange={e => setScadaPointFilter('b1Adi', e.target.value)}
+                        style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="">Tümü</option>
+                        {scadaPointFilterOptions.b1Adi.map(value => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>B2 ADI</label>
+                      <select value={scadaPointFilters.b2Adi} onChange={e => setScadaPointFilter('b2Adi', e.target.value)}
+                        style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="">Tümü</option>
+                        {scadaPointFilterOptions.b2Adi.map(value => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>B3 ADI</label>
+                      <select value={scadaPointFilters.b3Adi} onChange={e => setScadaPointFilter('b3Adi', e.target.value)}
+                        style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="">Tümü</option>
+                        {scadaPointFilterOptions.b3Adi.map(value => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>TRAFO MERKEZİ</label>
+                      <select value={scadaPointFilters.trafoMerkezi} onChange={e => setScadaPointFilter('trafoMerkezi', e.target.value)}
+                        style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="">Tümü</option>
+                        {scadaPointFilterOptions.trafoMerkezi.map(value => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 3 }}>ELEMENT ID</label>
+                      <select value={scadaPointFilters.elementId} onChange={e => setScadaPointFilter('elementId', e.target.value)}
+                        style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        <option value="">Tümü</option>
+                        {scadaPointFilterOptions.elementId.map(value => <option key={value} value={value}>{value}</option>)}
+                      </select>
+                    </div>
+                    <button className="btn btn-primary" style={{ fontSize: 11, padding: '7px 12px' }} onClick={() => setScadaPointFilters({ kind: 'all', b1Adi: '', b2Adi: '', b3Adi: '', trafoMerkezi: '', elementId: '' })}>
+                      Temizle
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">{filteredScadaPoints.length} ölçüm noktası</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Dijital ayrımı Noel alanındaki Anahtar değeriyle yapılır</span>
+                </div>
+                <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 1120 }}>
+                    <thead>
+                      <tr style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
+                        {['Tip', 'B1 Adı', 'B2 Adı', 'B3 Adı', 'Trafo Merkezi', 'Element ID', 'Element Adı', 'Noel', 'Nimset', 'Aktif'].map(header => (
+                          <th key={header} style={{ textAlign: 'left', padding: '9px 10px', borderBottom: '1px solid var(--border-color)', fontWeight: 600 }}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredScadaPoints.map(point => (
+                        <tr key={point.id} style={{ borderBottom: '1px solid rgba(148,163,184,0.12)' }}>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span style={{ color: point.measurementKind === 'digital' ? 'var(--accent-yellow)' : '#60a5fa', fontWeight: 700 }}>
+                              {point.measurementKind === 'digital' ? 'Dijital' : 'Analog'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{point.b1Adi}</td>
+                          <td style={{ padding: '8px 10px' }}>{point.b2Adi}</td>
+                          <td style={{ padding: '8px 10px' }}>{point.b3Adi}</td>
+                          <td style={{ padding: '8px 10px' }}>{point.trafoMerkezi || '-'}</td>
+                          <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{point.elementId}</td>
+                          <td style={{ padding: '8px 10px' }}>{point.elementAdi}</td>
+                          <td style={{ padding: '8px 10px' }}>{point.noel}</td>
+                          <td style={{ padding: '8px 10px' }}>{point.nimset}</td>
+                          <td style={{ padding: '8px 10px', color: point.aktif ? 'var(--accent-green)' : 'var(--text-muted)' }}>{point.aktif ? 'Aktif' : 'Pasif'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Ayarlar ve Loglar */}
           {activeTab === 'config' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -703,7 +1099,7 @@ function App() {
                 </div>
                 <div className="card-body">
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                    Birincil sunucuya erişilemediğinde YTBS (ytbs.teias.gov.tr) üzerinden yedek veri çekilir. İlk girişte SMS doğrulaması gerekir (24 saat geçerli).
+                    Birincil sunucuya erişilemediğinde YTBS (ytbs.teias.gov.tr) üzerinden GKÇ ve SCADA verileri çekilir. İlk girişte SMS doğrulaması gerekir (24 saat geçerli).
                   </div>
                   {ytbs.error && <div style={{ color: 'var(--accent-red)', fontSize: '12px', marginBottom: '8px' }}>⚠️ {ytbs.error}</div>}
                   
@@ -753,7 +1149,7 @@ function App() {
 
                   {ytbs.status === 'connected' && (
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ fontSize: 12, color: 'var(--accent-green)' }}>✅ YTBS bağlantısı aktif. "YTBS GKÇ Veri" sekmesinden sorgulama yapabilirsiniz.</div>
+                      <div style={{ fontSize: 12, color: 'var(--accent-green)' }}>✅ YTBS bağlantısı aktif. "YTBS GKÇ Veri" ve "YTBS SCADA Veri" sekmelerinden sorgulama yapabilirsiniz.</div>
                       <button className="btn btn-danger" onClick={() => ytbs.disconnect()} style={{ fontSize: '11px' }}>⛔ Bağlantıyı Kes</button>
                     </div>
                   )}
@@ -813,7 +1209,7 @@ function App() {
           )}
 
           {/* Diğer sekmeler için placeholder */}
-          {activeTab !== 'dashboard' && activeTab !== 'config' && (
+          {['rms', 'pmu', 'pmux'].includes(activeTab) && (
             <div className="card">
               <div className="card-body" style={{ padding: '40px', textAlign: 'center' }}>
                 <div style={{ fontSize: '40px', marginBottom: '16px' }}>🚧</div>
@@ -821,7 +1217,6 @@ function App() {
                   {activeTab === 'rms' && 'RMS Detaylı Grafikler'}
                   {activeTab === 'pmu' && 'PMU Fazör Analizi'}
                   {activeTab === 'pmux' && 'PMUX Faz Bazlı Güç'}
-                  {activeTab === 'tekhat' && 'Tek-Hat Şeması'}
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
                   Bu bölüm Faz 3'te geliştirilecektir.

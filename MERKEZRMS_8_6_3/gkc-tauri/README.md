@@ -24,7 +24,8 @@ Bu proje, eski Java/JavaFX tabanlı Güç Kalitesi Çözümleyici (GKÇ) dinamik
 Projeyi derlemek veya canlı önizleme ile geliştirmek için özel PowerShell/CMD bat betiklerini kullanabilirsiniz. (Bu betikler Windows ortamındaki Türkçe karakter sorununu çözer):
 
 *   **`dev.bat`** : Uygulamayı geliştirici (Development) modunda, anlık güncellemeleri dinleyecek şekilde çalıştırır.
-*   **`build.bat`** : Uygulamayı production-ready taşınabilir (Portable) `.exe` ve kurulum arşivi olarak derler. (Çıktılar `src-tauri\target\release` altında yer alır).
+*   **`build.bat`** : Uygulamayı production-ready taşınabilir (Portable) `.exe` ve kurulum arşivi olarak derler. Portable kopya `portable-builds\gkc-scada-test_vYYMMDD_versX.exe` formatında adlandırılır.
+*   **`npm run build:portable`** : Aynı derleme ve otomatik portable isimlendirme akışını komut satırından çalıştırır. Aynı gün içinde her yeni çıktı `vers1`, `vers2`, `vers3` şeklinde artar.
 
 *(Not: Bu scriptler sisteminizdeki Cargo (Rust) modüllerini otomatik algılayarak yola (PATH) ekler).*
 

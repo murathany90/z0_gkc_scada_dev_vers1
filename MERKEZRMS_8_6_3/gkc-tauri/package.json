@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "generate:scada-points": "python scripts/generate_scada_points.py",
+    "portable:name": "node scripts/portableNaming.mjs",
+    "build:portable": "npm run tauri -- build && npm run portable:name",
+    "test:portable-name": "node scripts/portableNaming.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

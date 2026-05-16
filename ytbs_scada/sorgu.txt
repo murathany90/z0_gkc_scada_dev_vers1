@@ -1,0 +1,78 @@
+Request URL
+https://ytbs.teias.gov.tr/ytbs/JAVASCRIPT/Raporlama/Raporlar/DinamikRaporlamaMotoru.js
+Request Method
+GET
+Status Code
+200 OK
+Remote Address
+212.175.131.164:443
+Referrer Policy
+strict-origin-when-cross-origin
+accept-ranges
+bytes
+cache-control
+no-cache, no-store, must-revalidate
+connection
+keep-alive
+content-length
+43768
+content-type
+text/javascript;charset=UTF-8
+date
+Sat, 16 May 2026 09:07:53 GMT
+etag
+W/"43768-1778051840000"
+expires
+Thu, 01 Jan 1970 00:00:00 GMT
+keep-alive
+timeout=20
+last-modified
+Wed, 06 May 2026 07:17:20 GMT
+pragma
+public
+set-cookie
+SameSite=None
+x-content-type-options
+nosniff
+x-frame-options
+SAMEORIGIN
+x-xss-protection
+1; mode=block
+accept
+text/javascript, application/javascript, application/ecmascript, application/x-ecmascript, */*; q=0.01
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7,de;q=0.6,ar;q=0.5
+connection
+keep-alive
+cookie
+SameSite=None; SameSite=None; primefaces.download_YTBSAnaSayfa=true; JSESSIONID=288B9EF87C912F211F41E645F2BD73A4; cookiesession1=678B2869636AC5363091A990A8103581; _ga=GA1.1.1497611084.1771281452;
+
+
+jakarta.faces.partial.ajax
+true
+jakarta.faces.source
+form:j_idt14326
+jakarta.faces.partial.execute
+@all
+jakarta.faces.partial.render
+form growlMessage
+form:j_idt14326
+form:j_idt14326
+form
+form
+form:baslangicZamani_input
+16.05.2026 11:03
+form:bitisZamani_input
+16.05.2026 12:03
+form:b1Id_input
+OYAK1GES
+form:b2Id_input
+154
+form:b3Id_input
+BB-A
+form:scadaId_input
+c0a8cb3d-f35f-4586-b162-c1c47e7481d9
+jakarta.faces.ViewState
+-8557368239817068547:8660472225091825786

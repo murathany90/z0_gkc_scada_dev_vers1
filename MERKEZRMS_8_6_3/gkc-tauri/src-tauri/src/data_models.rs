@@ -187,6 +187,34 @@ pub struct YtbsGrafikVerisi {
     pub y15: Option<f64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct YtbsSelectOption {
+    pub value: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct YtbsScadaOptions {
+    pub b1: Vec<YtbsSelectOption>,
+    pub b2: Vec<YtbsSelectOption>,
+    pub b3: Vec<YtbsSelectOption>,
+    pub elements: Vec<YtbsSelectOption>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct YtbsScadaSample {
+    pub zaman: String,
+    pub deger: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct YtbsScadaQueryResult {
+    pub title: String,
+    pub unit: String,
+    pub data: Vec<YtbsScadaSample>,
+    pub raw_json: String,
+}
+
 /// GKÇ sağlık taraması sonucu
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct YtbsHealthCheckResult {

@@ -3,8 +3,8 @@
 
 use crate::config;
 use crate::data_models::{
-    DataSource, KonfigurasyonData, YtbsGrafikVerisi, YtbsHealthCheckResult, YtbsSessionStatus,
-    YtbsStatusInfo,
+    DataSource, KonfigurasyonData, YtbsGrafikVerisi, YtbsHealthCheckResult, YtbsScadaOptions,
+    YtbsScadaQueryResult, YtbsSessionStatus, YtbsStatusInfo,
 };
 use crate::ytbs_client::YtbsClient;
 use std::sync::Arc;
@@ -263,6 +263,47 @@ pub async fn ytbs_query_range(
     println!("YTBS SORGUSU TAMAMLANDI. Veri sayısı: {}", data.len());
 
     Ok(json)
+}
+
+/// YTBS SCADA filtre seçeneklerini çek
+#[tauri::command]
+pub async fn ytbs_scada_options(
+    state: State<'_, AppState>,
+    b1: Option<String>,
+    b2: Option<String>,
+    b3: Option<String>,
+) -> Result<YtbsScadaOptions, String> {
+    let mut ytbs_lock = state.ytbs_client.lock().await;
+
+    let client = ytbs_lock
+        .as_mut()
+        .ok_or("YTBS oturumu başlatılmamış. Ayarlar'dan YTBS'ye bağlanın.")?;
+
+    client
+        .scada_options(b1.as_deref(), b2.as_deref(), b3.as_deref())
+        .await
+}
+
+/// YTBS SCADA ölçüm verisi tarih aralığı sorgusu
+#[tauri::command]
+pub async fn ytbs_scada_query(
+    state: State<'_, AppState>,
+    start_time: String,
+    end_time: String,
+    b1: String,
+    b2: String,
+    b3: String,
+    scada_id: String,
+) -> Result<YtbsScadaQueryResult, String> {
+    let mut ytbs_lock = state.ytbs_client.lock().await;
+
+    let client = ytbs_lock
+        .as_mut()
+        .ok_or("YTBS oturumu başlatılmamış. Ayarlar'dan YTBS'ye bağlanın.")?;
+
+    client
+        .query_scada(&start_time, &end_time, &b1, &b2, &b3, &scada_id)
+        .await
 }
 
 /// YTBS üzerinden GKÇ fider sağlık kontrolü yap

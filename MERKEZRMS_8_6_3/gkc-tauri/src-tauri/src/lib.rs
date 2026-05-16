@@ -40,6 +40,8 @@ pub fn run() {
             commands::ytbs_set_device,
             commands::ytbs_query_once,
             commands::ytbs_query_range,
+            commands::ytbs_scada_options,
+            commands::ytbs_scada_query,
             commands::ytbs_health_check,
         ])
         .run(tauri::generate_context!())
