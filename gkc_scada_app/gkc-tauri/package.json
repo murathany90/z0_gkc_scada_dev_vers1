@@ -10,8 +10,11 @@
     "tauri": "tauri",
     "generate:scada-points": "python scripts/generate_scada_points.py",
     "portable:name": "node scripts/portableNaming.mjs",
-    "build:portable": "npm run tauri -- build && npm run portable:name",
-    "test:portable-name": "node scripts/portableNaming.test.mjs"
+    "build:portable": "node scripts/buildPortable.mjs",
+    "test:portable-name": "node scripts/portableNaming.test.mjs",
+    "test:ui-state": "node scripts/uiState.test.ts",
+    "test:scada-threshold": "node scripts/scadaThreshold.test.ts",
+    "test:scada-details": "node scripts/scadaPointDetails.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

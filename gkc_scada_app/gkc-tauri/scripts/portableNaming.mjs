@@ -23,6 +23,20 @@ export const buildPortableExeName = (date = new Date(), version = 1) => {
   return `${PORTABLE_PREFIX}_v${formatDateStamp(date)}_vers${version}.exe`;
 };
 
+export const buildPortableMetadata = (date = new Date(), version = 1) => {
+  const exeName = buildPortableExeName(date, version);
+  return {
+    exeName,
+    windowTitle: exeName.replace(/\.exe$/i, ''),
+  };
+};
+
+export const createPortableBuildEnv = (metadata, baseEnv = process.env) => ({
+  ...baseEnv,
+  VITE_PORTABLE_EXE_NAME: metadata.exeName,
+  VITE_PORTABLE_WINDOW_TITLE: metadata.windowTitle,
+});
+
 export const nextPortableVersion = (existingNames, date = new Date()) => {
   const stamp = formatDateStamp(date);
   const pattern = new RegExp(`^${PORTABLE_PREFIX}_v${stamp}_vers(\\d+)\\.exe$`, 'i');
@@ -40,11 +54,12 @@ export const nextPortableVersion = (existingNames, date = new Date()) => {
 
 export const resolveNextPortablePath = (outputDir, existingNames, date = new Date()) => {
   const version = nextPortableVersion(existingNames, date);
-  const fileName = buildPortableExeName(date, version);
+  const metadata = buildPortableMetadata(date, version);
   return {
-    fileName,
-    outputPath: path.join(outputDir, fileName),
+    fileName: metadata.exeName,
+    outputPath: path.join(outputDir, metadata.exeName),
     version,
+    windowTitle: metadata.windowTitle,
   };
 };
 

@@ -9,10 +9,13 @@
   --bg-secondary: #111827;
   --bg-card: #1a2332;
   --bg-card-hover: #1e293b;
+  --bg-control: rgba(255, 255, 255, 0.05);
   --border-color: #2a3a4e;
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --table-header-bg: rgba(255, 255, 255, 0.03);
+  --row-border: rgba(148, 163, 184, 0.12);
   
   /* Accent renkler */
   --accent-blue: #3b82f6;
@@ -44,6 +47,37 @@
   background-color: var(--bg-primary);
 }
 
+:root[data-theme="light"] {
+  --bg-primary: #f5f7fb;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #eef4ff;
+  --bg-control: #eef2f7;
+  --border-color: #cbd5e1;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --table-header-bg: #f1f5f9;
+  --row-border: rgba(100, 116, 139, 0.2);
+
+  --accent-blue: #2563eb;
+  --accent-green: #059669;
+  --accent-red: #dc2626;
+  --accent-yellow: #b45309;
+  --accent-purple: #7c3aed;
+  --accent-cyan: #0891b2;
+
+  --color-frekans: #dc2626;
+  --color-aktif-guc: #111827;
+  --color-reaktif-guc: #2563eb;
+  --color-gorunen-guc: #475569;
+  --color-guc-faktoru: #be185d;
+  --color-gerilim-a: #dc2626;
+  --color-gerilim-b: #b45309;
+  --color-gerilim-c: #2563eb;
+  --color-dfdt: #7c3aed;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -53,6 +87,8 @@
 body {
   min-height: 100vh;
   overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-primary);
 }
 
 #root {
@@ -89,7 +125,53 @@ body {
 .header-status {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-title {
+  white-space: nowrap;
+}
+
+.monitoring-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.source-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bg-control);
+  color: var(--text-secondary);
+  font-size: 11px;
+  border: 1px solid transparent;
+}
+
+.source-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.source-primary { background: var(--accent-green); }
+.source-ytbs { background: var(--accent-yellow); }
+.source-mock { background: var(--accent-blue); }
+.source-none { background: var(--text-muted); }
+
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  background: var(--bg-control);
 }
 
 .status-indicator {
@@ -149,6 +231,16 @@ body {
   padding: 0;
   margin: 0;
   overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-nav {
+  padding: 8px 5px;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 10px 0;
+  gap: 0;
 }
 
 .sidebar-nav {
@@ -220,6 +312,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
 }
@@ -311,6 +405,19 @@ body {
   background: rgba(255,255,255,0.1);
 }
 
+.btn-icon.theme-toggle {
+  width: 34px;
+  height: 34px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  background: var(--bg-control);
+}
+
+.btn-icon.theme-toggle:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
 .btn-primary {
   background: var(--accent-blue);
   color: white;
@@ -339,6 +446,91 @@ body {
 .btn-outline:hover {
   border-color: var(--accent-blue);
   color: var(--accent-blue);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-compact {
+  padding: 5px 10px;
+  font-size: 11px;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pagination-summary {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.scada-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scada-info-card {
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.scada-info-label {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.scada-info-value {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.threshold-note {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--table-header-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+@media (max-width: 1180px) {
+  .scada-info-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .scada-info-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Chart container */

@@ -2,6 +2,7 @@
 // Modern SCADA dashboard arayüzü — YTBS GKÇ Ölçüm Verileri entegrasyonlu
 
 import { useEffect, useState, useMemo } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useRmsStore } from './stores/rmsStore';
 import { useLogStore } from './stores/logStore';
 import { useYtbsStore } from './stores/ytbsStore';
@@ -15,49 +16,184 @@ import {
   type ScadaMeasurementKind,
 } from './data/scadaPointList';
 import { buildYtbsCsv, buildYtbsScadaCsv } from './utils/csvExport';
+import {
+  SCADA_POINT_PAGE_SIZE,
+  clampPage,
+  getPageCount,
+  paginateRows,
+  resolveInitialTheme,
+  toggleTheme,
+  type ThemeMode,
+} from './uiState';
+import {
+  THRESHOLD_DIGITAL_MESSAGE,
+  THRESHOLD_MISSING_MESSAGE,
+  calculateThresholdEstimate,
+  formatThresholdPercent,
+  type ThresholdEstimate,
+} from './utils/scadaThreshold';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
 
-function TimeChart({ series, height = 100, cssHeight = '100%', title }: { series: { data: any[]; color: string; label: string }[]; height?: number; cssHeight?: string | number; title?: string }) {
-  const allVals = series.flatMap(s => s.data.map(d => Array.isArray(d) ? d[1] : d));
+const APP_HEADER_TITLE = 'GKÇ-SCADA Veri Analiz v2.0';
+const THEME_STORAGE_KEY = 'gkc_theme_mode';
+const SIDEBAR_STORAGE_KEY = 'gkc_sidebar_open';
+const PORTABLE_WINDOW_TITLE = import.meta.env.VITE_PORTABLE_WINDOW_TITLE?.trim();
+
+const chartPalette = (themeMode: ThemeMode) => themeMode === 'light'
+  ? {
+      title: '#0f172a',
+      text: '#0f172a',
+      muted: '#475569',
+      axis: '#64748b',
+      axisLine: '#cbd5e1',
+      tooltipBg: 'rgba(255, 255, 255, 0.98)',
+      tooltipBorder: '#cbd5e1',
+      tooltipValue: '#047857',
+      splitLine: 'rgba(148, 163, 184, 0.35)',
+    }
+  : {
+      title: '#f3f4f6',
+      text: '#f3f4f6',
+      muted: '#94a3b8',
+      axis: '#94a3b8',
+      axisLine: '#334155',
+      tooltipBg: 'rgba(17, 24, 39, 0.95)',
+      tooltipBorder: '#374151',
+      tooltipValue: '#34d399',
+      splitLine: 'rgba(148, 163, 184, 0.16)',
+    };
+
+type TooltipExtraRow = { label: string; value: string };
+
+interface TimeChartSeries {
+  data: any[];
+  color: string;
+  label: string;
+  yAxisIndex?: number;
+  lineStyle?: Record<string, unknown>;
+  showSymbol?: boolean;
+  symbolSize?: number;
+  labelOptions?: Record<string, unknown>;
+  valueFormatter?: (value: number) => string;
+}
+
+const escapeTooltipText = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+const getSeriesValues = (items: TimeChartSeries[]) =>
+  items
+    .flatMap(s => s.data.map(d => Array.isArray(d) ? d[1] : d))
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+const formatNumericWithUnit = (value: number | undefined | null, unit = '', digits = 3) =>
+  Number.isFinite(value)
+    ? `${Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: digits })}${unit ? ` ${unit}` : ''}`
+    : '-';
+
+function TimeChart({
+  series,
+  height = 100,
+  cssHeight = '100%',
+  title,
+  themeMode,
+  valueAxisName,
+  secondaryAxisName,
+  extraTooltipRows,
+}: {
+  series: TimeChartSeries[];
+  height?: number;
+  cssHeight?: string | number;
+  title?: string;
+  themeMode: ThemeMode;
+  valueAxisName?: string;
+  secondaryAxisName?: string;
+  extraTooltipRows?: (timestamp: number) => TooltipExtraRow[];
+}) {
+  const allVals = getSeriesValues(series);
   if (allVals.length === 0) return <div style={{ height: cssHeight, minHeight: height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>Veri bekleniyor...</div>;
 
   // Eksen ölçeklendirme için 0 olmayan değerleri bul
-  const filteredVals = allVals.filter(v => v !== 0 && v !== null && v !== undefined);
+  const primaryValues = getSeriesValues(series.filter(s => (s.yAxisIndex ?? 0) === 0));
+  const secondaryValues = getSeriesValues(series.filter(s => (s.yAxisIndex ?? 0) === 1));
+  const filteredVals = (primaryValues.length ? primaryValues : allVals).filter(v => v !== 0);
+  const filteredSecondaryVals = secondaryValues.filter(v => v !== 0);
   const dataMin = filteredVals.length > 0 ? Math.min(...filteredVals) : 0;
   const dataMax = filteredVals.length > 0 ? Math.max(...filteredVals) : 100;
+  const secondaryMax = filteredSecondaryVals.length > 0 ? Math.max(...filteredSecondaryVals) : 1;
   const padding = (dataMax - dataMin) * 0.1 || 0.1;
+  const secondaryPadding = secondaryMax * 0.15 || 0.1;
+  const palette = chartPalette(themeMode);
+  const hasSecondaryAxis = series.some(s => (s.yAxisIndex ?? 0) === 1);
+  const findSeries = (name: string) => series.find(item => item.label === name);
+
+  const valueAxis = {
+    type: 'value',
+    name: valueAxisName,
+    nameTextStyle: { color: palette.axis, fontSize: 10, padding: [0, 0, 4, 0] },
+    scale: true,
+    min: (val: any) => val.min === 0 ? 0 : dataMin - padding,
+    max: (val: any) => val.max === 0 ? 100 : dataMax + padding,
+    splitLine: { show: true, lineStyle: { color: palette.splitLine } },
+    axisLabel: {
+      color: palette.axis,
+      fontSize: 10,
+      formatter: (val: number) => val.toLocaleString('en-US', { minimumFractionDigits: 1 })
+    },
+    axisLine: { show: true, lineStyle: { color: palette.axisLine } }
+  };
 
   const option = {
     title: {
       text: title,
       left: 'left',
       top: 'top',
-      textStyle: { color: '#f3f4f6', fontSize: 13, fontWeight: 600 }
+      textStyle: { color: palette.title, fontSize: 13, fontWeight: 600 }
     },
     tooltip: { 
       trigger: 'axis', 
       confine: true,
-      backgroundColor: 'rgba(17, 24, 39, 0.95)',
-      borderColor: '#374151',
-      textStyle: { fontSize: 11, color: '#f3f4f6' }, 
+      backgroundColor: palette.tooltipBg,
+      borderColor: palette.tooltipBorder,
+      textStyle: { fontSize: 11, color: palette.text }, 
       padding: 8,
       formatter: function (params: any) {
-        if (!params.length) return '';
+        const items = Array.isArray(params) ? params : [params];
+        if (!items.length) return '';
         // Tooltip'e zaman bilgisini düzgün formatta ekle
-        const timestamp = params[0].value[0];
+        const timestamp = items[0].value[0];
         const dateStr = new Date(timestamp).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        let html = `<div style="margin-bottom:6px;font-weight:700;border-bottom:1px solid #374151;padding-bottom:4px;color:#94a3b8;font-size:10px;">🕒 ${dateStr}</div>`;
-        params.forEach((p: any) => {
-          const val = p.value[1] !== undefined && p.value[1] !== null ? Number(p.value[1]).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : '--';
+        let html = `<div style="margin-bottom:6px;font-weight:700;border-bottom:1px solid ${palette.tooltipBorder};padding-bottom:4px;color:${palette.muted};font-size:10px;">${escapeTooltipText(dateStr)}</div>`;
+        items.forEach((p: any) => {
+          const seriesMeta = findSeries(p.seriesName);
+          const numericValue = Number(p.value[1]);
+          const val = p.value[1] !== undefined && p.value[1] !== null
+            ? seriesMeta?.valueFormatter?.(numericValue) ?? numericValue.toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+            : '--';
           html += `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:2px;">
             <div style="display:flex;align-items:center;">
               <span style="display:inline-block;margin-right:6px;border-radius:10px;width:8px;height:8px;background-color:${p.color};"></span>
-              <span style="font-size:11px;">${p.seriesName}</span>
+              <span style="font-size:11px;">${escapeTooltipText(p.seriesName)}</span>
             </div>
-            <span style="font-weight:600;font-family:'JetBrains Mono',monospace;color:#10b981;">${val}</span>
+            <span style="font-weight:600;font-family:'JetBrains Mono',monospace;color:${palette.tooltipValue};">${escapeTooltipText(val)}</span>
           </div>`;
         });
+        const extraRows = extraTooltipRows?.(timestamp) ?? [];
+        if (extraRows.length) {
+          html += `<div style="margin-top:6px;border-top:1px solid ${palette.tooltipBorder};padding-top:6px;">`;
+          extraRows.forEach(row => {
+            html += `<div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:2px;">
+              <span style="font-size:10px;color:${palette.muted};">${escapeTooltipText(row.label)}</span>
+              <span style="font-size:10px;font-weight:600;color:${palette.text};max-width:260px;text-align:right;white-space:normal;">${escapeTooltipText(row.value)}</span>
+            </div>`;
+          });
+          html += `</div>`;
+        }
         return html;
       }
     },
@@ -66,11 +202,11 @@ function TimeChart({ series, height = 100, cssHeight = '100%', title }: { series
       right: 5, 
       top: 'middle', 
       orient: 'vertical', 
-      textStyle: { color: '#94a3b8', fontSize: 10 }, 
+      textStyle: { color: palette.muted, fontSize: 10 }, 
       itemWidth: 10, 
       itemHeight: 10,
-      pageIconColor: '#94a3b8',
-      pageTextStyle: { color: '#94a3b8' }
+      pageIconColor: palette.muted,
+      pageTextStyle: { color: palette.muted }
     },
     grid: { top: 45, right: 140, bottom: 30, left: 15, containLabel: true },
     xAxis: {
@@ -78,33 +214,41 @@ function TimeChart({ series, height = 100, cssHeight = '100%', title }: { series
       axisLabel: { 
         show: true, 
         fontSize: 9, 
-        color: '#64748b',
+        color: palette.axis,
         formatter: '{HH}:{mm}:{ss}'
       },
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#334155' } },
+      axisLine: { lineStyle: { color: palette.axisLine } },
       splitLine: { show: false }
     },
-    yAxis: {
-      type: 'value',
-      scale: true,
-      min: (val: any) => val.min === 0 ? 0 : dataMin - padding,
-      max: (val: any) => val.max === 0 ? 100 : dataMax + padding,
-      splitLine: { show: false },
-      axisLabel: { 
-        color: '#64748b', 
-        fontSize: 10, 
-        formatter: (val: number) => val.toLocaleString('en-US', { minimumFractionDigits: 1 }) 
-      },
-      axisLine: { show: true, lineStyle: { color: '#334155' } }
-    },
+    yAxis: hasSecondaryAxis ? [
+      valueAxis,
+      {
+        type: 'value',
+        name: secondaryAxisName,
+        nameTextStyle: { color: palette.axis, fontSize: 10, padding: [0, 0, 4, 0] },
+        min: 0,
+        max: secondaryMax + secondaryPadding,
+        position: 'right',
+        splitLine: { show: false },
+        axisLabel: {
+          color: palette.axis,
+          fontSize: 10,
+          formatter: (val: number) => `%${Number(val).toFixed(2)}`
+        },
+        axisLine: { show: true, lineStyle: { color: palette.axisLine } }
+      }
+    ] : valueAxis,
     series: series.map(s => ({
       name: s.label,
       type: 'line',
       data: s.data,
+      yAxisIndex: s.yAxisIndex ?? 0,
       itemStyle: { color: s.color },
-      lineStyle: { width: 1.5 },
-      showSymbol: false, // Noktaları tamamen kapat
+      lineStyle: { width: 1.5, ...(s.lineStyle || {}) },
+      showSymbol: s.showSymbol ?? false,
+      symbolSize: s.symbolSize ?? 4,
+      label: s.labelOptions,
       animation: false,
       sampling: 'lttb',
       connectNulls: true
@@ -124,7 +268,10 @@ function App() {
   const ytbs = useYtbsStore();
   const scada = useYtbsScadaStore();
   const [activeTab, setActiveTab] = useState('merkezrms');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_STORAGE_KEY) !== '0');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => resolveInitialTheme(localStorage.getItem(THEME_STORAGE_KEY)));
+  const [scadaPointPage, setScadaPointPage] = useState(1);
+  const [showScadaPointDetails, setShowScadaPointDetails] = useState(false);
   const [scadaPointFilters, setScadaPointFilters] = useState<{
     kind: ScadaMeasurementKind | 'all';
     b1Adi: string;
@@ -184,15 +331,6 @@ function App() {
     }
   }, [ytbs.ytbsRawData]);
 
-  const processedScadaData = useMemo(() => {
-    if (scada.data.length === 0) return [];
-    return [{
-      data: scada.data.map(item => [parseYtbsScadaTimestamp(item.zaman), item.deger]),
-      color: '#111827',
-      label: scada.unit ? `Ölçüm (${scada.unit})` : 'Ölçüm',
-    }];
-  }, [scada.data, scada.unit]);
-
   // YTBS Filtreleri store'a taşındı
   const [isHealthScanning, setIsHealthScanning] = useState(false);
 
@@ -225,6 +363,105 @@ function App() {
     ? formatScadaElementLabel(selectedScadaPoint)
     : scada.filters.scadaId);
   const scadaQueryIsSessionError = Boolean(scada.queryError?.includes('YTBS oturumu aktif değil'));
+  const latestScadaSample = scada.data.length > 0 ? scada.data[scada.data.length - 1] : null;
+  const previousScadaSample = scada.data.length > 1 ? scada.data[scada.data.length - 2] : null;
+  const scadaDisplayUnit = scada.unit || selectedScadaPoint?.unit || '';
+  const rawScadaDelta = Number.isFinite(latestScadaSample?.deger) && Number.isFinite(previousScadaSample?.deger)
+    ? Math.abs(Number(latestScadaSample?.deger) - Number(previousScadaSample?.deger))
+    : null;
+  const scadaThresholdEstimate = useMemo<ThresholdEstimate>(() => calculateThresholdEstimate({
+    elementAdi: selectedScadaPoint?.elementAdi,
+    previousValue: previousScadaSample?.deger,
+    currentValue: latestScadaSample?.deger,
+    aciklama2: selectedScadaPoint?.aciklama2,
+    aciklama3: selectedScadaPoint?.aciklama3,
+  }), [
+    latestScadaSample?.deger,
+    previousScadaSample?.deger,
+    selectedScadaPoint?.aciklama2,
+    selectedScadaPoint?.aciklama3,
+    selectedScadaPoint?.elementAdi,
+  ]);
+  const thresholdStatusText = scadaThresholdEstimate.status === 'ok'
+    ? `${formatThresholdPercent(scadaThresholdEstimate.estimatedThresholdPercent)} · Δ ${formatNumericWithUnit(scadaThresholdEstimate.estimatedThresholdEngineering, scadaDisplayUnit)} · Ham Δ ${scadaThresholdEstimate.estimatedRawDelta.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+    : scadaThresholdEstimate.status === 'digital'
+      ? THRESHOLD_DIGITAL_MESSAGE
+      : THRESHOLD_MISSING_MESSAGE;
+  const processedScadaData = useMemo(() => {
+    if (scada.data.length === 0) return [];
+
+    const baseSeries: TimeChartSeries[] = [{
+      data: scada.data.map(item => [parseYtbsScadaTimestamp(item.zaman), item.deger]),
+      color: themeMode === 'dark' ? '#38bdf8' : '#0f766e',
+      label: scadaDisplayUnit ? `Ölçüm (${scadaDisplayUnit})` : 'Ölçüm',
+    }];
+
+    if (scadaThresholdEstimate.status === 'ok' && latestScadaSample) {
+      const timestamp = parseYtbsScadaTimestamp(latestScadaSample.zaman);
+      const percent = scadaThresholdEstimate.estimatedThresholdPercent;
+      baseSeries.push({
+        data: [[timestamp, percent]],
+        color: themeMode === 'dark' ? '#fbbf24' : '#b45309',
+        label: 'Tahmini Threshold %',
+        yAxisIndex: 1,
+        lineStyle: { width: 0 },
+        showSymbol: true,
+        symbolSize: 9,
+        valueFormatter: formatThresholdPercent,
+        labelOptions: {
+          show: true,
+          formatter: formatThresholdPercent(percent),
+          position: 'bottom',
+          color: themeMode === 'dark' ? '#fde68a' : '#92400e',
+          fontSize: 11,
+          fontWeight: 700,
+        },
+      });
+    }
+
+    return baseSeries;
+  }, [latestScadaSample, scada.data, scadaDisplayUnit, scadaThresholdEstimate, themeMode]);
+  const scadaTooltipRows = useMemo(() => {
+    return (timestamp: number): TooltipExtraRow[] => {
+      const thresholdText = scadaThresholdEstimate.status === 'ok'
+        ? formatThresholdPercent(scadaThresholdEstimate.estimatedThresholdPercent)
+        : scadaThresholdEstimate.message;
+      return [
+        { label: 'Zaman', value: new Date(timestamp).toLocaleString('tr-TR') },
+        { label: 'Son analog değer', value: formatNumericWithUnit(latestScadaSample?.deger, scadaDisplayUnit) },
+        { label: 'Önceki analog değer', value: formatNumericWithUnit(previousScadaSample?.deger, scadaDisplayUnit) },
+        { label: 'Delta değer', value: rawScadaDelta === null ? '-' : formatNumericWithUnit(rawScadaDelta, scadaDisplayUnit) },
+        { label: 'Tahmini threshold %', value: thresholdText },
+        { label: 'AÇIKLAMA 1', value: selectedScadaPoint?.aciklama1 || '-' },
+        { label: 'AÇIKLAMA 2', value: selectedScadaPoint?.aciklama2 || '-' },
+        { label: 'AÇIKLAMA 3', value: selectedScadaPoint?.aciklama3 || '-' },
+        { label: 'EŞLEŞME DURUMU', value: selectedScadaPoint?.eslesmeDurumu || '-' },
+        { label: 'ADRES1 / ADRES2', value: `${selectedScadaPoint?.noel || '-'} / ${selectedScadaPoint?.nimset || '-'}` },
+        { label: 'B1 ID / B2 ID / B3 ID / Element Adı', value: `${selectedScadaPoint?.b1Id || '-'} / ${selectedScadaPoint?.b2Id || '-'} / ${selectedScadaPoint?.b3Id || '-'} / ${selectedScadaPoint?.elementAdi || '-'}` },
+      ];
+    };
+  }, [latestScadaSample?.deger, previousScadaSample?.deger, rawScadaDelta, scadaDisplayUnit, scadaThresholdEstimate, selectedScadaPoint]);
+  const scadaInfoCards = useMemo(() => [
+    { label: 'Son Analog Değer', value: formatNumericWithUnit(latestScadaSample?.deger, scadaDisplayUnit) },
+    { label: 'Önceki Analog Değer', value: formatNumericWithUnit(previousScadaSample?.deger, scadaDisplayUnit) },
+    { label: 'SCADA Adresi', value: `${selectedScadaPoint?.noel || '-'} / ${selectedScadaPoint?.nimset || '-'}` },
+    { label: 'Ölçüm Noktası', value: selectedScadaElementLabel || '-' },
+    { label: 'AÇIKLAMA 1', value: selectedScadaPoint?.aciklama1 || '-' },
+    { label: 'AÇIKLAMA 2 / Analog Aralık', value: selectedScadaPoint?.aciklama2 || '-' },
+    { label: 'AÇIKLAMA 3 / Ham Aralık', value: selectedScadaPoint?.aciklama3 || '-' },
+    { label: 'Tahmini Threshold %', value: thresholdStatusText },
+  ], [
+    latestScadaSample?.deger,
+    previousScadaSample?.deger,
+    scadaDisplayUnit,
+    selectedScadaElementLabel,
+    selectedScadaPoint?.aciklama1,
+    selectedScadaPoint?.aciklama2,
+    selectedScadaPoint?.aciklama3,
+    selectedScadaPoint?.nimset,
+    selectedScadaPoint?.noel,
+    thresholdStatusText,
+  ]);
 
   const scadaCatalogTotals = useMemo(() => ({
     total: SCADA_POINT_LIST.length,
@@ -258,7 +495,15 @@ function App() {
     });
   }, [scadaPointFilters]);
 
+  const scadaPointPageCount = getPageCount(filteredScadaPoints.length);
+  const safeScadaPointPage = clampPage(scadaPointPage, filteredScadaPoints.length);
+  const paginatedScadaPoints = useMemo(
+    () => paginateRows(filteredScadaPoints, scadaPointPage),
+    [filteredScadaPoints, scadaPointPage],
+  );
+
   const setScadaPointFilter = (key: keyof typeof scadaPointFilters, value: string) => {
+    setScadaPointPage(1);
     setScadaPointFilters(filters => ({ ...filters, [key]: value }));
   };
 
@@ -290,10 +535,33 @@ function App() {
   }, []);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarOpen ? '1' : '0');
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    const title = PORTABLE_WINDOW_TITLE || APP_HEADER_TITLE;
+    document.title = title;
+    if (PORTABLE_WINDOW_TITLE) {
+      getCurrentWindow().setTitle(PORTABLE_WINDOW_TITLE).catch(error => {
+        console.warn('Pencere başlığı güncellenemedi:', error);
+      });
+    }
+  }, []);
+
+  useEffect(() => {
     if (activeTab === 'ytbs_scada') {
       scada.refreshOptions(ytbs.status === 'connected');
     }
   }, [activeTab, ytbs.status]);
+
+  useEffect(() => {
+    setScadaPointPage(page => clampPage(page, filteredScadaPoints.length));
+  }, [filteredScadaPoints.length]);
 
   // Grafik verileri
   const recentData = data.slice(-100);
@@ -307,13 +575,23 @@ function App() {
   const akimAData = recentData.map(d => d.akim.faz_a);
   const akimBData = recentData.map(d => d.akim.faz_b);
   const akimCData = recentData.map(d => d.akim.faz_c);
+  const highContrastTraceColor = themeMode === 'dark' ? '#f8fafc' : '#111827';
+  const scadaPointPageStart = filteredScadaPoints.length === 0
+    ? 0
+    : ((safeScadaPointPage - 1) * SCADA_POINT_PAGE_SIZE) + 1;
+  const scadaPointPageEnd = Math.min(safeScadaPointPage * SCADA_POINT_PAGE_SIZE, filteredScadaPoints.length);
 
   return (
     <>
       {/* Header */}
       <header className="header">
         <div className="header-title">
-          <button className="btn btn-icon" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <button
+            className="btn btn-icon"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? 'Sol menüyü daralt' : 'Sol menüyü genişlet'}
+            title={sidebarOpen ? 'Sol menüyü daralt' : 'Sol menüyü genişlet'}
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 12h18M3 6h18M3 18h18" />
             </svg>
@@ -321,30 +599,50 @@ function App() {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
           </svg>
-          <span className="nav-text">MGKP Dinamik İzleme v2.0</span>
+          <span className="app-title">{APP_HEADER_TITLE}</span>
         </div>
         <div className="header-status">
-          {/* Veri Kaynağı Göstergesi */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', fontSize: '11px' }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: ytbs.dataSource === 'ytbs' ? '#f59e0b' : ytbs.dataSource === 'mock' ? '#3b82f6' : ytbs.dataSource === 'primary' ? '#10b981' : '#6b7280' }} />
-            <span style={{ color: 'var(--text-muted)' }}>
-              {ytbs.dataSource === 'primary' && '🟢 Birincil'}
-              {ytbs.dataSource === 'ytbs' && '🟡 YTBS Yedek'}
-              {ytbs.dataSource === 'mock' && '🔵 Mock'}
-              {ytbs.dataSource === 'none' && '⚫ Kaynak Yok'}
-            </span>
-          </div>
-          <div className="status-indicator">
-            <span className={`status-dot ${isMonitoring ? 'connected' : 'disconnected'}`} />
-            <span style={{ color: isMonitoring ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-              {isMonitoring ? 'İzleme Aktif' : 'Bağlı Değil'}
-            </span>
-          </div>
-          {isMonitoring ? (
-            <button className="btn btn-danger" onClick={stopMonitoring}>⏹ Durdur</button>
-          ) : (
-            <button className="btn btn-primary" onClick={startMonitoring}>▶ Başlat</button>
+          {activeTab === 'merkezrms' && (
+            <div className="monitoring-controls" aria-label="MerkezRMS veri kontrolü">
+              <div className="source-pill">
+                <span className={`source-dot source-${ytbs.dataSource}`} />
+                <span>
+                  {ytbs.dataSource === 'primary' && 'Birincil'}
+                  {ytbs.dataSource === 'ytbs' && 'YTBS Yedek'}
+                  {ytbs.dataSource === 'mock' && 'Mock'}
+                  {ytbs.dataSource === 'none' && 'Kaynak Yok'}
+                </span>
+              </div>
+              <div className="status-indicator">
+                <span className={`status-dot ${isMonitoring ? 'connected' : 'disconnected'}`} />
+                <span style={{ color: isMonitoring ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                  {isMonitoring ? 'İzleme Aktif' : 'Bağlı Değil'}
+                </span>
+              </div>
+              {isMonitoring ? (
+                <button className="btn btn-danger" onClick={stopMonitoring}>Durdur</button>
+              ) : (
+                <button className="btn btn-primary" onClick={startMonitoring}>Başlat</button>
+              )}
+            </div>
           )}
+          <button
+            className="btn btn-icon theme-toggle"
+            onClick={() => setThemeMode(current => toggleTheme(current))}
+            aria-label={themeMode === 'dark' ? 'Light moda geç' : 'Dark moda geç'}
+            title={themeMode === 'dark' ? 'Light moda geç' : 'Dark moda geç'}
+          >
+            {themeMode === 'dark' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z" />
+              </svg>
+            )}
+          </button>
         </div>
       </header>
 
@@ -354,30 +652,30 @@ function App() {
         <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
           <nav className="sidebar-nav">
             <div className="nav-section-title">GKÇ İzleme</div>
-            <button className={`nav-item ${activeTab === 'merkezrms' ? 'active' : ''}`} onClick={() => setActiveTab('merkezrms')}>
+            <button className={`nav-item ${activeTab === 'merkezrms' ? 'active' : ''}`} onClick={() => setActiveTab('merkezrms')} title="MerkezRMS Veri" aria-label="MerkezRMS Veri">
               ⚡ <span className="nav-text">MerkezRMS Veri</span>
             </button>
-            <button className={`nav-item ${activeTab === 'ytbs_gkc' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_gkc')}>
+            <button className={`nav-item ${activeTab === 'ytbs_gkc' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_gkc')} title="YTBS GKÇ Veri" aria-label="YTBS GKÇ Veri">
               📡 <span className="nav-text">YTBS GKÇ Veri</span>
             </button>
-            <button className={`nav-item ${activeTab === 'rms' ? 'active' : ''}`} onClick={() => setActiveTab('rms')}>
+            <button className={`nav-item ${activeTab === 'rms' ? 'active' : ''}`} onClick={() => setActiveTab('rms')} title="RMS Verileri" aria-label="RMS Verileri">
               📊 <span className="nav-text">RMS Verileri</span>
             </button>
-            <button className={`nav-item ${activeTab === 'pmu' ? 'active' : ''}`} onClick={() => setActiveTab('pmu')}>
+            <button className={`nav-item ${activeTab === 'pmu' ? 'active' : ''}`} onClick={() => setActiveTab('pmu')} title="PMU Verileri" aria-label="PMU Verileri">
               📈 <span className="nav-text">PMU Verileri</span>
             </button>
-            <button className={`nav-item ${activeTab === 'pmux' ? 'active' : ''}`} onClick={() => setActiveTab('pmux')}>
+            <button className={`nav-item ${activeTab === 'pmux' ? 'active' : ''}`} onClick={() => setActiveTab('pmux')} title="PMUX Verileri" aria-label="PMUX Verileri">
               📉 <span className="nav-text">PMUX Verileri</span>
             </button>
             <div className="nav-section-title">SCADA İzleme</div>
-            <button className={`nav-item ${activeTab === 'ytbs_scada' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada')}>
+            <button className={`nav-item ${activeTab === 'ytbs_scada' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada')} title="YTBS SCADA Veri" aria-label="YTBS SCADA Veri">
               📡 <span className="nav-text">YTBS SCADA Veri</span>
             </button>
-            <button className={`nav-item ${activeTab === 'ytbs_scada_points' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada_points')}>
+            <button className={`nav-item ${activeTab === 'ytbs_scada_points' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada_points')} title="YTBS SCADA Ölçüm Noktaları" aria-label="YTBS SCADA Ölçüm Noktaları">
               📍 <span className="nav-text">YTBS SCADA Ölçüm Noktaları</span>
             </button>
             <div className="nav-section-title">Sistem</div>
-            <button className={`nav-item ${activeTab === 'config' ? 'active' : ''}`} onClick={() => setActiveTab('config')}>
+            <button className={`nav-item ${activeTab === 'config' ? 'active' : ''}`} onClick={() => setActiveTab('config')} title="Ayarlar" aria-label="Ayarlar">
               ⚙️ <span className="nav-text">Ayarlar</span>
             </button>
           </nav>
@@ -463,8 +761,8 @@ function App() {
               <div className="card" style={{ marginBottom: 12 }}>
                 <div className="card-header"><span className="card-title">⚡ Güç</span><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{recentData.length} örnek</span></div>
                 <div className="card-body">
-                  <TimeChart height={140} series={[
-                    { data: gucData, color: '#1a1a1a', label: 'Aktif Güç' },
+                  <TimeChart height={140} themeMode={themeMode} series={[
+                    { data: gucData, color: highContrastTraceColor, label: 'Aktif Güç' },
                     { data: rGucData, color: '#ef4444', label: 'Reaktif Güç' },
                     { data: gGucData, color: '#3b82f6', label: 'Görünen Güç' },
                   ]} />
@@ -475,7 +773,7 @@ function App() {
                 <div className="card">
                   <div className="card-header"><span className="card-title">🔌 Gerilim</span></div>
                   <div className="card-body">
-                    <TimeChart height={120} series={[
+                    <TimeChart height={120} themeMode={themeMode} series={[
                       { data: gerilimAData, color: '#ef4444', label: 'Faz A' },
                       { data: gerilimBData, color: '#eab308', label: 'Faz B' },
                       { data: gerilimCData, color: '#3b82f6', label: 'Faz C' },
@@ -485,7 +783,7 @@ function App() {
                 <div className="card">
                   <div className="card-header"><span className="card-title">📊 Akım</span></div>
                   <div className="card-body">
-                    <TimeChart height={120} series={[
+                    <TimeChart height={120} themeMode={themeMode} series={[
                       { data: akimAData, color: '#ef4444', label: 'Faz A' },
                       { data: akimBData, color: '#eab308', label: 'Faz B' },
                       { data: akimCData, color: '#3b82f6', label: 'Faz C' },
@@ -497,7 +795,7 @@ function App() {
               <div className="card">
                 <div className="card-header"><span className="card-title">📈 Frekans</span></div>
                 <div className="card-body">
-                  <TimeChart height={100} series={[{ data: frekansData, color: '#1a1a1a', label: 'Frekans' }]} />
+                  <TimeChart height={100} themeMode={themeMode} series={[{ data: frekansData, color: highContrastTraceColor, label: 'Frekans' }]} />
                 </div>
               </div>
 
@@ -645,7 +943,7 @@ function App() {
                       ⚡ Güç
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Güç Analizi (MW/MVAr)" cssHeight="100%" series={processedYtbsData.guc} />
+                      <TimeChart height={300} title="Güç Analizi (MW/MVAr)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.guc} />
                     </div>
                   </div>
                   
@@ -654,7 +952,7 @@ function App() {
                       🔌 Gerilim
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Gerilim Analizi (kV)" cssHeight="100%" series={processedYtbsData.gerilim} />
+                      <TimeChart height={300} title="Gerilim Analizi (kV)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilim} />
                     </div>
                   </div>
                   
@@ -663,7 +961,7 @@ function App() {
                       📊 Akım
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Akım Analizi (A)" cssHeight="100%" series={processedYtbsData.akim} />
+                      <TimeChart height={300} title="Akım Analizi (A)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akim} />
                     </div>
                   </div>
                   
@@ -672,7 +970,7 @@ function App() {
                       📈 Frekans
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Frekans Analizi (Hz)" cssHeight="100%" series={processedYtbsData.frekans} />
+                      <TimeChart height={300} title="Frekans Analizi (Hz)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.frekans} />
                     </div>
                   </div>
                 </div>
@@ -838,8 +1136,28 @@ function App() {
                       SCADA
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative', minHeight: 420 }}>
-                      <TimeChart height={420} title={scada.title || (scada.unit ? `Ölçüm (${scada.unit})` : 'Ölçüm')} cssHeight="100%" series={processedScadaData} />
+                      <TimeChart
+                        height={420}
+                        title={scada.title || (scadaDisplayUnit ? `Ölçüm (${scadaDisplayUnit})` : 'Ölçüm')}
+                        cssHeight="100%"
+                        themeMode={themeMode}
+                        series={processedScadaData}
+                        valueAxisName={scadaDisplayUnit || 'Analog değer'}
+                        secondaryAxisName="Threshold %"
+                        extraTooltipRows={scadaTooltipRows}
+                      />
                     </div>
+                  </div>
+                  <div className="scada-info-grid">
+                    {scadaInfoCards.map(card => (
+                      <div className="scada-info-card" key={card.label}>
+                        <div className="scada-info-label">{card.label}</div>
+                        <div className="scada-info-value" title={card.value}>{card.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="threshold-note">
+                    Threshold yüzdesi, son iki analog değer arasındaki farkın AÇIKLAMA 2’de tanımlı analog mühendislik aralığına oranı ile tahmini olarak hesaplanır. AÇIKLAMA 2 veya AÇIKLAMA 3 eksikse hesaplama yapılmaz. Bu değer gerçek RTU threshold ayarı değil, SCADA verisinden hesaplanan tahmini değişim yüzdesidir.
                   </div>
                   <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -926,7 +1244,7 @@ function App() {
                 </div>
                 <div className="card-body" style={{ padding: '10px 12px' }}>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))', gap: 8, marginBottom: 12 }}>
-                    <div style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'rgba(255,255,255,0.03)' }}>
+                    <div style={{ padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: 6, background: 'var(--table-header-bg)' }}>
                       <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>TOPLAM</div>
                       <div style={{ fontSize: 20, fontWeight: 700 }}>{scadaCatalogTotals.total}</div>
                     </div>
@@ -994,9 +1312,22 @@ function App() {
                         {scadaPointFilterOptions.elementId.map(value => <option key={value} value={value}>{value}</option>)}
                       </select>
                     </div>
-                    <button className="btn btn-primary" style={{ fontSize: 11, padding: '7px 12px' }} onClick={() => setScadaPointFilters({ kind: 'all', b1Adi: '', b2Adi: '', b3Adi: '', trafoMerkezi: '', elementId: '' })}>
-                      Temizle
-                    </button>
+                    <div className="filter-actions">
+                      <button className="btn btn-primary" style={{ fontSize: 11, padding: '7px 12px' }} onClick={() => {
+                        setScadaPointPage(1);
+                        setScadaPointFilters({ kind: 'all', b1Adi: '', b2Adi: '', b3Adi: '', trafoMerkezi: '', elementId: '' });
+                      }}>
+                        Temizle
+                      </button>
+                      <button
+                        className="btn btn-outline"
+                        style={{ fontSize: 11, padding: '7px 12px', whiteSpace: 'nowrap' }}
+                        onClick={() => setShowScadaPointDetails(show => !show)}
+                        aria-pressed={showScadaPointDetails}
+                      >
+                        {showScadaPointDetails ? 'Ayrıntıyı Gizle' : 'Ayrıntıyı Göster'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1004,20 +1335,50 @@ function App() {
               <div className="card">
                 <div className="card-header">
                   <span className="card-title">{filteredScadaPoints.length} ölçüm noktası</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Dijital ayrımı Noel alanındaki Anahtar değeriyle yapılır</span>
+                  <div className="pagination-controls">
+                    <span className="pagination-summary">
+                      {scadaPointPageStart}-{scadaPointPageEnd} gösteriliyor · Sayfa {safeScadaPointPage}/{scadaPointPageCount}
+                    </span>
+                    <button
+                      className="btn btn-outline btn-compact"
+                      disabled={safeScadaPointPage <= 1}
+                      onClick={() => setScadaPointPage(page => clampPage(page - 1, filteredScadaPoints.length))}
+                    >
+                      Önceki
+                    </button>
+                    <button
+                      className="btn btn-outline btn-compact"
+                      disabled={safeScadaPointPage >= scadaPointPageCount}
+                      onClick={() => setScadaPointPage(page => clampPage(page + 1, filteredScadaPoints.length))}
+                    >
+                      Sonraki
+                    </button>
+                  </div>
                 </div>
                 <div className="card-body" style={{ padding: 0, overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: 1120 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: showScadaPointDetails ? 1720 : 1120 }}>
                     <thead>
-                      <tr style={{ color: 'var(--text-muted)', background: 'rgba(255,255,255,0.03)' }}>
-                        {['Tip', 'B1 Adı', 'B2 Adı', 'B3 Adı', 'Trafo Merkezi', 'Element ID', 'Element Adı', 'Noel', 'Nimset', 'Aktif'].map(header => (
+                      <tr style={{ color: 'var(--text-muted)', background: 'var(--table-header-bg)' }}>
+                        {[
+                          'Tip',
+                          'B1 Adı',
+                          'B2 Adı',
+                          'B3 Adı',
+                          'Trafo Merkezi',
+                          'Element ID',
+                          'Element Adı',
+                          'Noel',
+                          'Nimset',
+                          'Aktif',
+                          ...(showScadaPointDetails ? ['AÇIKLAMA 1', 'AÇIKLAMA 2', 'AÇIKLAMA 3', 'EŞLEŞME DURUMU'] : []),
+                        ].map(header => (
                           <th key={header} style={{ textAlign: 'left', padding: '9px 10px', borderBottom: '1px solid var(--border-color)', fontWeight: 600 }}>{header}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredScadaPoints.map(point => (
-                        <tr key={point.id} style={{ borderBottom: '1px solid rgba(148,163,184,0.12)' }}>
+                      {paginatedScadaPoints.map(point => (
+                        <tr key={point.id} style={{ borderBottom: '1px solid var(--row-border)' }}>
                           <td style={{ padding: '8px 10px' }}>
                             <span style={{ color: point.measurementKind === 'digital' ? 'var(--accent-yellow)' : '#60a5fa', fontWeight: 700 }}>
                               {point.measurementKind === 'digital' ? 'Dijital' : 'Analog'}
@@ -1032,6 +1393,14 @@ function App() {
                           <td style={{ padding: '8px 10px' }}>{point.noel}</td>
                           <td style={{ padding: '8px 10px' }}>{point.nimset}</td>
                           <td style={{ padding: '8px 10px', color: point.aktif ? 'var(--accent-green)' : 'var(--text-muted)' }}>{point.aktif ? 'Aktif' : 'Pasif'}</td>
+                          {showScadaPointDetails && (
+                            <>
+                              <td style={{ padding: '8px 10px' }}>{point.aciklama1}</td>
+                              <td style={{ padding: '8px 10px' }}>{point.aciklama2}</td>
+                              <td style={{ padding: '8px 10px' }}>{point.aciklama3}</td>
+                              <td style={{ padding: '8px 10px' }}>{point.eslesmeDurumu}</td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>
