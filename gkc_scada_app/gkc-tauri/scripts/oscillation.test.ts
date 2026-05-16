@@ -7,6 +7,11 @@ import {
 import { rawYtbsRowsToPmuSamples } from '../src/features/oscillation/utils/pmuSamples.ts';
 import { fetchSequentialPmuRawData } from '../src/features/oscillation/utils/sequentialQuery.ts';
 import { OSCILLATION_BANDS, validateCustomBand } from '../src/features/oscillation/utils/bands.ts';
+import {
+  calculatePmuDataZoomStart,
+  formatPmuAxisTime,
+  formatPmuTooltipTime,
+} from '../src/features/oscillation/components/chartHelpers.ts';
 import type { PmuFider } from '../src/features/oscillation/types/oscillationTypes.ts';
 
 const fixtureText = readFileSync('../../ytbs_gkc/gkcpmu/gkc1.txt', 'utf8');
@@ -44,6 +49,11 @@ assert.equal(samples[0].activePower, -368.12);
 assert.equal(samples[0].reactivePower, -66.01);
 assert.equal(samples[0].apparentPower, 374.11);
 assert.equal(samples[1].timestampMs - samples[0].timestampMs, 100);
+assert.equal(formatPmuTooltipTime(samples[0].timestampMs).endsWith('.000'), true);
+assert.equal(formatPmuAxisTime(samples[0].timestampMs + 100).endsWith('.100'), true);
+assert.equal(formatPmuAxisTime(samples[0].timestampMs + 900).endsWith('.900'), true);
+assert.equal(calculatePmuDataZoomStart(samples.slice(0, 100), 15), 0);
+assert.ok(calculatePmuDataZoomStart(samples, 0.2) > 0);
 
 const analysis = calculateOscillationAnalysis({
   selectionMode: 'single',

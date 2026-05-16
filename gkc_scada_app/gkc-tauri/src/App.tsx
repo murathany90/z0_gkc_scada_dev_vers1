@@ -902,6 +902,9 @@ function App() {
               📡 <span className="nav-text">YTBS GKÇ Veri</span>
             </button>
             <button className={`nav-item ${activeTab === 'oscillation' ? 'active' : ''}`} onClick={() => setActiveTab('oscillation')} title="Salınım Algılayıcı" aria-label="Salınım Algılayıcı">
+              <svg className="nav-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 12h3l2.5-6 5 12 2.5-6h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
               <span className="nav-text">Salınım Algılayıcı</span>
             </button>
             <button className={`nav-item ${activeTab === 'rms' ? 'active' : ''}`} onClick={() => setActiveTab('rms')} title="RMS Verileri" aria-label="RMS Verileri">

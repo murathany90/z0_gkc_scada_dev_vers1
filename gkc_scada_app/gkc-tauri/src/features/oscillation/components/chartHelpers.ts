@@ -47,6 +47,44 @@ export const PMU_COLORS = ['#22c55e', '#38bdf8', '#f97316', '#a78bfa', '#f43f5e'
 export const formatMetricNumber = (value: number | null | undefined, digits = 3): string =>
   Number.isFinite(value) ? Number(value).toLocaleString('tr-TR', { maximumFractionDigits: digits }) : '-';
 
+const pad = (value: number, size = 2) => String(value).padStart(size, '0');
+const escapeHtml = (value: unknown): string => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
+
+export const formatPmuTooltipTime = (timestampMs: number): string => {
+  const date = new Date(timestampMs);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+};
+
+export const formatPmuAxisTime = (timestampMs: number): string => {
+  const date = new Date(timestampMs);
+  const milliseconds = date.getMilliseconds();
+  const base = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return milliseconds === 0 ? base : `${base}.${pad(milliseconds, 3)}`;
+};
+
+export const calculatePmuDataZoomStart = (samples: PmuSample[], initialWindowMinutes = 15): number => {
+  if (samples.length < 2) return 0;
+  let first = Number.POSITIVE_INFINITY;
+  let last = Number.NEGATIVE_INFINITY;
+  samples.forEach(sample => {
+    if (Number.isFinite(sample.timestampMs)) {
+      first = Math.min(first, sample.timestampMs);
+      last = Math.max(last, sample.timestampMs);
+    }
+  });
+  const durationMs = last - first;
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
+
+  const windowMs = initialWindowMinutes * 60_000;
+  if (durationMs <= windowMs) return 0;
+  return Math.max(0, Math.min(100, ((durationMs - windowMs) / durationMs) * 100));
+};
+
 export const toTimeSeries = (
   samples: PmuSample[],
   signal: PmuSignalKey,
@@ -69,6 +107,21 @@ export const chartBase = (themeMode: OscillationThemeMode) => {
       backgroundColor: palette.tooltipBg,
       borderColor: palette.tooltipBorder,
       textStyle: { color: palette.text, fontSize: 11 },
+      formatter: (params: unknown) => {
+        const items = Array.isArray(params) ? params : [params];
+        const first = items[0] as { value?: [number, number] } | undefined;
+        if (!first?.value) return '';
+        const rows = [`<div style="margin-bottom:6px;font-weight:700;color:${palette.muted};">${formatPmuTooltipTime(first.value[0])}</div>`];
+        items.forEach(item => {
+          const point = item as { marker?: string; seriesName?: string; value?: [number, number] };
+          const value = point.value?.[1];
+          rows.push(`<div style="display:flex;justify-content:space-between;gap:16px;">
+            <span>${point.marker ?? ''}${escapeHtml(point.seriesName)}</span>
+            <strong>${Number.isFinite(value) ? Number(value).toLocaleString('tr-TR', { maximumFractionDigits: 4 }) : '-'}</strong>
+          </div>`);
+        });
+        return rows.join('');
+      },
     },
     grid: { top: 34, left: 42, right: 18, bottom: 48 },
     toolbox: {

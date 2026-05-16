@@ -14,9 +14,13 @@ export function OscillationFilterBar() {
   const durationMs = new Date(store.endTime).getTime() - new Date(store.startTime).getTime();
   const durationHours = Number.isFinite(durationMs) ? durationMs / 3_600_000 : 0;
   const invalidDuration = !Number.isFinite(durationMs) || durationMs <= 0 || durationHours > 4;
+  const handleFetch = async () => {
+    await store.fetchPmuData();
+    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
-    <div className="card" style={{ position: 'sticky', top: 0, zIndex: 5, marginBottom: 12 }}>
+    <div className="card oscillation-filter-card">
       <div className="card-header">
         <span className="card-title">Salınım Algılayıcı — PMU Modal Analiz ve Raporlama</span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gerçek YTBS PMU verisi</span>
@@ -64,7 +68,7 @@ export function OscillationFilterBar() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-primary" disabled={store.loading || invalidDuration} onClick={store.fetchPmuData} style={{ fontSize: 11, fontWeight: 700 }}>
+            <button className="btn btn-primary" disabled={store.loading || invalidDuration} onClick={handleFetch} style={{ fontSize: 11, fontWeight: 700 }}>
               {store.loading ? 'Sorgulanıyor...' : 'Veriyi Getir'}
             </button>
             <button className="btn" disabled={store.analyzing || !store.rawSamples.length} onClick={store.runAnalysis} style={{ fontSize: 11 }}>

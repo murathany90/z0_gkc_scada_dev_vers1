@@ -248,3 +248,89 @@ GKC SCADA projesine katkıda bulunacak tüm geliştiricilerin uyması gereken te
 ---
 
 *Bu doküman, sistemin sürdürülebilirliğini sağlamak adına projeye dahil edilen her yeni özellik veya mimari değişiklik sonrası güncellenmek zorundadır. Enerjinin gücü, bilginin güvenliğinden geçer.*
+
+---
+
+## 10. GÜNCEL ÖZELLİKLER VE DOĞRULAMA NOTLARI (2026-05-17)
+
+### 10.1. Salınım Algılayıcı - GKÇ PMU Modal Analiz
+
+`GKÇ İzleme > Salınım Algılayıcı` sayfası, gerçek YTBS GKÇ PMU verisi üzerinden modal salınım incelemesi yapmak için eklenmiştir. Modül kodları frontend tarafında `gkc_scada_app/gkc-tauri/src/features/oscillation/` altındadır.
+
+Temel kapsam:
+- PMU seçimi tekli analizde 1, çoklu analizde 2-6 ölçüm noktası ile sınırlıdır.
+- YTBS sorguları mevcut `ytbs_query_range`, `buildYtbsQueryChunks` ve `ytbsPmu.ts` altyapısı ile yapılır.
+- Sorgular 30 dakikalık parçalar halinde sıralı çalışır; çoklu PMU'da bir PMU'nun tüm parçaları tamamlanmadan diğerine geçilmez.
+- Analizler yalnızca başarıyla çekilmiş gerçek PMU örnekleri üzerinden yapılır.
+- CSV ve rapor çıktıları yalnızca gerçek sorgu verisinden üretilir.
+
+Mock kapsamı:
+- Salınım Algılayıcı mock veya sentetik PMU veri üretmez.
+- Salınım Algılayıcı mock fallback kullanmaz.
+- Veri yoksa veya PMU boş dönerse arayüz bunu veri bulunamadı / PMU boş döndü bulgusu olarak raporlar.
+- Mevcut `mock_service.rs` diğer geliştirme ve simülasyon akışları için korunur; Salınım Algılayıcı için genişletilmez.
+
+Analiz ve grafik davranışı:
+- Varsayılan ana bant `TR Inter-area / SAS Gözlem Bandı: 0.10-0.20 Hz` olarak gelir.
+- 4.5-5.0 Hz Nyquist tampon bandı pasiftir.
+- 5-14 Hz torsiyonel band desteklenmez.
+- Frekans, gerilim, aktif güç ve reaktif güç sinyalleri için aynı bantlar kullanılır; metrikler ayrı hesaplanır.
+- Büyük veri analizleri Web Worker üzerinden çalışır.
+- Ham PMU grafiklerinde 100 ms zaman hassasiyeti korunur; `.000`, `.100`, `.900` gibi milisaniye değerleri x-ekseni ve tooltipte görünür.
+- Grafiklerde ECharts LTTB sampling, progressive render, zoom ve grafik dışa aktarma desteklenir.
+- Arayüz terminolojisinde `Alarm` yerine `Bulgu`, `Mod`, `Sınıflandırma` ve `Rapor` kullanılır.
+
+### 10.2. UI Güncellemeleri
+
+Salınım Algılayıcı sayfasında son UI düzeltmeleri:
+- Sol sidebar'daki Salınım Algılayıcı menü öğesine sayfa iconu eklendi.
+- Sorgu sonrasında filtre kartının görünür kalması için filtre kartı sticky hale getirildi.
+- Sorgu tamamlandıktan sonra ana içerik tekrar üst bölüme kaydırılır; böylece analiz başlatma kontrolleri kaybolmaz.
+- Ham veri grafiklerinde PMU'nun 100 ms örnekleme yapısına uygun milisaniyeli zaman gösterimi kullanılır.
+
+### 10.3. PMU Veri Mapping Notları
+
+YTBS PMU export satırları analiz için aşağıdaki alan eşleşmeleriyle kullanılır:
+- `y1`: frekans
+- `y2-y4`: gerilim genlikleri
+- `y5-y7`: gerilim açıları
+- `y8-y10`: akım genlikleri
+- `y11-y13`: akım açıları
+- `y14-y16`: güç/görünür güç alanları
+
+Timestamp değerleri parse edilirken milisaniye bilgisi korunur. Bu davranış hem analiz hem de grafik gösterimi için kritiktir.
+
+### 10.4. Güncel Test ve Derleme Komutları
+
+Salınım Algılayıcı ve mevcut YTBS/SCADA akışları için önemli doğrulama komutları:
+
+```powershell
+cd c:\yazilim_projeler\z0_gkc_scada_dev_vers1\gkc_scada_app\gkc-tauri
+
+npm run test:oscillation
+npm run test:ytbs-pmu
+npm run test:ui-state
+cargo test
+npm run build
+```
+
+Canlı Tauri geliştirme testi:
+
+```powershell
+cd c:\yazilim_projeler\z0_gkc_scada_dev_vers1\gkc_scada_app\gkc-tauri
+npm run tauri dev
+```
+
+Notlar:
+- `npm run build` sırasında Vite büyük chunk uyarısı verebilir; bu uyarı derlemeyi tek başına başarısız yapmaz.
+- Canlı YTBS testleri `.env` içindeki bilgilerle yapılır; gizli bilgiler dokümantasyona yazılmamalıdır.
+- SMS doğrulaması gerekirse kullanıcıdan kod alınmalıdır.
+- Canlı oturum veya SMS tamamlanamazsa test sonucu bloklandı olarak raporlanmalı, mock fallback kullanılmamalıdır.
+
+### 10.5. Canlı Veri Doğrulama Noktaları
+
+Salınım Algılayıcı canlı veri testlerinde kullanılan PMU ölçüm noktaları:
+- `285 TEMELLİ, 400 kV YUNUS EMRE TES`
+- `704 YEŞİLHİSAR, 400 kV KARAPINAR MEKE GÖLÜ`
+
+Bu noktalarda PMU verisi yoğun olabileceği için sorgu süreleri uzayabilir. Boş/verisiz dönen PMU sonuçları başarılı bir şekilde veri kalitesi bulgusu olarak gösterilmeli; analiz sadece gelen gerçek örnekler için çalışmalıdır.

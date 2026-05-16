@@ -1,7 +1,16 @@
 import ReactECharts from 'echarts-for-react';
 import { PMU_FIDERS } from '../store/oscillationStore.ts';
 import type { PmuSample, PmuSignalKey } from '../types/oscillationTypes.ts';
-import { chartBase, PMU_COLORS, SIGNAL_LABELS, SIGNAL_UNITS, toTimeSeries, type OscillationThemeMode } from './chartHelpers.ts';
+import {
+  calculatePmuDataZoomStart,
+  chartBase,
+  formatPmuAxisTime,
+  PMU_COLORS,
+  SIGNAL_LABELS,
+  SIGNAL_UNITS,
+  toTimeSeries,
+  type OscillationThemeMode,
+} from './chartHelpers.ts';
 
 export function RawDataCharts({
   samplesByPmu,
@@ -27,11 +36,31 @@ export function RawDataCharts({
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
       {selectedSignals.map(signal => {
+        const selectedSamples = selectedPmuIds.flatMap(pmuId => samplesByPmu[pmuId] ?? []);
+        const dataZoomStart = calculatePmuDataZoomStart(selectedSamples, 15);
         const option = {
           ...chartBase(themeMode),
-          title: { text: `${SIGNAL_LABELS[signal]} Ham Veri`, textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
+          title: {
+            text: `${SIGNAL_LABELS[signal]} Ham Veri`,
+            subtext: 'PMU 100 ms örnekleme',
+            textStyle: { color: 'var(--text-primary)', fontSize: 13 },
+            subtextStyle: { color: 'var(--text-muted)', fontSize: 10 },
+          },
           legend: { top: 0, right: 58, textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
-          xAxis: { type: 'time', axisLabel: { color: 'var(--text-muted)', fontSize: 10 }, axisLine: { lineStyle: { color: 'var(--border-color)' } } },
+          dataZoom: [
+            { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05 },
+            { type: 'slider', start: dataZoomStart, end: 100, bottom: 8, height: 18, borderColor: 'var(--border-color)', textStyle: { color: 'var(--text-muted)' } },
+          ],
+          xAxis: {
+            type: 'time',
+            axisLabel: {
+              color: 'var(--text-muted)',
+              fontSize: 10,
+              hideOverlap: true,
+              formatter: (value: number) => formatPmuAxisTime(value),
+            },
+            axisLine: { lineStyle: { color: 'var(--border-color)' } },
+          },
           yAxis: {
             type: 'value',
             name: SIGNAL_UNITS[signal],

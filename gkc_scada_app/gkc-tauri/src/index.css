@@ -265,6 +265,10 @@ body {
   text-align: left;
 }
 
+.nav-icon-svg {
+  flex: 0 0 16px;
+}
+
 .nav-item:hover {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -306,6 +310,16 @@ body {
 
 .card:hover {
   border-color: rgba(59, 130, 246, 0.3);
+}
+
+.oscillation-filter-card {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  flex-shrink: 0;
+  margin-bottom: 12px;
+  overflow: visible;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
 }
 
 .card-header {
