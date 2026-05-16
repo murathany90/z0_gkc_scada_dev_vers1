@@ -48,6 +48,41 @@ const YTBS_SCADA_CSV_HEADERS = [
 
 const numericTextPattern = /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 
+const turkishAsciiMap: Record<string, string> = {
+  Ç: 'C',
+  ç: 'c',
+  Ğ: 'G',
+  ğ: 'g',
+  İ: 'I',
+  ı: 'i',
+  Ö: 'O',
+  ö: 'o',
+  Ş: 'S',
+  ş: 's',
+  Ü: 'U',
+  ü: 'u',
+};
+
+const repairUtf8Mojibake = (value: string): string => {
+  if (!/[ÃÄÅ]/.test(value)) {
+    return value;
+  }
+
+  try {
+    const bytes = Uint8Array.from(Array.from(value, char => char.charCodeAt(0) & 0xff));
+    return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+  } catch {
+    return value;
+  }
+};
+
+export const toCsvSafeText = (value: string): string =>
+  repairUtf8Mojibake(value)
+    .replace(/[ÇçĞğİıÖöŞşÜü]/g, char => turkishAsciiMap[char] || char)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\x20-\x7E\r\n\t]/g, '');
+
 export function formatCsvCellForExcelTr(value: unknown): string {
   if (value === undefined || value === null || value === '') {
     return '';
@@ -61,6 +96,8 @@ export function formatCsvCellForExcelTr(value: unknown): string {
   } else {
     text = String(value);
   }
+
+  text = toCsvSafeText(text);
 
   if (/[;"\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;

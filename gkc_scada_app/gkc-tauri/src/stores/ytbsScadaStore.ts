@@ -6,6 +6,8 @@ import {
   SCADA_POINT_LIST,
   SCADA_QUERY_MEASUREMENT_POINTS,
   formatScadaElementLabel,
+  formatScadaVoltageLevelLabel,
+  normalizeScadaVoltageLevelValue,
   type ScadaMeasurementPoint,
   type ScadaSelectOption,
 } from '../data/scadaPointList';
@@ -84,8 +86,8 @@ const buildLocalOptions = (filters: YtbsScadaStore['filters']): YtbsScadaOptions
 
   return {
     b1: uniqueOptions(queryPoints, point => point.b1Id, point => point.b1Adi || point.b1Id),
-    b2: uniqueOptions(b2Points, point => point.b2Id, point => point.b2Adi || point.b2Id),
-    b3: uniqueOptions(b3Points, point => point.b3Id, point => point.b3Adi || point.b3Id),
+    b2: uniqueOptions(b2Points, point => point.b2Id, point => formatScadaVoltageLevelLabel(point.b2Adi || point.b2Id)),
+    b3: uniqueOptions(b3Points, point => point.b3Id, point => formatScadaVoltageLevelLabel(point.b3Adi || point.b3Id)),
     elements: uniqueOptions(elementPoints, point => point.id, formatScadaElementLabel),
   };
 };
@@ -94,18 +96,24 @@ const mergeOptions = (
   localOptions: ScadaSelectOption[],
   remoteOptions: ScadaSelectOption[] | undefined,
   preferLocalLabel = false,
+  labelFormatter: (label: string) => string = label => label,
+  valueFormatter: (value: string) => string = value => value,
 ): ScadaSelectOption[] => {
   const merged = new Map<string, ScadaSelectOption>();
-  localOptions.forEach(option => merged.set(option.value, option));
+  localOptions.forEach(option => {
+    const value = valueFormatter(option.value);
+    merged.set(value, { value, label: labelFormatter(option.label) });
+  });
   remoteOptions?.forEach(option => {
     if (!option.value) {
       return;
     }
 
-    const local = merged.get(option.value);
-    merged.set(option.value, {
-      value: option.value,
-      label: preferLocalLabel && local ? local.label : option.label || local?.label || option.value,
+    const value = valueFormatter(option.value);
+    const local = merged.get(value);
+    merged.set(value, {
+      value,
+      label: labelFormatter(preferLocalLabel && local ? local.label : option.label || local?.label || option.value),
     });
   });
   return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label, 'tr'));
@@ -116,8 +124,8 @@ const mergeOptionSets = (
   remoteOptions: Partial<YtbsScadaOptions>,
 ): YtbsScadaOptions => ({
   b1: mergeOptions(localOptions.b1, remoteOptions.b1),
-  b2: mergeOptions(localOptions.b2, remoteOptions.b2),
-  b3: mergeOptions(localOptions.b3, remoteOptions.b3),
+  b2: mergeOptions(localOptions.b2, remoteOptions.b2, false, formatScadaVoltageLevelLabel, normalizeScadaVoltageLevelValue),
+  b3: mergeOptions(localOptions.b3, remoteOptions.b3, false, formatScadaVoltageLevelLabel, normalizeScadaVoltageLevelValue),
   elements: mergeOptions(localOptions.elements, remoteOptions.elements),
 });
 
@@ -203,7 +211,10 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
 
   setFilter: (key, value) => {
     set(state => {
-      const filters = resetDependentFilters(state.filters, key, value);
+      const normalizedValue = key === 'b2' || key === 'b3'
+        ? normalizeScadaVoltageLevelValue(value)
+        : value;
+      const filters = resetDependentFilters(state.filters, key, normalizedValue);
       return {
         filters,
         options: buildLocalOptions(filters),

@@ -8,11 +8,13 @@ import { useLogStore } from './stores/logStore';
 import { useYtbsStore } from './stores/ytbsStore';
 import { findScadaPointById, parseYtbsScadaTimestamp, useYtbsScadaStore } from './stores/ytbsScadaStore';
 import { DEVICE_LIST, DEVICE_MAP } from './data/deviceList';
+import { YtbsScadaQualityReport, type OpenScadaPointRequest } from './components/YtbsScadaQualityReport';
 import {
   SCADA_ANALOG_MEASUREMENT_POINTS,
   SCADA_DIGITAL_MEASUREMENT_POINTS,
   SCADA_POINT_LIST,
   formatScadaElementLabel,
+  formatScadaVoltageLevelLabel,
   type ScadaMeasurementKind,
 } from './data/scadaPointList';
 import { buildYtbsCsv, buildYtbsScadaCsv } from './utils/csvExport';
@@ -28,9 +30,10 @@ import {
 import {
   THRESHOLD_DIGITAL_MESSAGE,
   THRESHOLD_MISSING_MESSAGE,
-  calculateThresholdEstimate,
+  calculateThresholdSeriesEstimate,
   formatThresholdPercent,
-  type ThresholdEstimate,
+  type ThresholdPointEstimate,
+  type ThresholdSeriesEstimate,
 } from './utils/scadaThreshold';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
@@ -42,27 +45,27 @@ const PORTABLE_WINDOW_TITLE = import.meta.env.VITE_PORTABLE_WINDOW_TITLE?.trim()
 
 const chartPalette = (themeMode: ThemeMode) => themeMode === 'light'
   ? {
-      title: '#0f172a',
-      text: '#0f172a',
-      muted: '#475569',
-      axis: '#64748b',
-      axisLine: '#cbd5e1',
-      tooltipBg: 'rgba(255, 255, 255, 0.98)',
-      tooltipBorder: '#cbd5e1',
-      tooltipValue: '#047857',
-      splitLine: 'rgba(148, 163, 184, 0.35)',
-    }
+    title: '#0f172a',
+    text: '#0f172a',
+    muted: '#475569',
+    axis: '#64748b',
+    axisLine: '#cbd5e1',
+    tooltipBg: 'rgba(255, 255, 255, 0.98)',
+    tooltipBorder: '#cbd5e1',
+    tooltipValue: '#047857',
+    splitLine: 'rgba(148, 163, 184, 0.35)',
+  }
   : {
-      title: '#f3f4f6',
-      text: '#f3f4f6',
-      muted: '#94a3b8',
-      axis: '#94a3b8',
-      axisLine: '#334155',
-      tooltipBg: 'rgba(17, 24, 39, 0.95)',
-      tooltipBorder: '#374151',
-      tooltipValue: '#34d399',
-      splitLine: 'rgba(148, 163, 184, 0.16)',
-    };
+    title: '#f3f4f6',
+    text: '#f3f4f6',
+    muted: '#94a3b8',
+    axis: '#94a3b8',
+    axisLine: '#334155',
+    tooltipBg: 'rgba(17, 24, 39, 0.95)',
+    tooltipBorder: '#374151',
+    tooltipValue: '#34d399',
+    splitLine: 'rgba(148, 163, 184, 0.16)',
+  };
 
 type TooltipExtraRow = { label: string; value: string };
 
@@ -155,12 +158,12 @@ function TimeChart({
       top: 'top',
       textStyle: { color: palette.title, fontSize: 13, fontWeight: 600 }
     },
-    tooltip: { 
-      trigger: 'axis', 
+    tooltip: {
+      trigger: 'axis',
       confine: true,
       backgroundColor: palette.tooltipBg,
       borderColor: palette.tooltipBorder,
-      textStyle: { fontSize: 11, color: palette.text }, 
+      textStyle: { fontSize: 11, color: palette.text },
       padding: 8,
       formatter: function (params: any) {
         const items = Array.isArray(params) ? params : [params];
@@ -197,23 +200,23 @@ function TimeChart({
         return html;
       }
     },
-    legend: { 
-      show: true, 
-      right: 5, 
-      top: 'middle', 
-      orient: 'vertical', 
-      textStyle: { color: palette.muted, fontSize: 10 }, 
-      itemWidth: 10, 
+    legend: {
+      show: true,
+      right: 5,
+      top: 'middle',
+      orient: 'vertical',
+      textStyle: { color: palette.muted, fontSize: 10 },
+      itemWidth: 10,
       itemHeight: 10,
       pageIconColor: palette.muted,
       pageTextStyle: { color: palette.muted }
     },
-    grid: { top: 45, right: 140, bottom: 30, left: 15, containLabel: true },
+    grid: { top: 45, right: hasSecondaryAxis ? 210 : 140, bottom: 30, left: 15, containLabel: true },
     xAxis: {
       type: 'time',
-      axisLabel: { 
-        show: true, 
-        fontSize: 9, 
+      axisLabel: {
+        show: true,
+        fontSize: 9,
         color: palette.axis,
         formatter: '{HH}:{mm}:{ss}'
       },
@@ -270,6 +273,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('merkezrms');
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_STORAGE_KEY) !== '0');
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => resolveInitialTheme(localStorage.getItem(THEME_STORAGE_KEY)));
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [scadaPointPage, setScadaPointPage] = useState(1);
   const [showScadaPointDetails, setShowScadaPointDetails] = useState(false);
   const [scadaPointFilters, setScadaPointFilters] = useState<{
@@ -294,14 +298,14 @@ function App() {
     const t0 = performance.now();
     try {
       const raw = ytbs.ytbsRawData;
-      
-      const toTs = (z: string) => { 
+
+      const toTs = (z: string) => {
         const p = z.split(/[. :]/);
-        return new Date(parseInt(p[2]), parseInt(p[1])-1, parseInt(p[0]), parseInt(p[3]), parseInt(p[4]), parseInt(p[5])).getTime();
+        return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]), parseInt(p[3]), parseInt(p[4]), parseInt(p[5])).getTime();
       };
-      
+
       const timestamps = raw.map(d => toTs(d.zaman));
-      
+
       const res = {
         guc: [
           { data: raw.map((d, i) => d.y11 !== undefined ? [timestamps[i], d.y11] : null).filter(n => n), color: '#94a3b8', label: 'Aktif Güç (y11)' },
@@ -369,24 +373,34 @@ function App() {
   const rawScadaDelta = Number.isFinite(latestScadaSample?.deger) && Number.isFinite(previousScadaSample?.deger)
     ? Math.abs(Number(latestScadaSample?.deger) - Number(previousScadaSample?.deger))
     : null;
-  const scadaThresholdEstimate = useMemo<ThresholdEstimate>(() => calculateThresholdEstimate({
+  const scadaThresholdSeriesEstimate = useMemo<ThresholdSeriesEstimate>(() => calculateThresholdSeriesEstimate({
     elementAdi: selectedScadaPoint?.elementAdi,
-    previousValue: previousScadaSample?.deger,
-    currentValue: latestScadaSample?.deger,
+    samples: scada.data.map(item => ({
+      timestamp: parseYtbsScadaTimestamp(item.zaman),
+      value: item.deger,
+    })),
     aciklama2: selectedScadaPoint?.aciklama2,
     aciklama3: selectedScadaPoint?.aciklama3,
   }), [
-    latestScadaSample?.deger,
-    previousScadaSample?.deger,
+    scada.data,
     selectedScadaPoint?.aciklama2,
     selectedScadaPoint?.aciklama3,
     selectedScadaPoint?.elementAdi,
   ]);
-  const thresholdStatusText = scadaThresholdEstimate.status === 'ok'
-    ? `${formatThresholdPercent(scadaThresholdEstimate.estimatedThresholdPercent)} · Δ ${formatNumericWithUnit(scadaThresholdEstimate.estimatedThresholdEngineering, scadaDisplayUnit)} · Ham Δ ${scadaThresholdEstimate.estimatedRawDelta.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
-    : scadaThresholdEstimate.status === 'digital'
+  const thresholdStatusText = scadaThresholdSeriesEstimate.status === 'ok'
+    ? `Min ${formatThresholdPercent(scadaThresholdSeriesEstimate.minThresholdPercent)} · Max ${formatThresholdPercent(scadaThresholdSeriesEstimate.maxThresholdPercent)} · Ort ${formatThresholdPercent(scadaThresholdSeriesEstimate.averageThresholdPercent)} · Ort Δ ${formatNumericWithUnit(scadaThresholdSeriesEstimate.averageThresholdEngineering, scadaDisplayUnit)}`
+    : scadaThresholdSeriesEstimate.status === 'digital'
       ? THRESHOLD_DIGITAL_MESSAGE
       : THRESHOLD_MISSING_MESSAGE;
+  const scadaThresholdPointByTimestamp = useMemo(() => {
+    const byTimestamp = new Map<number, ThresholdPointEstimate>();
+    if (scadaThresholdSeriesEstimate.status === 'ok') {
+      scadaThresholdSeriesEstimate.points.forEach(point => {
+        byTimestamp.set(point.timestamp, point);
+      });
+    }
+    return byTimestamp;
+  }, [scadaThresholdSeriesEstimate]);
   const processedScadaData = useMemo(() => {
     if (scada.data.length === 0) return [];
 
@@ -396,36 +410,36 @@ function App() {
       label: scadaDisplayUnit ? `Ölçüm (${scadaDisplayUnit})` : 'Ölçüm',
     }];
 
-    if (scadaThresholdEstimate.status === 'ok' && latestScadaSample) {
-      const timestamp = parseYtbsScadaTimestamp(latestScadaSample.zaman);
-      const percent = scadaThresholdEstimate.estimatedThresholdPercent;
+    if (scadaThresholdSeriesEstimate.status === 'ok') {
       baseSeries.push({
-        data: [[timestamp, percent]],
+        data: scadaThresholdSeriesEstimate.points.map(point => [point.timestamp, point.estimatedThresholdPercent]),
         color: themeMode === 'dark' ? '#fbbf24' : '#b45309',
         label: 'Tahmini Threshold %',
         yAxisIndex: 1,
-        lineStyle: { width: 0 },
+        lineStyle: { width: 1.5, type: 'dashed' },
         showSymbol: true,
-        symbolSize: 9,
+        symbolSize: 6,
         valueFormatter: formatThresholdPercent,
         labelOptions: {
           show: true,
-          formatter: formatThresholdPercent(percent),
-          position: 'bottom',
+          formatter: (params: { dataIndex: number }) =>
+            params.dataIndex === scadaThresholdSeriesEstimate.points.length - 1 ? thresholdStatusText : '',
+          position: 'top',
           color: themeMode === 'dark' ? '#fde68a' : '#92400e',
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: 700,
         },
       });
     }
 
     return baseSeries;
-  }, [latestScadaSample, scada.data, scadaDisplayUnit, scadaThresholdEstimate, themeMode]);
+  }, [scada.data, scadaDisplayUnit, scadaThresholdSeriesEstimate, themeMode, thresholdStatusText]);
   const scadaTooltipRows = useMemo(() => {
     return (timestamp: number): TooltipExtraRow[] => {
-      const thresholdText = scadaThresholdEstimate.status === 'ok'
-        ? formatThresholdPercent(scadaThresholdEstimate.estimatedThresholdPercent)
-        : scadaThresholdEstimate.message;
+      const thresholdPoint = scadaThresholdPointByTimestamp.get(timestamp);
+      const thresholdText = thresholdPoint
+        ? `${formatThresholdPercent(thresholdPoint.estimatedThresholdPercent)} · Δ ${formatNumericWithUnit(thresholdPoint.estimatedThresholdEngineering, scadaDisplayUnit)}`
+        : thresholdStatusText;
       return [
         { label: 'Zaman', value: new Date(timestamp).toLocaleString('tr-TR') },
         { label: 'Son analog değer', value: formatNumericWithUnit(latestScadaSample?.deger, scadaDisplayUnit) },
@@ -437,10 +451,10 @@ function App() {
         { label: 'AÇIKLAMA 3', value: selectedScadaPoint?.aciklama3 || '-' },
         { label: 'EŞLEŞME DURUMU', value: selectedScadaPoint?.eslesmeDurumu || '-' },
         { label: 'ADRES1 / ADRES2', value: `${selectedScadaPoint?.noel || '-'} / ${selectedScadaPoint?.nimset || '-'}` },
-        { label: 'B1 ID / B2 ID / B3 ID / Element Adı', value: `${selectedScadaPoint?.b1Id || '-'} / ${selectedScadaPoint?.b2Id || '-'} / ${selectedScadaPoint?.b3Id || '-'} / ${selectedScadaPoint?.elementAdi || '-'}` },
+        { label: 'B1 ID / B2 ID / B3 ID / Element Adı', value: `${selectedScadaPoint?.b1Id || '-'} / ${selectedScadaPoint?.b2Id ? formatScadaVoltageLevelLabel(selectedScadaPoint.b2Id) : '-'} / ${selectedScadaPoint?.b3Id ? formatScadaVoltageLevelLabel(selectedScadaPoint.b3Id) : '-'} / ${selectedScadaPoint?.elementAdi || '-'}` },
       ];
     };
-  }, [latestScadaSample?.deger, previousScadaSample?.deger, rawScadaDelta, scadaDisplayUnit, scadaThresholdEstimate, selectedScadaPoint]);
+  }, [latestScadaSample?.deger, previousScadaSample?.deger, rawScadaDelta, scadaDisplayUnit, scadaThresholdPointByTimestamp, selectedScadaPoint, thresholdStatusText]);
   const scadaInfoCards = useMemo(() => [
     { label: 'Son Analog Değer', value: formatNumericWithUnit(latestScadaSample?.deger, scadaDisplayUnit) },
     { label: 'Önceki Analog Değer', value: formatNumericWithUnit(previousScadaSample?.deger, scadaDisplayUnit) },
@@ -517,13 +531,51 @@ function App() {
 
   const formatYtbsDateTime = (iso: string) => {
     const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
   const handleScadaFilterChange = (key: keyof typeof scada.filters, value: string) => {
     scada.setFilter(key, value);
     if (ytbs.status === 'connected' && key !== 'scadaId') {
       useYtbsScadaStore.getState().refreshOptions(true);
+    }
+  };
+
+  const showExportMessage = (message: string) => {
+    setExportMessage(message);
+    window.setTimeout(() => setExportMessage(null), 5000);
+  };
+
+  const downloadCsv = (content: string, fileName: string) => {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenScadaPointFromQualityReport = async ({
+    startTime,
+    endTime,
+    point,
+    scadaId,
+  }: OpenScadaPointRequest) => {
+    const scadaStore = useYtbsScadaStore.getState();
+    scadaStore.setFilter('startTime', startTime);
+    scadaStore.setFilter('endTime', endTime);
+    scadaStore.setFilter('b1', point.b1Id);
+    scadaStore.setFilter('b2', point.b2Id);
+    scadaStore.setFilter('b3', point.b3Id);
+    scadaStore.setFilter('scadaId', scadaId);
+    setActiveTab('ytbs_scada');
+
+    if (ytbs.status === 'connected') {
+      await useYtbsScadaStore.getState().refreshOptions(true);
+      await useYtbsScadaStore.getState().queryRange(formatYtbsDateTime(startTime), formatYtbsDateTime(endTime));
     }
   };
 
@@ -646,6 +698,27 @@ function App() {
         </div>
       </header>
 
+      {exportMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 58,
+            right: 16,
+            zIndex: 50,
+            maxWidth: 360,
+            padding: '9px 12px',
+            border: '1px solid var(--border-color)',
+            borderRadius: 6,
+            background: 'var(--bg-secondary)',
+            color: exportMessage.includes('hatası') || exportMessage.includes('bulunamadı') ? 'var(--accent-red)' : 'var(--accent-green)',
+            fontSize: 12,
+            boxShadow: '0 8px 20px rgba(15, 23, 42, 0.18)',
+          }}
+        >
+          {exportMessage}
+        </div>
+      )}
+
       {/* Layout */}
       <div className="app-layout">
         {/* Sidebar */}
@@ -670,6 +743,9 @@ function App() {
             <div className="nav-section-title">SCADA İzleme</div>
             <button className={`nav-item ${activeTab === 'ytbs_scada' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada')} title="YTBS SCADA Veri" aria-label="YTBS SCADA Veri">
               📡 <span className="nav-text">YTBS SCADA Veri</span>
+            </button>
+            <button className={`nav-item ${activeTab === 'ytbs_scada_quality_report' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada_quality_report')} title="YTBS SCADA Veri Kalitesi Raporu" aria-label="YTBS SCADA Veri Kalitesi Raporu">
+              📊 <span className="nav-text">YTBS SCADA Veri Kalitesi Raporu</span>
             </button>
             <button className={`nav-item ${activeTab === 'ytbs_scada_points' ? 'active' : ''}`} onClick={() => setActiveTab('ytbs_scada_points')} title="YTBS SCADA Ölçüm Noktaları" aria-label="YTBS SCADA Ölçüm Noktaları">
               📍 <span className="nav-text">YTBS SCADA Ölçüm Noktaları</span>
@@ -869,8 +945,8 @@ function App() {
                       <select value={ytbs.filters.cihaz} onChange={e => ytbs.setFilter('cihaz', e.target.value)} disabled={isHealthScanning}
                         style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11, opacity: isHealthScanning ? 0.6 : 1 }}>
                         <option value="">Cihaz seçin...</option>
-                        {DEVICE_LIST.filter(d => 
-                          (!ytbs.filters.gerilim || String(d.gerilim) === ytbs.filters.gerilim) && 
+                        {DEVICE_LIST.filter(d =>
+                          (!ytbs.filters.gerilim || String(d.gerilim) === ytbs.filters.gerilim) &&
                           (d.olcumModu === ytbs.filters.olcumTipi)
                         ).map(dev => {
                           const healthInfo = ytbs.healthStatus[dev.id];
@@ -884,17 +960,17 @@ function App() {
                         })}
                       </select>
                     </div>
-                    <button className="btn btn-primary" 
+                    <button className="btn btn-primary"
                       disabled={ytbs.ytbsQueryLoading || ytbs.status !== 'connected' || !ytbs.filters.cihaz || isHealthScanning}
                       onClick={() => {
-                        const fmt = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+                        const fmt = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
                         const fazVal = ytbs.filters.faz === 'Üç Faz' ? '' : '1';
                         ytbs.queryRange(ytbs.filters.cihaz, ytbs.filters.olcumTipi, fmt(ytbs.filters.startTime), fmt(ytbs.filters.endTime), ytbs.filters.gerilim, fazVal);
                       }}
                       style={{ fontWeight: 600, fontSize: 12 }}>
                       {ytbs.ytbsQueryLoading ? '⏳ Sorgulanıyor...' : '📊 GÖSTER'}
                     </button>
-                    <button className="btn" 
+                    <button className="btn"
                       disabled={ytbs.status !== 'connected'}
                       onClick={async () => {
                         if (isHealthScanning) {
@@ -902,8 +978,8 @@ function App() {
                         } else {
                           setIsHealthScanning(true);
                           try {
-                            const targetDevices = DEVICE_LIST.filter(d => 
-                              (!ytbs.filters.gerilim || String(d.gerilim) === ytbs.filters.gerilim) && 
+                            const targetDevices = DEVICE_LIST.filter(d =>
+                              (!ytbs.filters.gerilim || String(d.gerilim) === ytbs.filters.gerilim) &&
                               (d.olcumModu === ytbs.filters.olcumTipi)
                             );
                             await ytbs.scanAllHealth(targetDevices, ytbs.filters.faz, ytbs.filters.olcumTipi);
@@ -912,15 +988,15 @@ function App() {
                           }
                         }
                       }}
-                      style={{ 
-                        fontWeight: 600, 
-                        fontSize: 12, 
+                      style={{
+                        fontWeight: 600,
+                        fontSize: 12,
                         backgroundColor: isHealthScanning ? '#ef4444' : '#10b981',
                         color: 'white',
                         minWidth: 140
                       }}>
-                      {isHealthScanning 
-                        ? `🛑 DURDUR (${ytbs.healthScanProgress.current}/${ytbs.healthScanProgress.total})` 
+                      {isHealthScanning
+                        ? `🛑 DURDUR (${ytbs.healthScanProgress.current}/${ytbs.healthScanProgress.total})`
                         : '🏥 GKÇ SAĞLIK'}
                     </button>
                   </div>
@@ -946,7 +1022,7 @@ function App() {
                       <TimeChart height={300} title="Güç Analizi (MW/MVAr)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.guc} />
                     </div>
                   </div>
-                  
+
                   <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
                     <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
                       🔌 Gerilim
@@ -955,7 +1031,7 @@ function App() {
                       <TimeChart height={300} title="Gerilim Analizi (kV)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilim} />
                     </div>
                   </div>
-                  
+
                   <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
                     <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
                       📊 Akım
@@ -964,7 +1040,7 @@ function App() {
                       <TimeChart height={300} title="Akım Analizi (A)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akim} />
                     </div>
                   </div>
-                  
+
                   <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
                     <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
                       📈 Frekans
@@ -1017,24 +1093,22 @@ function App() {
                 <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <span>✅ {ytbs.ytbsData.length} veri noktası yüklendi</span>
-                    <button 
-                      className="btn btn-primary" 
+                    <button
+                      className="btn btn-primary"
                       style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600 }}
                       onClick={() => {
                         try {
                           const rawData = ytbs.ytbsRawData;
-                          if (!rawData.length) { alert('İndirilecek veri bulunamadı.'); return; }
+                          if (!rawData.length) {
+                            showExportMessage('İndirilecek veri bulunamadı.');
+                            return;
+                          }
+                          showExportMessage('YTBS GKÇ CSV dosyası hazırlanıyor...');
                           const csvContent = buildYtbsCsv(rawData);
-                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                          const url = URL.createObjectURL(blob);
-                          const link = document.createElement("a");
-                          link.setAttribute("href", url);
-                          link.setAttribute("download", `YTBS_GKC_VERI_EKSPOR_${new Date().getTime()}.csv`);
-                          document.body.appendChild(link);
-                          link.click();
-                          document.body.removeChild(link);
+                          downloadCsv(csvContent, `YTBS_GKC_VERI_EKSPOR_${new Date().getTime()}.csv`);
+                          showExportMessage('YTBS GKÇ CSV indirildi. Türkçe karakterler Excel uyumu için ASCII olarak yazıldı.');
                         } catch (err) {
-                          alert('CSV oluşturma hatası: ' + err);
+                          showExportMessage('CSV oluşturma hatası: ' + err);
                         }
                       }}
                     >
@@ -1157,7 +1231,7 @@ function App() {
                     ))}
                   </div>
                   <div className="threshold-note">
-                    Threshold yüzdesi, son iki analog değer arasındaki farkın AÇIKLAMA 2’de tanımlı analog mühendislik aralığına oranı ile tahmini olarak hesaplanır. AÇIKLAMA 2 veya AÇIKLAMA 3 eksikse hesaplama yapılmaz. Bu değer gerçek RTU threshold ayarı değil, SCADA verisinden hesaplanan tahmini değişim yüzdesidir.
+                    Threshold yüzdesi, ilk nokta hariç ardışık analog değerler arasındaki farkın AÇIKLAMA 2’de tanımlı analog aralığına oranı ile tahmini olarak hesaplanır. AÇIKLAMA 2 veya AÇIKLAMA 3 eksikse hesaplama yapılmaz. Bu değer gerçek RTU threshold ayarı değil, SCADA verisinden hesaplanan tahmini değişim yüzdesidir.
                   </div>
                   <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -1167,7 +1241,11 @@ function App() {
                         style={{ padding: '6px 14px', fontSize: 11, fontWeight: 600 }}
                         onClick={() => {
                           try {
-                            if (!scada.data.length) { alert('İndirilecek veri bulunamadı.'); return; }
+                            if (!scada.data.length) {
+                              showExportMessage('İndirilecek veri bulunamadı.');
+                              return;
+                            }
+                            showExportMessage('YTBS SCADA CSV dosyası hazırlanıyor...');
                             const csvContent = buildYtbsScadaCsv(scada.data as unknown as Record<string, unknown>[], {
                               unit: scada.unit || selectedScadaPoint?.unit || '',
                               b1: selectedScadaB1Label,
@@ -1175,16 +1253,10 @@ function App() {
                               b3: selectedScadaB3Label,
                               element: selectedScadaElementLabel,
                             });
-                            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                            const url = URL.createObjectURL(blob);
-                            const link = document.createElement("a");
-                            link.setAttribute("href", url);
-                            link.setAttribute("download", `YTBS_SCADA_VERI_EKSPOR_${new Date().getTime()}.csv`);
-                            document.body.appendChild(link);
-                            link.click();
-                            document.body.removeChild(link);
+                            downloadCsv(csvContent, `YTBS_SCADA_VERI_EKSPOR_${new Date().getTime()}.csv`);
+                            showExportMessage('YTBS SCADA CSV indirildi. Türkçe karakterler Excel uyumu için ASCII olarak yazıldı.');
                           } catch (err) {
-                            alert('CSV oluşturma hatası: ' + err);
+                            showExportMessage('CSV oluşturma hatası: ' + err);
                           }
                         }}
                       >
@@ -1232,6 +1304,15 @@ function App() {
               )}
             </>
           )}
+
+          <div
+            style={{ display: activeTab === 'ytbs_scada_quality_report' ? 'block' : 'none' }}
+          >
+            <YtbsScadaQualityReport
+              ytbsStatus={ytbs.status}
+              onOpenScadaPoint={handleOpenScadaPointFromQualityReport}
+            />
+          </div>
 
           {activeTab === 'ytbs_scada_points' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 20 }}>
@@ -1285,7 +1366,7 @@ function App() {
                       <select value={scadaPointFilters.b2Adi} onChange={e => setScadaPointFilter('b2Adi', e.target.value)}
                         style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
                         <option value="">Tümü</option>
-                        {scadaPointFilterOptions.b2Adi.map(value => <option key={value} value={value}>{value}</option>)}
+                        {scadaPointFilterOptions.b2Adi.map(value => <option key={value} value={value}>{formatScadaVoltageLevelLabel(value)}</option>)}
                       </select>
                     </div>
                     <div>
@@ -1293,7 +1374,7 @@ function App() {
                       <select value={scadaPointFilters.b3Adi} onChange={e => setScadaPointFilter('b3Adi', e.target.value)}
                         style={{ width: '100%', padding: 7, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
                         <option value="">Tümü</option>
-                        {scadaPointFilterOptions.b3Adi.map(value => <option key={value} value={value}>{value}</option>)}
+                        {scadaPointFilterOptions.b3Adi.map(value => <option key={value} value={value}>{formatScadaVoltageLevelLabel(value)}</option>)}
                       </select>
                     </div>
                     <div>
@@ -1385,8 +1466,8 @@ function App() {
                             </span>
                           </td>
                           <td style={{ padding: '8px 10px', color: 'var(--text-primary)' }}>{point.b1Adi}</td>
-                          <td style={{ padding: '8px 10px' }}>{point.b2Adi}</td>
-                          <td style={{ padding: '8px 10px' }}>{point.b3Adi}</td>
+                          <td style={{ padding: '8px 10px' }}>{formatScadaVoltageLevelLabel(point.b2Adi)}</td>
+                          <td style={{ padding: '8px 10px' }}>{formatScadaVoltageLevelLabel(point.b3Adi)}</td>
                           <td style={{ padding: '8px 10px' }}>{point.trafoMerkezi || '-'}</td>
                           <td style={{ padding: '8px 10px', fontFamily: 'JetBrains Mono, monospace' }}>{point.elementId}</td>
                           <td style={{ padding: '8px 10px' }}>{point.elementAdi}</td>
@@ -1421,25 +1502,25 @@ function App() {
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
                     <div style={{ flex: 1 }}>
                       <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Kullanıcı Adı</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         id="rms-username"
                         defaultValue={localStorage.getItem('rms_username') || ''}
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} 
-                        placeholder="Kullanıcı adını girin..." 
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                        placeholder="Kullanıcı adını girin..."
                       />
                     </div>
                     <div style={{ flex: 1 }}>
                       <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px' }}>Şifre</label>
-                      <input 
-                        type="password" 
+                      <input
+                        type="password"
                         id="rms-password"
                         defaultValue=""
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }} 
-                        placeholder="Şifreyi girin..." 
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)' }}
+                        placeholder="Şifreyi girin..."
                       />
                     </div>
-                    <button 
+                    <button
                       className="btn btn-primary"
                       onClick={() => {
                         const uname = (document.getElementById('rms-username') as HTMLInputElement).value;
@@ -1459,7 +1540,8 @@ function App() {
               <div className="card">
                 <div className="card-header">
                   <span className="card-title">🌐 YTBS Yedek Veri Kanalı</span>
-                  <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold',
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold',
                     background: ytbs.status === 'connected' ? 'rgba(16,185,129,0.2)' : ytbs.status === 'sms_required' ? 'rgba(245,158,11,0.2)' : 'rgba(107,114,128,0.2)',
                     color: ytbs.status === 'connected' ? 'var(--accent-green)' : ytbs.status === 'sms_required' ? 'var(--accent-yellow)' : 'var(--text-muted)'
                   }}>
@@ -1471,7 +1553,7 @@ function App() {
                     Birincil sunucuya erişilemediğinde YTBS (ytbs.teias.gov.tr) üzerinden GKÇ ve SCADA verileri çekilir. İlk girişte SMS doğrulaması gerekir (24 saat geçerli).
                   </div>
                   {ytbs.error && <div style={{ color: 'var(--accent-red)', fontSize: '12px', marginBottom: '8px' }}>⚠️ {ytbs.error}</div>}
-                  
+
                   {ytbs.status !== 'connected' && ytbs.status !== 'sms_required' && (
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: '140px' }}>
@@ -1552,7 +1634,7 @@ function App() {
                           <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                             <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>{new Date(log.timestamp).toLocaleTimeString('tr-TR')}</td>
                             <td style={{ padding: '8px 12px' }}>
-                              <span style={{ 
+                              <span style={{
                                 padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold',
                                 background: log.type === 'ERROR' ? 'rgba(239, 68, 68, 0.2)' : log.type === 'WARN' ? 'rgba(245, 158, 11, 0.2)' : log.type === 'NETWORK' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
                                 color: log.type === 'ERROR' ? 'var(--accent-red)' : log.type === 'WARN' ? 'var(--accent-yellow)' : log.type === 'NETWORK' ? 'var(--accent-blue)' : 'var(--accent-green)'

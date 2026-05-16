@@ -15444,6 +15444,23 @@ const inferUnit = (elementId: string): string => {
   return match?.[1] || '';
 };
 
+const SCADA_VOLTAGE_LEVEL_ALIASES: Record<string, string> = {
+  '63': '6.3',
+  '105': '10.5',
+  '144': '14.4',
+  '275': '27.5',
+  '315': '31.5',
+  '336': '33.6',
+  '345': '34.5',
+};
+
+export const normalizeScadaVoltageLevelValue = (value: string): string => {
+  const normalized = value.trim();
+  return SCADA_VOLTAGE_LEVEL_ALIASES[normalized] || normalized;
+};
+
+export const formatScadaVoltageLevelLabel = normalizeScadaVoltageLevelValue;
+
 export const formatScadaElementLabel = (point: ScadaMeasurementPoint): string =>
   point.elementAdi ? `${point.elementAdi} - ${point.elementId}` : point.elementId;
 
@@ -15471,10 +15488,10 @@ export const SCADA_POINT_LIST: ScadaMeasurementPoint[] = SCADA_POINT_ROWS.map(([
   id,
   b1Id,
   b1Adi,
-  b2Id,
-  b2Adi,
-  b3Id,
-  b3Adi,
+  b2Id: normalizeScadaVoltageLevelValue(b2Id),
+  b2Adi: normalizeScadaVoltageLevelValue(b2Adi),
+  b3Id: normalizeScadaVoltageLevelValue(b3Id),
+  b3Adi: normalizeScadaVoltageLevelValue(b3Adi),
   trafoMerkezi,
   anahtar,
   elementId,

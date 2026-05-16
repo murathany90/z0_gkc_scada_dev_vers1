@@ -1,5 +1,6 @@
 // GKÇ İstemci - Log Yönetimi (Zustand)
 import { create } from 'zustand';
+import { formatCsvCellForExcelTr } from '../utils/csvExport';
 
 export interface AppLog {
   id: string;
@@ -42,19 +43,16 @@ export const useLogStore = create<LogStore>((set, get) => ({
 
     const headers = ['Tarih/Saat', 'Tip', 'Endpoint', 'Mesaj', 'Detay'];
     const csvContent = [
-      headers.join(','),
+      headers.map(formatCsvCellForExcelTr).join(';'),
       ...logs.map(log => {
         const date = new Date(log.timestamp).toLocaleString('tr-TR');
         const type = log.type;
         const endpoint = log.endpoint || '-';
-        // CSV formatı için mesajlardaki virgülleri ve tırnakları temizle
-        const message = `"${log.message.replace(/"/g, '""')}"`;
-        const details = log.details ? `"${log.details.replace(/"/g, '""')}"` : '-';
-        return `${date},${type},${endpoint},${message},${details}`;
+        return [date, type, endpoint, log.message, log.details || '-'].map(formatCsvCellForExcelTr).join(';');
       })
-    ].join('\n');
+    ].join('\r\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([`\uFEFFsep=;\r\n${csvContent}`], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
@@ -63,5 +61,11 @@ export const useLogStore = create<LogStore>((set, get) => ({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    get().addLog({
+      type: 'INFO',
+      message: 'Log CSV dosyası indirildi. Türkçe karakterler Excel uyumu için ASCII olarak yazıldı.',
+    });
   }
 }));

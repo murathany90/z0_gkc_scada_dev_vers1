@@ -22,6 +22,8 @@ assert.equal(formatCsvCellForExcelTr(-88.643684), '-88,643684');
 assert.equal(formatCsvCellForExcelTr('49.985774'), '49,985774');
 assert.equal(formatCsvCellForExcelTr('10.05.2026 22:48'), '10.05.2026 22:48');
 assert.equal(formatCsvCellForExcelTr('A;B "C"'), '"A;B ""C"""');
+assert.equal(formatCsvCellForExcelTr('ÇĞİÖŞÜ çğıöşü'), 'CGIOSU cgiosu');
+assert.equal(formatCsvCellForExcelTr('Ölçüm Güç'), 'Olcum Guc');
 
 const csv = buildYtbsCsv([
   {
@@ -47,8 +49,8 @@ const scadaCsv = buildYtbsScadaCsv([
   b1: 'CAYIRHA',
   b2: '380',
   b3: 'ADA-2',
-  element: 'Q',
+  element: 'Ölçüm Güç',
 });
 
 assert.ok(scadaCsv.startsWith('\uFEFFsep=;\r\nZaman;Deger;Birim;B1;B2;B3;Element'));
-assert.ok(scadaCsv.includes('-9,68;MVAr;CAYIRHA;380;ADA-2;Q'));
+assert.ok(scadaCsv.includes('-9,68;MVAr;CAYIRHA;380;ADA-2;Olcum Guc'));

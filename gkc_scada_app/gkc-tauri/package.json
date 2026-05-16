@@ -13,7 +13,9 @@
     "build:portable": "node scripts/buildPortable.mjs",
     "test:portable-name": "node scripts/portableNaming.test.mjs",
     "test:ui-state": "node scripts/uiState.test.ts",
+    "test:csv-format": "node scripts/csvFormat.test.ts",
     "test:scada-threshold": "node scripts/scadaThreshold.test.ts",
+    "test:scada-quality-report": "node scripts/scadaQualityReport.test.ts",
     "test:scada-details": "node scripts/scadaPointDetails.test.ts"
   },
   "dependencies": {
