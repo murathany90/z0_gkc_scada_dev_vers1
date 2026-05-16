@@ -83,8 +83,8 @@ const statsWithZeroThresholds = calculateScadaQualityStats(createPoint('u-1', 'B
 ]);
 
 assert.equal(statsWithZeroThresholds.sampleCount, 5);
-assert.equal(statsWithZeroThresholds.averageThresholdPercent, 0.75);
-assert.equal(statsWithZeroThresholds.averageThresholdEngineering, 1.5);
+assert.equal(Math.round(Number(statsWithZeroThresholds.averageThresholdPercent) * 1000) / 1000, 0.667);
+assert.equal(Math.round(Number(statsWithZeroThresholds.averageThresholdEngineering) * 1000) / 1000, 1.333);
 
 assert.equal(calculateDataRatePerMinute(160, '2026-05-16T14:00', '2026-05-16T15:20'), 2);
 assert.equal(calculateDataRatePerMinute(0, '2026-05-16T14:00', '2026-05-16T15:20'), 0);

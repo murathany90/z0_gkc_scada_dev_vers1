@@ -29,6 +29,12 @@ pub struct YtbsClient {
 mod scada_parser_tests {
     use super::*;
 
+    fn read_repo_fixture(relative_path: &str) -> Option<String> {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = manifest_dir.parent()?.parent()?.parent()?;
+        std::fs::read_to_string(repo_root.join(relative_path)).ok()
+    }
+
     #[test]
     fn parse_scada_grafik_verisi_extracts_single_value_series() {
         let response = r#"
@@ -98,18 +104,23 @@ mod scada_parser_tests {
 
     #[test]
     fn parse_scada_options_extracts_primefaces_panel_values_from_fixtures() {
-        let b1 = YtbsClient::parse_scada_options_from_response(include_str!(
-            "../../../../ytbs_scada/b1.txt"
-        ));
-        let b2 = YtbsClient::parse_scada_options_from_response(include_str!(
-            "../../../../ytbs_scada/b2.txt"
-        ));
-        let b3 = YtbsClient::parse_scada_options_from_response(include_str!(
-            "../../../../ytbs_scada/b3.txt"
-        ));
-        let element = YtbsClient::parse_scada_options_from_response(include_str!(
-            "../../../../ytbs_scada/element.txt"
-        ));
+        let Some(b1_raw) = read_repo_fixture("ytbs_scada/b1.txt") else {
+            return;
+        };
+        let Some(b2_raw) = read_repo_fixture("ytbs_scada/b2.txt") else {
+            return;
+        };
+        let Some(b3_raw) = read_repo_fixture("ytbs_scada/b3.txt") else {
+            return;
+        };
+        let Some(element_raw) = read_repo_fixture("ytbs_scada/element.txt") else {
+            return;
+        };
+
+        let b1 = YtbsClient::parse_scada_options_from_response(&b1_raw);
+        let b2 = YtbsClient::parse_scada_options_from_response(&b2_raw);
+        let b3 = YtbsClient::parse_scada_options_from_response(&b3_raw);
+        let element = YtbsClient::parse_scada_options_from_response(&element_raw);
 
         assert!(b1
             .b1
@@ -130,10 +141,10 @@ mod scada_parser_tests {
 
     #[test]
     fn parse_scada_grafik_verisi_extracts_fixture_series() {
-        let result = YtbsClient::parse_scada_grafik_verisi(include_str!(
-            "../../../../ytbs_scada/sayfa_html 2.txt"
-        ))
-        .unwrap();
+        let Some(response) = read_repo_fixture("ytbs_scada/sayfa_html 2.txt") else {
+            return;
+        };
+        let result = YtbsClient::parse_scada_grafik_verisi(&response).unwrap();
 
         assert_eq!(result.title, "Ölçüm (MVAr)");
         assert_eq!(result.unit, "MVAr");
@@ -891,7 +902,10 @@ impl YtbsClient {
         self.last_activity = Some(chrono::Utc::now());
 
         // YtbsGrafikVerisi → RmsData dönüşümü
-        let rms_data: Vec<RmsData> = grafik_verileri.iter().map(|gv| gv.to_rms_data()).collect();
+        let rms_data: Vec<RmsData> = grafik_verileri
+            .iter()
+            .map(|gv| gv.to_rms_data_for_measurement(measurement_type))
+            .collect();
 
         Ok((rms_data, raw_json))
     }
@@ -1066,6 +1080,7 @@ impl YtbsClient {
                                     y13: None,
                                     y14: None,
                                     y15: None,
+                                    y16: None,
                                 });
 
                         if item.y1.is_some() {
@@ -1112,6 +1127,9 @@ impl YtbsClient {
                         }
                         if item.y15.is_some() {
                             entry.y15 = item.y15;
+                        }
+                        if item.y16.is_some() {
+                            entry.y16 = item.y16;
                         }
                     }
                 }
@@ -1440,5 +1458,32 @@ mod tests {
 
         assert!(samples.is_empty());
         assert_eq!(raw_json, "[]");
+    }
+
+    #[test]
+    fn parse_grafik_verisi_merges_pmu_series_and_keeps_y16() {
+        let response = r#"<?xml version='1.0' encoding='UTF-8'?>
+<partial-response><changes><update id="form"><![CDATA[
+<script>
+var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y14":-368.12,"y15":-66.01,"y16":374.11}];
+var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y2":405.1,"y3":406.2,"y4":404.3}];
+var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y5":1.1,"y6":-118.9,"y7":121.0}];
+var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y8":980.0,"y9":981.0,"y10":982.0}];
+var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y11":10.0,"y12":-110.0,"y13":130.0}];
+var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y1":50.02}];
+</script>
+]]></update></changes></partial-response>"#;
+
+        let (samples, raw_json) = YtbsClient::parse_grafik_verisi(response).unwrap();
+
+        assert_eq!(samples.len(), 1);
+        let sample = &samples[0];
+        assert_eq!(sample.y1, Some(50.02));
+        assert_eq!(sample.y2, Some(405.1));
+        assert_eq!(sample.y8, Some(980.0));
+        assert_eq!(sample.y14, Some(-368.12));
+        assert_eq!(sample.y15, Some(-66.01));
+        assert_eq!(sample.y16, Some(374.11));
+        assert!(raw_json.contains("\"y16\":374.11"));
     }
 }

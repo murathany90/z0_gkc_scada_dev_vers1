@@ -35,6 +35,10 @@ import {
   type ThresholdPointEstimate,
   type ThresholdSeriesEstimate,
 } from './utils/scadaThreshold';
+import { buildScadaDataRateSeries, formatDataRatePerMinute } from './utils/scadaDataRate';
+import { buildScadaQueryChunks } from './utils/scadaQueryChunks';
+import { buildYtbsChartGroups, type YtbsChartGroup, type YtbsTimeResolution } from './utils/ytbsPmu';
+import { buildYtbsQueryChunks } from './utils/ytbsQueryChunks';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
 
@@ -42,6 +46,12 @@ const APP_HEADER_TITLE = 'GKÇ-SCADA Veri Analiz v2.0';
 const THEME_STORAGE_KEY = 'gkc_theme_mode';
 const SIDEBAR_STORAGE_KEY = 'gkc_sidebar_open';
 const PORTABLE_WINDOW_TITLE = import.meta.env.VITE_PORTABLE_WINDOW_TITLE?.trim();
+const SCADA_DATA_RATE_PERIOD_OPTIONS = [
+  { value: 1, label: '1 dk' },
+  { value: 10, label: '10 dk' },
+  { value: 15, label: '15 dk' },
+  { value: 60, label: '1 saat' },
+];
 
 const chartPalette = (themeMode: ThemeMode) => themeMode === 'light'
   ? {
@@ -73,12 +83,29 @@ interface TimeChartSeries {
   data: any[];
   color: string;
   label: string;
+  type?: 'line' | 'scatter' | 'bar';
   yAxisIndex?: number;
   lineStyle?: Record<string, unknown>;
   showSymbol?: boolean;
   symbolSize?: number;
   labelOptions?: Record<string, unknown>;
   valueFormatter?: (value: number) => string;
+  defaultVisible?: boolean;
+  barWidth?: number | string;
+  barMaxWidth?: number;
+  connectNulls?: boolean;
+  z?: number;
+}
+
+interface ProcessedYtbsData {
+  groups: YtbsChartGroup[];
+  guc: TimeChartSeries[];
+  gerilim: TimeChartSeries[];
+  gerilimFazoru: TimeChartSeries[];
+  akim: TimeChartSeries[];
+  akimFazoru: TimeChartSeries[];
+  frekans: TimeChartSeries[];
+  timeResolution: YtbsTimeResolution;
 }
 
 const escapeTooltipText = (value: string) =>
@@ -108,6 +135,9 @@ function TimeChart({
   valueAxisName,
   secondaryAxisName,
   extraTooltipRows,
+  xAxisRange,
+  gridRight,
+  timeResolution = 'second',
 }: {
   series: TimeChartSeries[];
   height?: number;
@@ -117,6 +147,9 @@ function TimeChart({
   valueAxisName?: string;
   secondaryAxisName?: string;
   extraTooltipRows?: (timestamp: number) => TooltipExtraRow[];
+  xAxisRange?: [number, number] | null;
+  gridRight?: number;
+  timeResolution?: YtbsTimeResolution;
 }) {
   const allVals = getSeriesValues(series);
   if (allVals.length === 0) return <div style={{ height: cssHeight, minHeight: height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>Veri bekleniyor...</div>;
@@ -134,6 +167,14 @@ function TimeChart({
   const palette = chartPalette(themeMode);
   const hasSecondaryAxis = series.some(s => (s.yAxisIndex ?? 0) === 1);
   const findSeries = (name: string) => series.find(item => item.label === name);
+  const formatChartTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const pad = (value: number, size = 2) => String(value).padStart(size, '0');
+    const base = `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    return timeResolution === 'millisecond'
+      ? `${base}.${pad(date.getMilliseconds(), 3)}`
+      : base;
+  };
 
   const valueAxis = {
     type: 'value',
@@ -170,7 +211,7 @@ function TimeChart({
         if (!items.length) return '';
         // Tooltip'e zaman bilgisini düzgün formatta ekle
         const timestamp = items[0].value[0];
-        const dateStr = new Date(timestamp).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateStr = formatChartTime(timestamp);
         let html = `<div style="margin-bottom:6px;font-weight:700;border-bottom:1px solid ${palette.tooltipBorder};padding-bottom:4px;color:${palette.muted};font-size:10px;">${escapeTooltipText(dateStr)}</div>`;
         items.forEach((p: any) => {
           const seriesMeta = findSeries(p.seriesName);
@@ -209,16 +250,24 @@ function TimeChart({
       itemWidth: 10,
       itemHeight: 10,
       pageIconColor: palette.muted,
-      pageTextStyle: { color: palette.muted }
+      pageTextStyle: { color: palette.muted },
+      selected: series.reduce<Record<string, boolean>>((selected, item) => {
+        if (item.defaultVisible === false) {
+          selected[item.label] = false;
+        }
+        return selected;
+      }, {})
     },
-    grid: { top: 45, right: hasSecondaryAxis ? 210 : 140, bottom: 30, left: 15, containLabel: true },
+    grid: { top: 45, right: gridRight ?? (hasSecondaryAxis ? 210 : 140), bottom: 30, left: 15, containLabel: true },
     xAxis: {
       type: 'time',
+      min: xAxisRange?.[0],
+      max: xAxisRange?.[1],
       axisLabel: {
         show: true,
         fontSize: 9,
         color: palette.axis,
-        formatter: '{HH}:{mm}:{ss}'
+        formatter: (value: number) => formatChartTime(value)
       },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: palette.axisLine } },
@@ -244,7 +293,7 @@ function TimeChart({
     ] : valueAxis,
     series: series.map(s => ({
       name: s.label,
-      type: 'line',
+      type: s.type ?? 'line',
       data: s.data,
       yAxisIndex: s.yAxisIndex ?? 0,
       itemStyle: { color: s.color },
@@ -252,9 +301,12 @@ function TimeChart({
       showSymbol: s.showSymbol ?? false,
       symbolSize: s.symbolSize ?? 4,
       label: s.labelOptions,
+      barWidth: s.barWidth,
+      barMaxWidth: s.barMaxWidth,
+      z: s.z,
       animation: false,
       sampling: 'lttb',
-      connectNulls: true
+      connectNulls: s.connectNulls ?? true
     }))
   };
 
@@ -276,6 +328,7 @@ function App() {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [scadaPointPage, setScadaPointPage] = useState(1);
   const [showScadaPointDetails, setShowScadaPointDetails] = useState(false);
+  const [scadaDataRatePeriodMinutes, setScadaDataRatePeriodMinutes] = useState(1);
   const [scadaPointFilters, setScadaPointFilters] = useState<{
     kind: ScadaMeasurementKind | 'all';
     b1Adi: string;
@@ -293,47 +346,23 @@ function App() {
   });
 
   // YTBS Veri İşleme Optimizasyonu (En Üst Seviyede)
-  const processedYtbsData = useMemo(() => {
+  const processedYtbsData = useMemo<ProcessedYtbsData | null>(() => {
     if (ytbs.ytbsRawData.length === 0) return null;
     const t0 = performance.now();
-    try {
-      const raw = ytbs.ytbsRawData;
-
-      const toTs = (z: string) => {
-        const p = z.split(/[. :]/);
-        return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]), parseInt(p[3]), parseInt(p[4]), parseInt(p[5])).getTime();
-      };
-
-      const timestamps = raw.map(d => toTs(d.zaman));
-
-      const res = {
-        guc: [
-          { data: raw.map((d, i) => d.y11 !== undefined ? [timestamps[i], d.y11] : null).filter(n => n), color: '#94a3b8', label: 'Aktif Güç (y11)' },
-          { data: raw.map((d, i) => d.y12 !== undefined ? [timestamps[i], d.y12] : null).filter(n => n), color: '#ef4444', label: 'Reaktif Güç (y12)' },
-          { data: raw.map((d, i) => d.y13 !== undefined ? [timestamps[i], d.y13] : null).filter(n => n), color: '#3b82f6', label: 'Görünen Güç (y13)' }
-        ],
-        gerilim: [
-          { data: raw.map((d, i) => d.y3 !== undefined ? [timestamps[i], d.y3] : null).filter(n => n), color: '#ef4444', label: 'Faz A (y3)' },
-          { data: raw.map((d, i) => d.y4 !== undefined ? [timestamps[i], d.y4] : null).filter(n => n), color: '#f59e0b', label: 'Faz B (y4)' },
-          { data: raw.map((d, i) => d.y5 !== undefined ? [timestamps[i], d.y5] : null).filter(n => n), color: '#3b82f6', label: 'Faz C (y5)' }
-        ],
-        akim: [
-          { data: raw.map((d, i) => d.y7 !== undefined ? [timestamps[i], d.y7] : null).filter(n => n), color: '#ef4444', label: 'Faz A (y7)' },
-          { data: raw.map((d, i) => d.y8 !== undefined ? [timestamps[i], d.y8] : null).filter(n => n), color: '#f59e0b', label: 'Faz B (y8)' },
-          { data: raw.map((d, i) => d.y9 !== undefined ? [timestamps[i], d.y9] : null).filter(n => n), color: '#3b82f6', label: 'Faz C (y9)' }
-        ],
-        frekans: [
-          { data: raw.map((d, i) => d.y1 !== undefined ? [timestamps[i], d.y1] : null).filter(n => n), color: '#4ade80', label: 'Frekans (y1)' }
-        ]
-      };
-      const t1 = performance.now();
-      console.log(`>>> [PERFORMANS] YTBS JS İşleme: ${raw.length} nokta, Süre: ${(t1 - t0).toFixed(2)}ms`);
-      return res;
-    } catch (e) {
-      console.error("YTBS Data Processing Error:", e);
-      return null;
-    }
-  }, [ytbs.ytbsRawData]);
+    const groups = buildYtbsChartGroups(ytbs.ytbsRawData, ytbs.filters.olcumTipi);
+    const t1 = performance.now();
+    console.log(`>>> [PERFORMANS] YTBS JS İşleme: ${ytbs.ytbsRawData.length} nokta, Süre: ${(t1 - t0).toFixed(2)}ms`);
+    return {
+      groups,
+      guc: groups.find(group => group.key === 'guc')?.series ?? [],
+      gerilim: groups.find(group => group.key === 'gerilim')?.series ?? [],
+      gerilimFazoru: groups.find(group => group.key === 'gerilimFazoru')?.series ?? [],
+      akim: groups.find(group => group.key === 'akim')?.series ?? [],
+      akimFazoru: groups.find(group => group.key === 'akimFazoru')?.series ?? [],
+      frekans: groups.find(group => group.key === 'frekans')?.series ?? [],
+      timeResolution: groups[0]?.timeResolution ?? 'second',
+    };
+  }, [ytbs.filters.olcumTipi, ytbs.ytbsRawData]);
 
   // YTBS Filtreleri store'a taşındı
   const [isHealthScanning, setIsHealthScanning] = useState(false);
@@ -343,6 +372,20 @@ function App() {
   const [filterOlcum, setFilterOlcum] = useState('PQ');
   const [filterSearch, setFilterSearch] = useState('');
   const [selectedDeviceId, setSelectedDeviceId] = useState(localStorage.getItem('selected_device_id') || '362');
+
+  const ytbsQueryWindow = useMemo(
+    () => buildYtbsQueryChunks({
+      measurementType: ytbs.filters.olcumTipi,
+      startIso: ytbs.filters.startTime,
+      endIso: ytbs.filters.endTime,
+    }),
+    [ytbs.filters.endTime, ytbs.filters.olcumTipi, ytbs.filters.startTime],
+  );
+  const ytbsTimeRangeWarning = ytbsQueryWindow.status === 'ok' ? null : ytbsQueryWindow.message;
+  const ytbsTimeRangeNotice = ytbsQueryWindow.status === 'ok' ? ytbsQueryWindow.message : null;
+  const ytbsQueryProgressText = ytbs.ytbsQueryProgress && ytbs.ytbsQueryProgress.totalChunks > 1
+    ? `${ytbs.ytbsQueryProgress.completedChunks}/${ytbs.ytbsQueryProgress.totalChunks} parça`
+    : null;
 
   // Filtrelenmiş cihaz listesi
   const filteredDevices = useMemo(() => {
@@ -367,22 +410,49 @@ function App() {
     ? formatScadaElementLabel(selectedScadaPoint)
     : scada.filters.scadaId);
   const scadaQueryIsSessionError = Boolean(scada.queryError?.includes('YTBS oturumu aktif değil'));
+  const scadaQueryWindow = useMemo(
+    () => buildScadaQueryChunks(scada.filters.startTime, scada.filters.endTime),
+    [scada.filters.endTime, scada.filters.startTime],
+  );
+  const scadaTimeRangeWarning = scadaQueryWindow.status === 'ok' ? null : scadaQueryWindow.message;
+  const scadaTimeRangeNotice = scadaQueryWindow.status === 'ok' ? scadaQueryWindow.message : null;
+  const scadaQueryProgressText = scada.queryProgress && scada.queryProgress.totalChunks > 1
+    ? `${scada.queryProgress.completedChunks}/${scada.queryProgress.totalChunks} parca`
+    : null;
   const latestScadaSample = scada.data.length > 0 ? scada.data[scada.data.length - 1] : null;
   const previousScadaSample = scada.data.length > 1 ? scada.data[scada.data.length - 2] : null;
   const scadaDisplayUnit = scada.unit || selectedScadaPoint?.unit || '';
-  const rawScadaDelta = Number.isFinite(latestScadaSample?.deger) && Number.isFinite(previousScadaSample?.deger)
-    ? Math.abs(Number(latestScadaSample?.deger) - Number(previousScadaSample?.deger))
-    : null;
+  const scadaTimestampedSamples = useMemo(() => scada.data.map(item => ({
+    timestamp: parseYtbsScadaTimestamp(item.zaman),
+    value: item.deger,
+  })), [scada.data]);
+  const scadaAxisRange = useMemo<[number, number] | null>(() => {
+    const filterStart = new Date(scada.filters.startTime).getTime();
+    const filterEnd = new Date(scada.filters.endTime).getTime();
+    if (Number.isFinite(filterStart) && Number.isFinite(filterEnd) && filterEnd > filterStart) {
+      return [filterStart, filterEnd];
+    }
+
+    const timestamps = scadaTimestampedSamples
+      .map(sample => sample.timestamp)
+      .filter((timestamp): timestamp is number => Number.isFinite(timestamp));
+    if (timestamps.length === 0) {
+      return null;
+    }
+
+    const minTimestamp = Math.min(...timestamps);
+    const maxTimestamp = Math.max(...timestamps);
+    return maxTimestamp > minTimestamp
+      ? [minTimestamp, maxTimestamp]
+      : [minTimestamp - 60000, maxTimestamp + 60000];
+  }, [scada.filters.endTime, scada.filters.startTime, scadaTimestampedSamples]);
   const scadaThresholdSeriesEstimate = useMemo<ThresholdSeriesEstimate>(() => calculateThresholdSeriesEstimate({
     elementAdi: selectedScadaPoint?.elementAdi,
-    samples: scada.data.map(item => ({
-      timestamp: parseYtbsScadaTimestamp(item.zaman),
-      value: item.deger,
-    })),
+    samples: scadaTimestampedSamples,
     aciklama2: selectedScadaPoint?.aciklama2,
     aciklama3: selectedScadaPoint?.aciklama3,
   }), [
-    scada.data,
+    scadaTimestampedSamples,
     selectedScadaPoint?.aciklama2,
     selectedScadaPoint?.aciklama3,
     selectedScadaPoint?.elementAdi,
@@ -392,6 +462,19 @@ function App() {
     : scadaThresholdSeriesEstimate.status === 'digital'
       ? THRESHOLD_DIGITAL_MESSAGE
       : THRESHOLD_MISSING_MESSAGE;
+  const scadaDataRate = useMemo(() => scadaAxisRange
+    ? buildScadaDataRateSeries({
+      samples: scadaTimestampedSamples,
+      startTimestamp: scadaAxisRange[0],
+      endTimestamp: scadaAxisRange[1],
+      periodMinutes: scadaDataRatePeriodMinutes,
+    })
+    : buildScadaDataRateSeries({
+      samples: [],
+      startTimestamp: 0,
+      endTimestamp: 0,
+      periodMinutes: scadaDataRatePeriodMinutes,
+    }), [scadaAxisRange, scadaDataRatePeriodMinutes, scadaTimestampedSamples]);
   const scadaThresholdPointByTimestamp = useMemo(() => {
     const byTimestamp = new Map<number, ThresholdPointEstimate>();
     if (scadaThresholdSeriesEstimate.status === 'ok') {
@@ -401,11 +484,45 @@ function App() {
     }
     return byTimestamp;
   }, [scadaThresholdSeriesEstimate]);
+  const scadaSampleContextByTimestamp = useMemo(() => {
+    const byTimestamp = new Map<number, {
+      previousValue: number | null;
+      currentValue: number | null;
+      deltaValue: number | null;
+    }>();
+    scadaTimestampedSamples.forEach((sample, index) => {
+      const previousValue = index > 0 && Number.isFinite(scadaTimestampedSamples[index - 1]?.value)
+        ? Number(scadaTimestampedSamples[index - 1].value)
+        : null;
+      const currentValue = Number.isFinite(sample.value) ? Number(sample.value) : null;
+      byTimestamp.set(sample.timestamp, {
+        previousValue,
+        currentValue,
+        deltaValue: previousValue !== null && currentValue !== null
+          ? Math.abs(currentValue - previousValue)
+          : null,
+      });
+    });
+    return byTimestamp;
+  }, [scadaTimestampedSamples]);
   const processedScadaData = useMemo(() => {
     if (scada.data.length === 0) return [];
 
+    const thresholdColors = themeMode === 'dark'
+      ? {
+        point: '#fbbf24',
+        min: '#fcd34d',
+        max: '#d97706',
+        average: '#f59e0b',
+      }
+      : {
+        point: '#b45309',
+        min: '#fed7aa',
+        max: '#92400e',
+        average: '#c2410c',
+      };
     const baseSeries: TimeChartSeries[] = [{
-      data: scada.data.map(item => [parseYtbsScadaTimestamp(item.zaman), item.deger]),
+      data: scadaTimestampedSamples.map(item => [item.timestamp, item.value]),
       color: themeMode === 'dark' ? '#38bdf8' : '#0f766e',
       label: scadaDisplayUnit ? `Ölçüm (${scadaDisplayUnit})` : 'Ölçüm',
     }];
@@ -413,63 +530,120 @@ function App() {
     if (scadaThresholdSeriesEstimate.status === 'ok') {
       baseSeries.push({
         data: scadaThresholdSeriesEstimate.points.map(point => [point.timestamp, point.estimatedThresholdPercent]),
-        color: themeMode === 'dark' ? '#fbbf24' : '#b45309',
+        color: thresholdColors.point,
         label: 'Tahmini Threshold %',
+        type: 'scatter',
         yAxisIndex: 1,
-        lineStyle: { width: 1.5, type: 'dashed' },
         showSymbol: true,
         symbolSize: 6,
         valueFormatter: formatThresholdPercent,
-        labelOptions: {
-          show: true,
-          formatter: (params: { dataIndex: number }) =>
-            params.dataIndex === scadaThresholdSeriesEstimate.points.length - 1 ? thresholdStatusText : '',
-          position: 'top',
-          color: themeMode === 'dark' ? '#fde68a' : '#92400e',
-          fontSize: 10,
-          fontWeight: 700,
-        },
+        z: 6,
       });
+
+      const thresholdLineRange = scadaAxisRange ?? [
+        scadaThresholdSeriesEstimate.points[0]?.timestamp,
+        scadaThresholdSeriesEstimate.points[scadaThresholdSeriesEstimate.points.length - 1]?.timestamp,
+      ];
+      const buildThresholdLineData = (value: number) => [
+        [thresholdLineRange[0], value],
+        [thresholdLineRange[1], value],
+      ];
+      if (
+        Number.isFinite(thresholdLineRange[0]) &&
+        Number.isFinite(thresholdLineRange[1]) &&
+        thresholdLineRange[1] > thresholdLineRange[0]
+      ) {
+        baseSeries.push(
+          {
+            data: buildThresholdLineData(scadaThresholdSeriesEstimate.minThresholdPercent),
+            color: thresholdColors.min,
+            label: 'Min Threshold %',
+            yAxisIndex: 1,
+            lineStyle: { width: 1.1, type: 'dotted', opacity: 0.45 },
+            showSymbol: false,
+            valueFormatter: formatThresholdPercent,
+            defaultVisible: false,
+            connectNulls: false,
+            z: 2,
+          },
+          {
+            data: buildThresholdLineData(scadaThresholdSeriesEstimate.maxThresholdPercent),
+            color: thresholdColors.max,
+            label: 'Max Threshold %',
+            yAxisIndex: 1,
+            lineStyle: { width: 1.1, type: 'dashed', opacity: 0.45 },
+            showSymbol: false,
+            valueFormatter: formatThresholdPercent,
+            defaultVisible: false,
+            connectNulls: false,
+            z: 2,
+          },
+          {
+            data: buildThresholdLineData(scadaThresholdSeriesEstimate.averageThresholdPercent),
+            color: thresholdColors.average,
+            label: 'Ort Threshold %',
+            yAxisIndex: 1,
+            lineStyle: { width: 2.4, type: 'dashed', opacity: 0.82 },
+            showSymbol: false,
+            valueFormatter: formatThresholdPercent,
+            connectNulls: false,
+            z: 3,
+          },
+        );
+      }
     }
 
     return baseSeries;
-  }, [scada.data, scadaDisplayUnit, scadaThresholdSeriesEstimate, themeMode, thresholdStatusText]);
+  }, [scada.data.length, scadaAxisRange, scadaDisplayUnit, scadaThresholdSeriesEstimate, scadaTimestampedSamples, themeMode]);
+  const processedScadaDataRate = useMemo<TimeChartSeries[]>(() => {
+    if (scadaDataRate.chartData.length === 0) return [];
+
+    const periodLabel = SCADA_DATA_RATE_PERIOD_OPTIONS.find(option => option.value === scadaDataRatePeriodMinutes)?.label || `${scadaDataRatePeriodMinutes} dk`;
+    return [{
+      data: scadaDataRate.chartData,
+      color: themeMode === 'dark' ? '#60a5fa' : '#2563eb',
+      label: `Veri/dk (${periodLabel})`,
+      type: 'bar',
+      barMaxWidth: 18,
+      valueFormatter: formatDataRatePerMinute,
+    }];
+  }, [scadaDataRate.chartData, scadaDataRatePeriodMinutes, themeMode]);
   const scadaTooltipRows = useMemo(() => {
     return (timestamp: number): TooltipExtraRow[] => {
       const thresholdPoint = scadaThresholdPointByTimestamp.get(timestamp);
+      const sampleContext = scadaSampleContextByTimestamp.get(timestamp);
+      const currentValue = thresholdPoint?.currentValue ?? sampleContext?.currentValue;
+      const previousValue = thresholdPoint?.previousValue ?? sampleContext?.previousValue;
+      const deltaValue = thresholdPoint?.deltaValue ?? sampleContext?.deltaValue;
       const thresholdText = thresholdPoint
         ? `${formatThresholdPercent(thresholdPoint.estimatedThresholdPercent)} · Δ ${formatNumericWithUnit(thresholdPoint.estimatedThresholdEngineering, scadaDisplayUnit)}`
-        : thresholdStatusText;
+        : scadaThresholdSeriesEstimate.status === 'ok'
+          ? '-'
+          : thresholdStatusText;
       return [
         { label: 'Zaman', value: new Date(timestamp).toLocaleString('tr-TR') },
-        { label: 'Son analog değer', value: formatNumericWithUnit(latestScadaSample?.deger, scadaDisplayUnit) },
-        { label: 'Önceki analog değer', value: formatNumericWithUnit(previousScadaSample?.deger, scadaDisplayUnit) },
-        { label: 'Delta değer', value: rawScadaDelta === null ? '-' : formatNumericWithUnit(rawScadaDelta, scadaDisplayUnit) },
+        { label: 'Son analog değer', value: formatNumericWithUnit(currentValue, scadaDisplayUnit) },
+        { label: 'Önceki analog değer', value: formatNumericWithUnit(previousValue, scadaDisplayUnit) },
+        { label: 'Delta değer', value: formatNumericWithUnit(deltaValue, scadaDisplayUnit) },
         { label: 'Tahmini threshold %', value: thresholdText },
-        { label: 'AÇIKLAMA 1', value: selectedScadaPoint?.aciklama1 || '-' },
-        { label: 'AÇIKLAMA 2', value: selectedScadaPoint?.aciklama2 || '-' },
-        { label: 'AÇIKLAMA 3', value: selectedScadaPoint?.aciklama3 || '-' },
-        { label: 'EŞLEŞME DURUMU', value: selectedScadaPoint?.eslesmeDurumu || '-' },
-        { label: 'ADRES1 / ADRES2', value: `${selectedScadaPoint?.noel || '-'} / ${selectedScadaPoint?.nimset || '-'}` },
-        { label: 'B1 ID / B2 ID / B3 ID / Element Adı', value: `${selectedScadaPoint?.b1Id || '-'} / ${selectedScadaPoint?.b2Id ? formatScadaVoltageLevelLabel(selectedScadaPoint.b2Id) : '-'} / ${selectedScadaPoint?.b3Id ? formatScadaVoltageLevelLabel(selectedScadaPoint.b3Id) : '-'} / ${selectedScadaPoint?.elementAdi || '-'}` },
       ];
     };
-  }, [latestScadaSample?.deger, previousScadaSample?.deger, rawScadaDelta, scadaDisplayUnit, scadaThresholdPointByTimestamp, selectedScadaPoint, thresholdStatusText]);
+  }, [scadaDisplayUnit, scadaSampleContextByTimestamp, scadaThresholdPointByTimestamp, scadaThresholdSeriesEstimate.status, thresholdStatusText]);
   const scadaInfoCards = useMemo(() => [
     { label: 'Son Analog Değer', value: formatNumericWithUnit(latestScadaSample?.deger, scadaDisplayUnit) },
     { label: 'Önceki Analog Değer', value: formatNumericWithUnit(previousScadaSample?.deger, scadaDisplayUnit) },
     { label: 'SCADA Adresi', value: `${selectedScadaPoint?.noel || '-'} / ${selectedScadaPoint?.nimset || '-'}` },
     { label: 'Ölçüm Noktası', value: selectedScadaElementLabel || '-' },
-    { label: 'AÇIKLAMA 1', value: selectedScadaPoint?.aciklama1 || '-' },
+    { label: 'Veri/dk', value: formatDataRatePerMinute(scadaDataRate.averagePerMinute) },
     { label: 'AÇIKLAMA 2 / Analog Aralık', value: selectedScadaPoint?.aciklama2 || '-' },
     { label: 'AÇIKLAMA 3 / Ham Aralık', value: selectedScadaPoint?.aciklama3 || '-' },
     { label: 'Tahmini Threshold %', value: thresholdStatusText },
   ], [
     latestScadaSample?.deger,
     previousScadaSample?.deger,
+    scadaDataRate.averagePerMinute,
     scadaDisplayUnit,
     selectedScadaElementLabel,
-    selectedScadaPoint?.aciklama1,
     selectedScadaPoint?.aciklama2,
     selectedScadaPoint?.aciklama3,
     selectedScadaPoint?.nimset,
@@ -529,11 +703,6 @@ function App() {
     clearData();
   };
 
-  const formatYtbsDateTime = (iso: string) => {
-    const d = new Date(iso);
-    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  };
-
   const handleScadaFilterChange = (key: keyof typeof scada.filters, value: string) => {
     scada.setFilter(key, value);
     if (ytbs.status === 'connected' && key !== 'scadaId') {
@@ -575,7 +744,7 @@ function App() {
 
     if (ytbs.status === 'connected') {
       await useYtbsScadaStore.getState().refreshOptions(true);
-      await useYtbsScadaStore.getState().queryRange(formatYtbsDateTime(startTime), formatYtbsDateTime(endTime));
+      await useYtbsScadaStore.getState().queryRange(startTime, endTime);
     }
   };
 
@@ -961,11 +1130,10 @@ function App() {
                       </select>
                     </div>
                     <button className="btn btn-primary"
-                      disabled={ytbs.ytbsQueryLoading || ytbs.status !== 'connected' || !ytbs.filters.cihaz || isHealthScanning}
+                      disabled={ytbs.ytbsQueryLoading || ytbs.status !== 'connected' || !ytbs.filters.cihaz || isHealthScanning || ytbsQueryWindow.status !== 'ok'}
                       onClick={() => {
-                        const fmt = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
                         const fazVal = ytbs.filters.faz === 'Üç Faz' ? '' : '1';
-                        ytbs.queryRange(ytbs.filters.cihaz, ytbs.filters.olcumTipi, fmt(ytbs.filters.startTime), fmt(ytbs.filters.endTime), ytbs.filters.gerilim, fazVal);
+                        ytbs.queryRange(ytbs.filters.cihaz, ytbs.filters.olcumTipi, ytbs.filters.startTime, ytbs.filters.endTime, ytbs.filters.gerilim, fazVal);
                       }}
                       style={{ fontWeight: 600, fontSize: 12 }}>
                       {ytbs.ytbsQueryLoading ? '⏳ Sorgulanıyor...' : '📊 GÖSTER'}
@@ -1000,6 +1168,14 @@ function App() {
                         : '🏥 GKÇ SAĞLIK'}
                     </button>
                   </div>
+                  {(ytbsTimeRangeWarning || ytbs.ytbsQueryNotice || ytbsTimeRangeNotice || ytbsQueryProgressText) && (
+                    <div style={{ marginTop: 8, color: ytbsTimeRangeWarning ? 'var(--accent-red)' : 'var(--accent-yellow)', fontSize: 11 }}>
+                      {[
+                        ytbsTimeRangeWarning || ytbs.ytbsQueryNotice || ytbsTimeRangeNotice,
+                        ytbs.ytbsQueryLoading && ytbsQueryProgressText ? ytbsQueryProgressText : null,
+                      ].filter(Boolean).join(' - ')}
+                    </div>
+                  )}
                   {ytbs.filters.cihaz && DEVICE_MAP.get(ytbs.filters.cihaz) && (
                     <div style={{ marginTop: 8, padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: '#3b82f6', fontSize: 16 }}>📍</span>
@@ -1019,7 +1195,7 @@ function App() {
                       ⚡ Güç
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Güç Analizi (MW/MVAr)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.guc} />
+                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'guc')?.title ?? 'Güç Analizi (MW/MVAr)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'guc')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.guc} timeResolution={processedYtbsData.timeResolution} />
                     </div>
                   </div>
 
@@ -1028,25 +1204,47 @@ function App() {
                       🔌 Gerilim
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Gerilim Analizi (kV)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilim} />
+                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'gerilim')?.title ?? 'Gerilim Analizi (kV)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'gerilim')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilim} timeResolution={processedYtbsData.timeResolution} />
                     </div>
                   </div>
+
+                  {processedYtbsData.gerilimFazoru.length > 0 && (
+                    <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
+                      <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
+                        Gerilim Fazörü
+                      </div>
+                      <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
+                        <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'gerilimFazoru')?.title ?? 'PMU Gerilim Fazörü (°)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'gerilimFazoru')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilimFazoru} timeResolution={processedYtbsData.timeResolution} />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
                     <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
                       📊 Akım
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Akım Analizi (A)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akim} />
+                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'akim')?.title ?? 'Akım Analizi (A)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'akim')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akim} timeResolution={processedYtbsData.timeResolution} />
                     </div>
                   </div>
+
+                  {processedYtbsData.akimFazoru.length > 0 && (
+                    <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
+                      <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
+                        Akım Fazörü
+                      </div>
+                      <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
+                        <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'akimFazoru')?.title ?? 'PMU Akım Fazörü (°)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'akimFazoru')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akimFazoru} timeResolution={processedYtbsData.timeResolution} />
+                      </div>
+                    </div>
+                  )}
 
                   <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
                     <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
                       📈 Frekans
                     </div>
                     <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title="Frekans Analizi (Hz)" cssHeight="100%" themeMode={themeMode} series={processedYtbsData.frekans} />
+                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'frekans')?.title ?? 'Frekans Analizi (Hz)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'frekans')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.frekans} timeResolution={processedYtbsData.timeResolution} />
                     </div>
                   </div>
                 </div>
@@ -1185,13 +1383,28 @@ function App() {
                         {scada.options.elements.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </select>
                     </div>
+                    <div style={{ minWidth: 110 }}>
+                      <label style={{ display: 'block', fontSize: '10px', color: 'var(--text-muted)', marginBottom: 2 }}>VERİ PERİYODU</label>
+                      <select value={scadaDataRatePeriodMinutes} onChange={e => setScadaDataRatePeriodMinutes(Number(e.target.value))}
+                        style={{ width: '100%', padding: '6px', borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+                        {SCADA_DATA_RATE_PERIOD_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    </div>
                     <button className="btn btn-primary"
-                      disabled={scada.queryLoading || ytbs.status !== 'connected' || !scada.filters.b1 || !scada.filters.b2 || !scada.filters.b3 || !scada.filters.scadaId}
-                      onClick={() => scada.queryRange(formatYtbsDateTime(scada.filters.startTime), formatYtbsDateTime(scada.filters.endTime))}
+                      disabled={scada.queryLoading || ytbs.status !== 'connected' || !scada.filters.b1 || !scada.filters.b2 || !scada.filters.b3 || !scada.filters.scadaId || scadaQueryWindow.status !== 'ok'}
+                      onClick={() => scada.queryRange(scada.filters.startTime, scada.filters.endTime)}
                       style={{ fontWeight: 600, fontSize: 12 }}>
                       {scada.queryLoading ? '⏳ Sorgulanıyor...' : '📊 GÖSTER'}
                     </button>
                   </div>
+                  {(scadaTimeRangeWarning || scada.queryNotice || scadaTimeRangeNotice || scadaQueryProgressText) && (
+                    <div style={{ marginTop: 8, color: scadaTimeRangeWarning ? 'var(--accent-red)' : 'var(--accent-yellow)', fontSize: 11 }}>
+                      {scadaTimeRangeWarning || [
+                        scada.queryNotice || scadaTimeRangeNotice,
+                        scada.queryLoading && scadaQueryProgressText ? scadaQueryProgressText : null,
+                      ].filter(Boolean).join(' - ')}
+                    </div>
+                  )}
                   {scada.filters.b1 && (
                     <div style={{ marginTop: 8, padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: '#3b82f6', fontSize: 16 }}>📍</span>
@@ -1219,6 +1432,25 @@ function App() {
                         valueAxisName={scadaDisplayUnit || 'Analog değer'}
                         secondaryAxisName="Threshold %"
                         extraTooltipRows={scadaTooltipRows}
+                        xAxisRange={scadaAxisRange}
+                        gridRight={210}
+                      />
+                    </div>
+                  </div>
+                  <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
+                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
+                      VERİ/DK
+                    </div>
+                    <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative', minHeight: 170 }}>
+                      <TimeChart
+                        height={170}
+                        title="Veri Sayısı / Dakika"
+                        cssHeight="100%"
+                        themeMode={themeMode}
+                        series={processedScadaDataRate}
+                        valueAxisName="Veri/dk"
+                        xAxisRange={scadaAxisRange}
+                        gridRight={210}
                       />
                     </div>
                   </div>
@@ -1231,7 +1463,7 @@ function App() {
                     ))}
                   </div>
                   <div className="threshold-note">
-                    Threshold yüzdesi, ilk nokta hariç ardışık analog değerler arasındaki farkın AÇIKLAMA 2’de tanımlı analog aralığına oranı ile tahmini olarak hesaplanır. AÇIKLAMA 2 veya AÇIKLAMA 3 eksikse hesaplama yapılmaz. Bu değer gerçek RTU threshold ayarı değil, SCADA verisinden hesaplanan tahmini değişim yüzdesidir.
+                    Threshold yüzdesi, ilk nokta hariç ardışık analog değerler arasındaki farkın AÇIKLAMA 2’de tanımlı analog aralığına oranı ile tahmini olarak hesaplanır. Ardışık analog değerler eşitse son hesaplanmış threshold değeri taşınır. Bu değer gerçek RTU threshold ayarı değil, SCADA verisinden hesaplanan tahmini değişim yüzdesidir.
                   </div>
                   <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 11, color: 'var(--text-muted)', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

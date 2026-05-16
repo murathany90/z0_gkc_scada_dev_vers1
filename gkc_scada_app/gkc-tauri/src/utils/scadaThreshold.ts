@@ -181,6 +181,10 @@ export const calculateThresholdSeriesEstimate = ({
   }
 
   const points: ThresholdPointEstimate[] = [];
+  let previousThresholdPercent: number | null = null;
+  let previousThresholdEngineering: number | null = null;
+  let previousRawDelta: number | null = null;
+
   for (let index = 1; index < samples.length; index += 1) {
     const previousValue = samples[index - 1]?.value;
     const currentValue = samples[index]?.value;
@@ -194,7 +198,21 @@ export const calculateThresholdSeriesEstimate = ({
     }
 
     const deltaValue = Math.abs(Number(currentValue) - Number(previousValue));
-    if (deltaValue === 0) {
+    const estimatedThresholdPercent: number | null = deltaValue === 0
+      ? previousThresholdPercent
+      : (deltaValue / analogSpan) * 100;
+    const estimatedThresholdEngineering: number | null = deltaValue === 0
+      ? previousThresholdEngineering
+      : deltaValue;
+    const estimatedRawDelta: number | null = deltaValue === 0
+      ? previousRawDelta
+      : (deltaValue / analogSpan) * rawSpan;
+
+    if (
+      estimatedThresholdPercent === null ||
+      estimatedThresholdEngineering === null ||
+      estimatedRawDelta === null
+    ) {
       continue;
     }
 
@@ -203,12 +221,16 @@ export const calculateThresholdSeriesEstimate = ({
       previousValue: Number(previousValue),
       currentValue: Number(currentValue),
       deltaValue,
-      estimatedThresholdPercent: (deltaValue / analogSpan) * 100,
-      estimatedThresholdEngineering: deltaValue,
-      estimatedRawDelta: (deltaValue / analogSpan) * rawSpan,
+      estimatedThresholdPercent,
+      estimatedThresholdEngineering,
+      estimatedRawDelta,
       analogRange,
       rawRange,
     });
+
+    previousThresholdPercent = estimatedThresholdPercent;
+    previousThresholdEngineering = estimatedThresholdEngineering;
+    previousRawDelta = estimatedRawDelta;
   }
 
   if (points.length === 0) {

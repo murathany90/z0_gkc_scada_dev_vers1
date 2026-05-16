@@ -185,6 +185,8 @@ pub struct YtbsGrafikVerisi {
     pub y14: Option<f64>,
     #[serde(default)]
     pub y15: Option<f64>,
+    #[serde(default)]
+    pub y16: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -246,15 +248,29 @@ impl YtbsGrafikVerisi {
     /// Fiderin kendi gerilim, akım veya güç kanallarından en az biri gelmelidir.
     pub fn has_fider_telemetry(&self) -> bool {
         Self::is_parseable_timestamp(&self.zaman)
-            && (self.y3.is_some()
+            && (self.y2.is_some()
+                || self.y3.is_some()
                 || self.y4.is_some()
                 || self.y5.is_some()
+                || self.y6.is_some()
                 || self.y7.is_some()
                 || self.y8.is_some()
                 || self.y9.is_some()
+                || self.y10.is_some()
                 || self.y11.is_some()
                 || self.y12.is_some()
-                || self.y13.is_some())
+                || self.y13.is_some()
+                || self.y14.is_some()
+                || self.y15.is_some()
+                || self.y16.is_some())
+    }
+
+    pub fn to_rms_data_for_measurement(&self, measurement_type: &str) -> RmsData {
+        if measurement_type.eq_ignore_ascii_case("PMU") {
+            self.to_pmu_rms_data()
+        } else {
+            self.to_rms_data()
+        }
     }
 
     /// YTBS grafik verisini RmsData struct'ına dönüştür
@@ -293,6 +309,39 @@ impl YtbsGrafikVerisi {
     }
 
     /// YTBS tarih formatını (dd.MM.yyyy HH:mm:ss) Unix timestamp'e çevir
+    fn to_pmu_rms_data(&self) -> RmsData {
+        let gerilim_carpan = 1000.0;
+        let frekans = self.y1.unwrap_or(50.0);
+        let aktif_guc = self.y14.unwrap_or(0.0);
+        let reaktif_guc = self.y15.unwrap_or(0.0);
+        let gorunen_guc = self.y16.unwrap_or(0.0);
+
+        RmsData {
+            timestamp: Self::parse_ytbs_timestamp(&self.zaman),
+            frekans,
+            aktif_guc,
+            reaktif_guc,
+            gorunen_guc,
+            guc_faktoru: if gorunen_guc.abs() > 0.001 {
+                (aktif_guc / gorunen_guc).abs().min(1.0)
+            } else {
+                1.0
+            },
+            frekans_sapma: frekans - 50.0,
+            df_dt: 0.0,
+            gerilim: GerilimData {
+                faz_a: self.y2.unwrap_or(0.0) * gerilim_carpan,
+                faz_b: self.y3.unwrap_or(0.0) * gerilim_carpan,
+                faz_c: self.y4.unwrap_or(0.0) * gerilim_carpan,
+            },
+            akim: AkimData {
+                faz_a: self.y8.unwrap_or(0.0),
+                faz_b: self.y9.unwrap_or(0.0),
+                faz_c: self.y10.unwrap_or(0.0),
+            },
+        }
+    }
+
     fn parse_ytbs_timestamp(zaman: &str) -> i64 {
         Self::parse_ytbs_datetime(zaman)
             .map(|dt| dt.and_utc().timestamp_millis())
@@ -304,7 +353,8 @@ impl YtbsGrafikVerisi {
     }
 
     fn parse_ytbs_datetime(zaman: &str) -> Result<chrono::NaiveDateTime, chrono::ParseError> {
-        chrono::NaiveDateTime::parse_from_str(zaman, "%d.%m.%Y %H:%M:%S")
+        chrono::NaiveDateTime::parse_from_str(zaman, "%d.%m.%Y %H:%M:%S%.f")
+            .or_else(|_| chrono::NaiveDateTime::parse_from_str(zaman, "%d.%m.%Y %H:%M:%S"))
             .or_else(|_| chrono::NaiveDateTime::parse_from_str(zaman, "%d.%m.%Y %H:%M"))
     }
 }
@@ -372,6 +422,7 @@ mod tests {
             y13: None,
             y14: None,
             y15: None,
+            y16: None,
         }
     }
 
@@ -429,5 +480,55 @@ mod tests {
 
         assert_eq!(result.status, "fail");
         assert_eq!(result.valid_sample_count, 0);
+    }
+
+    #[test]
+    fn pmu_timestamp_preserves_milliseconds() {
+        let mut sample = sample_with("16.05.2026 22:00:02.100");
+        sample.y14 = Some(-368.12);
+
+        let rms = sample.to_rms_data_for_measurement("PMU");
+        let expected = chrono::NaiveDate::from_ymd_opt(2026, 5, 16)
+            .unwrap()
+            .and_hms_milli_opt(22, 0, 2, 100)
+            .unwrap()
+            .and_utc()
+            .timestamp_millis();
+
+        assert_eq!(rms.timestamp, expected);
+    }
+
+    #[test]
+    fn pmu_mapping_uses_pmu_field_layout() {
+        let mut sample = sample_with("16.05.2026 22:00:02.100");
+        sample.y1 = Some(50.02);
+        sample.y2 = Some(405.1);
+        sample.y3 = Some(406.2);
+        sample.y4 = Some(404.3);
+        sample.y5 = Some(1.1);
+        sample.y6 = Some(-118.9);
+        sample.y7 = Some(121.0);
+        sample.y8 = Some(980.0);
+        sample.y9 = Some(981.0);
+        sample.y10 = Some(982.0);
+        sample.y11 = Some(10.0);
+        sample.y12 = Some(-110.0);
+        sample.y13 = Some(130.0);
+        sample.y14 = Some(-368.12);
+        sample.y15 = Some(-66.01);
+        sample.y16 = Some(374.11);
+
+        let rms = sample.to_rms_data_for_measurement("PMU");
+
+        assert_eq!(rms.frekans, 50.02);
+        assert_eq!(rms.aktif_guc, -368.12);
+        assert_eq!(rms.reaktif_guc, -66.01);
+        assert_eq!(rms.gorunen_guc, 374.11);
+        assert_eq!(rms.gerilim.faz_a, 405100.0);
+        assert_eq!(rms.gerilim.faz_b, 406200.0);
+        assert_eq!(rms.gerilim.faz_c, 404300.0);
+        assert_eq!(rms.akim.faz_a, 980.0);
+        assert_eq!(rms.akim.faz_b, 981.0);
+        assert_eq!(rms.akim.faz_c, 982.0);
     }
 }

@@ -70,6 +70,26 @@ z0_gkc_scada_dev_vers1/
 
 ---
 
+### 3.2. YTBS SCADA Sistemi Ölçüm Noktası ve  SCADA Sistemi Ölçüm Verisi Sayfaları Hakkında
+
+1. **SCADA Sistemi Ölçüm Noktası Sayfası**
+
+Bu sayfa, TEİAŞ SCADA sistemi kapsamında iletim şebekesine yerleştirilmiş RTU'ların (Uzak Uç Birimi) ölçüm yaptığı noktaları kontrol etmek ve güncel listeyi hızlı bir şekilde temin etmek amacıyla kullanılmaktadır
+. Haftalık olarak güncellenen bu liste içerisindeki her bir kayıt tek bir ölçüm birimini temsil eder ve kullanıcılar bu sayfa üzerinden doğrudan son 6 saatin ölçümlerine ulaşabilir
+. Sayfada yer alan hiyerarşik yapı ve bilgiler şunlardır:
+Katman Bilgileri: B1 (Trafo Merkezi), B2 (Gerilim Seviyesi) ve B3 (Fider veya Teçhizat) katmanlarının ID ve adlarını içerir
+.
+Element Türleri: B3 ile temsil edilen nesneye ait ölçüm elementleri detaylandırılır; örneğin Aktif Güç (P), Reaktif Güç (Q), Gerilim (U), Kademe (TapPosMv/Tap_Chan), Kesici (CB) ve Ayırıcı (Iso_Bb) gibi değerler transfer edilir
+.
+Eşleşme Durumu: Ölçüm noktasının YTBS sisteminde eşli olup olmadığı, eşleme yapıldıysa aktif veri çekiş talimatının verilip verilmediği veya bu noktanın eşlemeden tamamen muaf tutulup tutulmadığı gösterilir
+.
+2. **SCADA Ölçüm Verileri Sayfası**
+Bu sayfa, ölçüm noktaları YTBS teçhizatlarıyla tam olarak eşleştirilmeden önce, gelen ölçüm verilerinin ve veri yönlerinin (polarizasyonlarının) doğruluğunu kontrol etmek için kullanılır
+. Sayfa üzerinden RTU bulunan fiderler seçilerek belirtilen zaman aralığındaki veriler orijinal çözünürlüğünde grafiksel olarak incelenebilir
+. Veriler, sorgulama anında doğrudan TEİAŞ SCADA sisteminden (Druid veri tabanını kullanan Büyük Veri Dışa Aktarım Sistemi web servisi üzerinden) çekilir ve istenildiğinde ham veriler Excel formatında indirilebilir
+.
+SCADA Ölçüm Verisi Maksimum Sorgulama Süresi Veri yoğunluğu sebebiyle SCADA ölçüm verileri, tek bir sorgulamada `en fazla 6 saatlik` bir zaman dilimini kapsayacak şekilde sorgulanabilmektedir
+
 ## 4. KURULUM VE GELİŞTİRME ORTAMI HAZIRLIĞI
 
 GKC SCADA uygulamasını yerel bilgisayarınızda geliştirmek, derlemek veya sadece incelemek için aşağıdaki bağımlılıkların sisteminizde eksiksiz olarak kurulu olması gerekmektedir. 
@@ -165,6 +185,7 @@ npm run build:portable
 # Çıktı formatı: gkc-scada-test_vYYAAGG_versX.exe
 ```
 
+cd c:\yazilim_projeler\z0_gkc_scada_dev_vers1\gkc_scada_app\gkc-tauri
 ---
 
 ## 6. YTBS VERİ ENTEGRASYONU VE MİMARİSİ

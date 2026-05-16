@@ -5,6 +5,11 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { useLogStore } from './logStore';
+import {
+  buildYtbsQueryChunks,
+  mergeYtbsRawSamples,
+  mergeYtbsTimestampedSamples,
+} from '../utils/ytbsQueryChunks';
 
 export type YtbsStatus = 'disconnected' | 'logging_in' | 'sms_required' | 'connected' | 'expired';
 export type DataSourceType = 'primary' | 'ytbs' | 'mock' | 'none';
@@ -39,6 +44,8 @@ interface YtbsStore {
   ytbsData: any[];          // YTBS sorgu sonuçları (RmsData)
   ytbsRawData: any[];          // YTBS'den gelen ham telemetri verileri (Parsed objects)
   ytbsQueryLoading: boolean;
+  ytbsQueryNotice: string | null;
+  ytbsQueryProgress: { totalChunks: number; completedChunks: number; currentChunk: number | null } | null;
   healthStatus: Record<string, HealthCheckState>; // Fider sağlık durumu
   healthScanProgress: { current: number; total: number };
   isStopRequested: boolean;
@@ -136,6 +143,8 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   ytbsData: [],
   ytbsRawData: [],
   ytbsQueryLoading: false,
+  ytbsQueryNotice: null,
+  ytbsQueryProgress: null,
   
   // Auth States
   ytbsUsername: localStorage.getItem('ytbs_username') || '',
@@ -302,28 +311,95 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   },
 
   queryRange: async (deviceId: string, measurementType: string, startTime: string, endTime: string, gerilim: string, fazId: string) => {
-    set({ ytbsQueryLoading: true, error: null });
-    try {
-      const result = await invoke<string>('ytbs_query_range', {
-        deviceId,
-        measurementType,
-        startTime,
-        endTime,
-        gerilim: toYtbsGerilimParam(gerilim),
-        fazId: toYtbsFazParam(fazId),
+    const queryChunks = buildYtbsQueryChunks({ measurementType, startIso: startTime, endIso: endTime });
+    if (queryChunks.status !== 'ok') {
+      set({
+        error: queryChunks.message,
+        ytbsQueryLoading: false,
+        ytbsQueryNotice: null,
+        ytbsQueryProgress: null,
+        ytbsData: [],
+        ytbsRawData: [],
       });
-      const parsed = JSON.parse(result);
-      const data = parsed.data || [];
-      const rawData = JSON.parse(parsed.raw_json || '[]');
+      return;
+    }
+
+    set({
+      ytbsQueryLoading: true,
+      error: null,
+      ytbsQueryNotice: queryChunks.message,
+      ytbsQueryProgress: queryChunks.isChunked
+        ? { totalChunks: queryChunks.chunks.length, completedChunks: 0, currentChunk: 1 }
+        : null,
+    });
+    try {
+      const allData: any[] = [];
+      const allRawData: any[] = [];
+
+      for (const chunk of queryChunks.chunks) {
+        set(state => ({
+          ytbsQueryProgress: queryChunks.isChunked
+            ? {
+              totalChunks: queryChunks.chunks.length,
+              completedChunks: Math.max(0, chunk.index - 1),
+              currentChunk: chunk.index,
+            }
+            : state.ytbsQueryProgress,
+        }));
+
+        let result: string;
+        try {
+          result = await invoke<string>('ytbs_query_range', {
+            deviceId,
+            measurementType,
+            startTime: chunk.startYtbs,
+            endTime: chunk.endYtbs,
+            gerilim: toYtbsGerilimParam(gerilim),
+            fazId: toYtbsFazParam(fazId),
+          });
+        } catch (error) {
+          throw new Error(`${chunk.startYtbs} - ${chunk.endYtbs} parçası sorgulanamadı: ${String(error)}`);
+        }
+
+        const parsed = JSON.parse(result);
+        allData.push(...(parsed.data || []));
+        allRawData.push(...JSON.parse(parsed.raw_json || '[]'));
+
+        set(state => ({
+          ytbsQueryProgress: queryChunks.isChunked
+            ? {
+              totalChunks: queryChunks.chunks.length,
+              completedChunks: chunk.index,
+              currentChunk: chunk.index < queryChunks.chunks.length ? chunk.index + 1 : null,
+            }
+            : state.ytbsQueryProgress,
+        }));
+      }
+
+      const data = mergeYtbsTimestampedSamples(allData);
+      const rawData = mergeYtbsRawSamples(allRawData);
       
-      set({ ytbsData: data, ytbsRawData: rawData, ytbsQueryLoading: false });
+      set({
+        ytbsData: data,
+        ytbsRawData: rawData,
+        ytbsQueryLoading: false,
+        ytbsQueryNotice: queryChunks.message,
+        ytbsQueryProgress: null,
+      });
       useLogStore.getState().addLog({
         type: 'NETWORK',
         message: `YTBS sorgu başarılı: ${data.length} veri noktası (Cihaz: ${deviceId}, ${startTime} - ${endTime})`,
         endpoint: 'ytbs.teias.gov.tr',
       });
     } catch (e) {
-      set({ error: String(e), ytbsQueryLoading: false, ytbsData: [], ytbsRawData: [] });
+      set({
+        error: String(e),
+        ytbsQueryLoading: false,
+        ytbsQueryNotice: null,
+        ytbsQueryProgress: null,
+        ytbsData: [],
+        ytbsRawData: [],
+      });
       useLogStore.getState().addLog({
         type: 'ERROR',
         message: `YTBS sorgu hatası: ${String(e)}`,

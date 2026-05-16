@@ -20,6 +20,12 @@ import {
   type ScadaQualitySample,
 } from '../utils/scadaQualityReport';
 import { formatThresholdPercent } from '../utils/scadaThreshold';
+import {
+  buildScadaQueryChunks,
+  formatScadaQueryDateTime,
+  mergeScadaQuerySamples,
+  type ScadaQueryChunk,
+} from '../utils/scadaQueryChunks';
 
 interface YtbsScadaQueryResponse {
   title: string;
@@ -53,11 +59,7 @@ const formatInputDateTime = (date: Date) => {
 const oneHourAgo = () => formatInputDateTime(new Date(Date.now() - 60 * 60 * 1000));
 const nowInput = () => formatInputDateTime(new Date());
 
-const formatYtbsDateTime = (iso: string) => {
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
+const formatYtbsDateTime = formatScadaQueryDateTime;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -96,6 +98,12 @@ export function YtbsScadaQualityReport({
     () => Array.from(new Set(SCADA_POINT_LIST.map(point => point.b1Adi).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'tr')),
     [],
   );
+  const queryWindow = useMemo(
+    () => buildScadaQueryChunks(startTime, endTime),
+    [endTime, startTime],
+  );
+  const queryRangeWarning = queryWindow.status === 'ok' ? null : queryWindow.message;
+  const queryRangeNotice = queryWindow.status === 'ok' ? queryWindow.message : null;
 
   const getRemoteElementOptions = async (row: ScadaQualityReportRow) => {
     const cacheKey = `${row.point.b1Id}|${row.point.b2Id}|${row.point.b3Id}`;
@@ -222,6 +230,11 @@ export function YtbsScadaQualityReport({
 
   const handleQueryRows = async () => {
     if (isQuerying || rows.length === 0 || ytbsStatus !== 'connected') return;
+    const queryChunks = buildScadaQueryChunks(startTime, endTime);
+    if (queryChunks.status !== 'ok') {
+      setFilterMessage(queryChunks.message);
+      return;
+    }
 
     const rowsToQuery = rows.map(row => ({
       ...row,
@@ -233,8 +246,6 @@ export function YtbsScadaQualityReport({
     setIsQuerying(true);
     setProgress({ total: rowsToQuery.length, done: 0, remaining: rowsToQuery.length });
 
-    const startTimeParam = formatYtbsDateTime(startTime);
-    const endTimeParam = formatYtbsDateTime(endTime);
     let done = 0;
 
     try {
@@ -244,15 +255,29 @@ export function YtbsScadaQualityReport({
 
         try {
           const scadaId = await resolveRowScadaId(row);
-          const result = await invoke<YtbsScadaQueryResponse>('ytbs_scada_query', {
-            startTime: startTimeParam,
-            endTime: endTimeParam,
-            b1: row.point.b1Id,
-            b2: row.point.b2Id,
-            b3: row.point.b3Id,
-            scadaId,
-          });
-          const stats = calculateScadaQualityStats(row.point, result.data || [], startTime, endTime);
+          const samples: ScadaQualitySample[] = [];
+          let activeChunk: ScadaQueryChunk | null = null;
+          try {
+            for (const chunk of queryChunks.chunks) {
+              activeChunk = chunk;
+              const result = await invoke<YtbsScadaQueryResponse>('ytbs_scada_query', {
+                startTime: chunk.startYtbs,
+                endTime: chunk.endYtbs,
+                b1: row.point.b1Id,
+                b2: row.point.b2Id,
+                b3: row.point.b3Id,
+                scadaId,
+              });
+              samples.push(...(result.data || []));
+            }
+          } catch (error) {
+            const message = activeChunk && queryChunks.isChunked
+              ? `${activeChunk.index}/${queryChunks.chunks.length}. parca (${activeChunk.startYtbs} - ${activeChunk.endYtbs}) hatasi: ${String(error)}`
+              : String(error);
+            throw new Error(message);
+          }
+
+          const stats = calculateScadaQualityStats(row.point, mergeScadaQuerySamples(samples), startTime, endTime);
           setRows(current => current.map(item => item.id === row.id ? { ...item, status: 'done', stats, error: null } : item));
         } catch (error) {
           setRows(current => current.map(item => item.id === row.id ? { ...item, status: 'error', stats: null, error: String(error) } : item));
@@ -327,7 +352,7 @@ export function YtbsScadaQualityReport({
             </button>
             <button
               className="btn btn-primary"
-              disabled={isQuerying || rows.length === 0 || ytbsStatus !== 'connected'}
+              disabled={isQuerying || rows.length === 0 || ytbsStatus !== 'connected' || queryWindow.status !== 'ok'}
               onClick={handleQueryRows}
               style={{ fontSize: 11, padding: '7px 12px', fontWeight: 700 }}
             >
@@ -353,6 +378,11 @@ export function YtbsScadaQualityReport({
               Toplam {progress.total || rows.length} · Yapıldı {progress.done} · Kalan {progress.remaining || (progress.total ? progress.total - progress.done : rows.length)}
             </span>
           </div>
+          {(queryRangeWarning || queryRangeNotice) && (
+            <div style={{ marginTop: 8, color: queryRangeWarning ? 'var(--accent-red)' : 'var(--accent-yellow)', fontSize: 11 }}>
+              {queryRangeWarning || queryRangeNotice}
+            </div>
+          )}
           {filterMessage && (
             <div style={{ marginTop: 8, color: rows.length ? 'var(--accent-green)' : 'var(--accent-yellow)', fontSize: 11 }}>
               {filterMessage}

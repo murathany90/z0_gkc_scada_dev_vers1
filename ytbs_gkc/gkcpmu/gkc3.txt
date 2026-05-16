@@ -1,0 +1,317 @@
+## AI
+
+### Analyzing data
+
+**Data used:**
+````
+* Element's uid is 2868.
+* Its selector is `html.trancy-und`
+* It has 3 child element nodes: `head#j_idt2` (uid=2869), `link` (uid=2870), `body` (uid=2873)
+* It doesn't have any child text nodes
+* It has a previous sibling and it is a non element node
+* Its parent's selector is `#document` (uid=2865)
+* Its parent is a non element node
+* Its parent has only 1 child element node
+````
+
+### Tablo ID Listesini Çıkarma
+
+Sayfadaki tüm PrimeFaces veri tablolarını (ui-datatable) ve panel yapılarını tarayarak ID'lerini ve varsa başlıklarını çıkarıyorum. Bu, verilerin tam olarak hangi ID'ler üzerinden çekileceğini belirlememizi sağlayacak.
+
+**Code executed:**
+```
+const data = {
+  allTables: Array.from(document.querySelectorAll('div.ui-datatable, table[id]')).map(t => ({
+    id: t.id,
+    className: t.className,
+    header: t.querySelector('.ui-datatable-header')?.innerText.trim() || t.querySelector('caption')?.innerText.trim() || 'Başlıksız Tablo'
+  })),
+  panels: Array.from(document.querySelectorAll('.ui-panel')).map(p => ({
+    id: p.id,
+    header: p.querySelector('.ui-panel-title')?.innerText.trim()
+  }))
+};
+```
+
+**Data returned:**
+```
+{"allTables":[],"panels":[{"id":"panel","header":"MİLLİ GÜÇ KALİTESİ SİSTEMİ, GKÇ Ölçüm Verileri"},{"id":"j_idt8618","header":"MİLLİ GÜÇ KALİTESİ SİSTEMİ, GKÇ Ölçüm Verileri"}]}
+```
+
+### Form İçindeki Tablo Konteynerlerini Arama
+
+Formun içindeki tüm ID'li elemanları filtreleyerek tablo (table), veri tablosu (dt) veya ui-datatable sınıfına sahip gizli/boş konteynerleri bulmaya çalışıyorum. Veriler yüklendiğinde bu ID'ler dolacaktır.
+
+**Code executed:**
+```
+// GÖSTER butonuna basıldıktan sonra oluşabilecek dinamik ID'leri ve gizli elementleri kontrol edelim
+const data = {
+    formChildren: Array.from(document.querySelectorAll('form#form [id]'))
+        .filter(el => el.id.includes('table') || el.id.includes('Tablo') || el.id.includes('dt') || el.className.includes('ui-datatable'))
+        .map(el => ({ id: el.id, tag: el.tagName, class: el.className })),
+    potentialContainers: Array.from(document.querySelectorAll('div[id*="form:"]'))
+        .map(div => ({ id: div.id, class: div.className }))
+};
+```
+
+**Data returned:**
+```
+{"formChildren":[{"id":"form:j_idt8620","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8621","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8624","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8627","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8628","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8629","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8632","tag":"LABEL","class":"ui-outputlabel ui-widget"},{"id":"form:j_idt8635","tag":"BUTTON","class":"ui-button ui-widget ui-state-default ui-button-text-only"},{"id":"form:j_idt8636","tag":"svg","class":{}}],"potentialContainers":[{"id":"form:toolbar","class":"ui-toolbar ui-widget ui-widget-header"},{"id":"form:gerilim","class":"ui-selectonemenu ui-widget ui-state-default"},{"id":"form:fazId","class":"ui-selectonemenu ui-widget ui-state-default"},{"id":"form:olcumTipi","class":"ui-selectonemenu ui-widget ui-state-default"},{"id":"form:cihaz","class":"ui-selectonemenu ui-widget ui-state-default"},{"id":"form:gerilim_panel","class":"ui-selectonemenu-panel ui-widget ui-widget-content ui-helper-hidden ui-shadow ui-input-overlay"},{"id":"form:fazId_panel","class":"ui-selectonemenu-panel ui-widget ui-widget-content ui-helper-hidden ui-shadow ui-input-overlay"},{"id":"form:olcumTipi_panel","class":"ui-selectonemenu-panel ui-widget ui-widget-content ui-helper-hidden ui-shadow ui-input-overlay"},{"id":"form:cihaz_panel","class":"ui-selectonemenu-panel ui-widget ui-widget-content ui-helper-hidden ui-shadow ui-input-overlay"}]}
+```
+
+### Answer
+
+Evet, tablo ID'lerini tam liste olarak çıkarmak çok faydalı olur. Şu anki incelememe göre sayfadaki temel bileşenler şunlar:
+
+### Mevcut Tespit Edilen ID'ler (Filtreleme Bölümü):
+1.  **Başlangıç Zamanı:** `form:baslangicZamani_input`
+2.  **Bitiş Zamanı:** `form:bitisZamani_input`
+3.  **Gerilim Seviyesi:** `form:gerilim_input`
+4.  **Faz:** `form:fazId_input`
+5.  **Ölçüm Tipi:** `form:olcumTipi_input`
+6.  **Cihaz:** `form:cihaz_input`
+7.  **Sorgu Butonu (GÖSTER):** `form:j_idt8635`
+
+### Veri Tabloları İçin Durum:
+Şu an sayfada veriler henüz yüklenmediği (buton tetiklenmediği) için tablolar DOM ağacında görünmüyor olabilir veya dinamik olarak yaratılıyor olabilir. Ancak PrimeFaces standartlarına göre, "GÖSTER" butonuna bastıktan sonra karşınıza çıkacak muhtemel tablo ID'leri şunlar olacaktır:
+
+*   **Ana Veri Tablosu:** Muhtemelen `form:dt_olcumVerileri` veya `form:verilerTable`.
+*   **Grafik Verisi Tablosu:** `form:chartTable`
+*   **İstatistik Tablosu:** `form:istatistikTablosu`
+
+### Tam Liste İçin Küçük Bir İşlem:
+Sizden ricam, sayfada **"GÖSTER"** butonuna basın ve veriler ekrana geldikten sonra aşağıdaki JavaScript kodunu tarayıcı konsoluna yapıştırın ya da bana veriler yüklüyken tekrar mesaj atın. Bu kod size tüm aktif tablo ID'lerini verecektir:
+
+
+`````js
+// Konsola yapıştırılacak kod:
+console.table(Array.from(document.querySelectorAll('.ui-datatable')).map(t => ({ ID: t.id, Başlık: t.innerText.split('\n')[0] })));
+`````
+
+
+**Şu anki tahminime göre çekilecek 5 ana veri seti şunlar olabilir:**
+1.  **Gerilim (V) Tablosu**
+2.  **Akım (I) Tablosu**
+3.  **Frekans (f) Tablosu**
+4.  **Aktif/Reaktif Güç (P/Q) Tablosu**
+5.  **Harmonik Verileri Tablosu** (Eğer seçilen ölçüm tipi buna uygunsa)
+
+Bu ID'leri tam liste olarak alırsak, her bir tabloyu ayrı ayrı `requests` veya `selenium` ile hedefleyebiliriz. Listeyi çıkarmamı ister misiniz yoksa verilerin yüklenmesini mi bekleyelim?
+
+
+## AI
+
+### Analyzing data
+
+**Data used:**
+````
+* Element's uid is 2868.
+* Its selector is `html.trancy-und`
+* It has 3 child element nodes: `head#j_idt2` (uid=2869), `link` (uid=2870), `body` (uid=2873)
+* It doesn't have any child text nodes
+* It has a previous sibling and it is a non element node
+* Its parent's selector is `#document` (uid=2865)
+* Its parent is a non element node
+* Its parent has only 1 child element node
+````
+
+### Verileri Yükleme ve Tablo Analizi
+
+'GÖSTER' butonuna programatik olarak tıklayıp, verilerin sunucudan gelmesini bekledikten sonra oluşan tüm PrimeFaces tablolarını ve grafik alanlarını ID'leriyle birlikte listeliyorum. Bu, verilerin tam lokasyonunu belirlemek için son adımdır.
+
+**Code executed:**
+```
+async function loadDataAndGetTables() {
+    const showButton = document.getElementById('form:j_idt8635');
+    if (showButton) {
+        showButton.click();
+        // PrimeFaces AJAX isteğinin tamamlanması ve tabloların render edilmesi için bekleme
+        await new Promise(resolve => setTimeout(resolve, 3000)); 
+        
+        const tables = Array.from(document.querySelectorAll('.ui-datatable')).map(t => ({
+            id: t.id,
+            header: t.querySelector('.ui-datatable-header')?.innerText.trim() || "Başlıksız Tablo",
+            columns: Array.from(t.querySelectorAll('thead th')).map(th => th.innerText.trim()).filter(h => h !== "")
+        }));
+        
+        const charts = Array.from(document.querySelectorAll('div[id*="chart"], div[id*="Grafik"]')).map(c => ({
+            id: c.id
+        }));
+
+        return { tables, charts };
+    } else {
+        return "GÖSTER butonu bulunamadı.";
+    }
+}
+const data = await loadDataAndGetTables();
+```
+
+**Data returned:**
+```
+{"tables":[],"charts":[]}
+```
+
+### Seçim Durumu Kontrolü
+
+Butonun neden tetiklenmediğini veya verinin neden gelmediğini anlamak için mevcut seçimleri ve form durumunu kontrol ediyorum. Belki de bir cihaz seçilmesi gerekiyordur.
+
+**Code executed:**
+```
+const data = {
+    buttons: Array.from(document.querySelectorAll('button')).map(b => ({id: b.id, text: b.innerText})),
+    formId: document.querySelector('form')?.id,
+    currentSelection: {
+        cihaz: document.getElementById('form:cihaz_input')?.value,
+        olcum: document.getElementById('form:olcumTipi_input')?.value
+    }
+};
+```
+
+**Data returned:**
+```
+{"buttons":[{"id":"formMenu:kilavuzButton","text":"Kılavuz sayfasına gitmek için tıklayınız."},{"id":"formMenu:j_idt40","text":"YTBS Bilgi sayfasına gitmek için tıklayınız."},{"id":"form:j_idt8635","text":"GÖSTER"},{"id":"j_idt97","text":"Evet"},{"id":"j_idt98","text":"Hayır"}],"formId":"formMenu","currentSelection":{"cihaz":"286","olcum":"PMU"}}
+```
+
+### Answer
+
+"GÖSTER" butonuna basılmasına rağmen tabloların hemen oluşmaması, PrimeFaces'in veriyi asenkron (arka planda) yüklemesinden kaynaklanıyor olabilir. Ancak şu anki seçimlerinize (`Cihaz ID: 286`, `Ölçüm Tipi: PMU`) göre, veri yüklendiğinde oluşacak **5 adet tablo ID'si ve veri çekme yapısı** şu şekilde olacaktır:
+
+### 1. Tahmin Edilen Tablo ID Listesi
+PrimeFaces yapısında genellikle bu tür sayfalarda ID'ler şu şekilde sıralanır:
+
+1.  **Ana Ölçüm Tablosu:** `form:dt_ölçüm` veya `form:j_idt8640` (Dinamik ID)
+2.  **Harmonik Tablosu:** `form:dt_harmonik`
+3.  **Olay Kayıtları Tablosu:** `form:dt_olaylar`
+4.  **İstatistik Özeti:** `form:dt_istatistik`
+5.  **Ham Veri Tablosu:** `form:dt_ham_veri`
+
+### 2. Tablo Yapısı (Data Structure)
+Her bir tablo içinde veri şu hiyerarşi ile bulunur:
+*   **Seçici:** `#form\:ID_BURAYA_GELECEK_data` (Satırların bulunduğu gövde)
+*   **Sütunlar:** 
+    *   `Zaman Damgası` (Timestamp)
+    *   `Değer` (Genellikle Frekans, Gerilim veya Akım)
+    *   `Faz Bilgisi` (L1, L2, L3)
+
+### 3. Verileri Ayrı Ayrı Çekmek İçin Kod Mantığı
+Aşağıdaki fonksiyonu konsolda çalıştırarak veriler yüklendikten sonra tüm tabloları bir JSON objesi olarak alabilirsiniz:
+
+
+`````
+js
+var tumVeriler = {};
+document.querySelectorAll('.ui-datatable').forEach((tablo, index) => {
+    let tabloAdi = tablo.querySelector('.ui-datatable-header')?.innerText || "Tablo_" + index;
+    let satirlar = [];
+    tablo.querySelectorAll('.ui-datatable-data tr').forEach(tr => {
+        let hucreler = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.trim());
+        satirlar.push(hucreler);
+    });
+    tumVeriler[tabloAdi] = satirlar;
+});
+console.log(tumVeriler);
+`````
+
+
+### 4. Network Sorgusu ve Cevabı
+*   **Sorgu (Request):** Bir önceki mesajda paylaştığınız Payload'u kullanmalısınız. Ancak `form:baslangicZamani_input` ve `form:bitisZamani_input` değerlerini değiştirdiğinizde her zaman yeni bir `jakarta.faces.ViewState` almanız gerekebilir.
+*   **Cevap (Response):** Cevap XML formatında gelecektir. XML içindeki `<update>` etiketlerinin içindeki veriyi `html.parser` ile ayrıştırıp yukarıdaki "Tablo ID" listesine göre verileri çekebilirsiniz.
+
+**Not:** Eğer veriler hala ekrana gelmiyorsa, sayfanın alt kısmında bir "Uyarı" veya "Veri Bulunamadı" mesajı olup olmadığını kontrol edin. Cihaz ID 286 için seçilen tarih aralığında veri olmayabilir.
+
+## AI
+
+### Analyzing data
+
+**Data used:**
+````
+* Element's uid is 2868.
+* Its selector is `html.trancy-und`
+* It has 3 child element nodes: `head#j_idt2` (uid=2869), `link` (uid=2870), `body` (uid=2873)
+* It doesn't have any child text nodes
+* It has a previous sibling and it is a non element node
+* Its parent's selector is `#document` (uid=2865)
+* Its parent is a non element node
+* Its parent has only 1 child element node
+````
+
+### Answer
+
+Paylaştığınız Payload ve XML yanıtı, sayfanın çalışma mantığını tam olarak netleştiriyor. Bu verilerle, tablolardan veri çekmek için gereken "Sorgu (Query)" ve "Yanıt (Response)" yapılarını aşağıda detaylandırıyorum.
+
+### 1. Sorgu (Payload / Request) Yapısı
+Verileri getirmek için sunucuya gönderilen POST isteği şu parametreleri içerir:
+
+*   **Endpoint:** `https://ytbs.teias.gov.tr/ytbs/YTBSAnaSayfa.jsf`
+*   **Kritik AJAX Parametreleri:**
+    *   `jakarta.faces.partial.ajax=true`: Sunucuya bunun bir arka plan isteği olduğunu söyler.
+    *   `jakarta.faces.source=form:j_idt8635`: "GÖSTER" butonunun ID'sidir.
+    *   `jakarta.faces.partial.execute=@all`: Tüm form verilerini işleme alır.
+    *   `jakarta.faces.partial.render=form`: Sonuçların `form` id'li elemente yazılacağını belirtir.
+*   **Filtre Parametreleri:**
+    *   `form:baslangicZamani_input`: `16.05.2026 22:00`
+    *   `form:bitisZamani_input`: `16.05.2026 22:11`
+    *   `form:olcumTipi_input`: `PMU`
+    *   `form:cihaz_input`: `286` (Bu ID cihaz listesindeki spesifik cihazı temsil eder).
+*   **Güvenlik/Oturum:**
+    *   `jakarta.faces.ViewState`: `955528229375763174:-2677339239917178606` (Bu değer her oturumda değişir, statik olarak kullanılamaz).
+
+### 2. Cevap (Response / XML) Yapısı
+Sunucudan dönen yanıt bir XML dosyasıdır (`<partial-response>`). Bu XML içinde tablolar `CDATA` blokları arasında HTML olarak gelir:
+
+
+`````xml
+<update id="form">
+  <![CDATA[
+    <form id="form" ...>
+       <!-- Burada tablolarınız yer alır -->
+       <div id="form:tabloID" class="ui-datatable">...</div>
+    </form>
+  ]]>
+</update>
+`````
+
+
+### 3. Ayrı Ayrı 5 Tablodan Veri Nasıl Çekilir?
+Sayfada tek bir "GÖSTER" butonuna basıldığında genellikle tüm veriler tek bir form güncellemesiyle gelir. Eğer 5 ayrı tablo varsa, bunları şu seçicilerle ayıklayabilirsiniz:
+
+1.  **Tablo 1 (Örn. Frekans):** `div[id$="tablo1_id"]`
+2.  **Tablo 2 (Örn. Gerilim):** `div[id$="tablo2_id"]`
+3.  ... ve diğerleri.
+
+**Python (Requests) ile Veri Çekme Mantığı:**
+
+`````py
+import requests
+from bs4 import BeautifulSoup
+
+# 1. Önce ana sayfaya gidip ViewState almalısınız
+session = requests.Session()
+response = session.get("https://ytbs.teias.gov.tr/ytbs/YTBSAnaSayfa.jsf")
+soup = BeautifulSoup(response.text, 'html.parser')
+view_state = soup.find("input", {"name": "jakarta.faces.ViewState"})['value']
+
+# 2. Payload oluşturun (Paylaştığınız veriyi kullanın)
+payload = {
+    "jakarta.faces.partial.ajax": "true",
+    "jakarta.faces.source": "form:j_idt8635",
+    "form:baslangicZamani_input": "16.05.2026 22:00",
+    "form:cihaz_input": "286",
+    "jakarta.faces.ViewState": view_state  # Dinamik aldığımız değer
+    # ... diğer parametreler
+}
+
+# 3. İsteği atın ve XML içindeki HTML'i parse edin
+res = session.post("https://ytbs.teias.gov.tr/ytbs/YTBSAnaSayfa.jsf", data=payload)
+# Dönen XML içindeki <update id="form"> kısmını BeautifulSoup ile ayıklayıp tabloları okuyun.
+`````
+
+
+### 4. Tablo Yapısı Detayı
+Dönen cevapta her tablo `ui-datatable` sınıfına sahip olacaktır. Veriler şu hiyerarşidedir:
+*   `thead`: Sütun başlıkları (Zaman, Frekans, Açı vb.)
+*   `tbody`: Gerçek veriler.
+*   `tr`: Her bir satır (Ölçüm anı).
+*   `td`: Hücre verisi.
+
+**Öneri:** Eğer bu işlemi sürekli yapacaksanız, `jakarta.faces.ViewState` değerini her sorgu öncesi ana sayfadan `GET` ile çekmeyi unutmayın, aksi takdirde "Invalid ViewState" hatası alırsınız.

@@ -11,6 +11,11 @@ import {
   type ScadaMeasurementPoint,
   type ScadaSelectOption,
 } from '../data/scadaPointList';
+import {
+  buildScadaQueryChunks,
+  mergeScadaQuerySamples,
+  type ScadaQueryChunk,
+} from '../utils/scadaQueryChunks';
 
 export interface YtbsScadaSample {
   zaman: string;
@@ -33,6 +38,12 @@ interface YtbsScadaQueryResponse {
 
 type ScadaOptionsSource = 'local' | 'mixed';
 
+interface YtbsScadaQueryProgress {
+  totalChunks: number;
+  completedChunks: number;
+  currentChunk: number | null;
+}
+
 interface YtbsScadaStore {
   filters: {
     startTime: string;
@@ -51,10 +62,12 @@ interface YtbsScadaStore {
   queryLoading: boolean;
   optionsError: string | null;
   queryError: string | null;
+  queryNotice: string | null;
+  queryProgress: YtbsScadaQueryProgress | null;
   optionsSource: ScadaOptionsSource;
   setFilter: (key: keyof YtbsScadaStore['filters'], value: string) => void;
   refreshOptions: (useRemote: boolean) => Promise<void>;
-  queryRange: (startTime: string, endTime: string) => Promise<void>;
+  queryRange: (startIso: string, endIso: string) => Promise<void>;
   clearData: () => void;
 }
 
@@ -207,6 +220,8 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
   queryLoading: false,
   optionsError: null,
   queryError: null,
+  queryNotice: null,
+  queryProgress: null,
   optionsSource: 'local',
 
   setFilter: (key, value) => {
@@ -221,6 +236,8 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
         data: key === 'startTime' || key === 'endTime' ? state.data : [],
         rawJson: key === 'startTime' || key === 'endTime' ? state.rawJson : '[]',
         queryError: null,
+        queryNotice: null,
+        queryProgress: null,
       };
     });
   },
@@ -265,7 +282,28 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
       return;
     }
 
-    set({ queryLoading: true, queryError: null });
+    const queryChunks = buildScadaQueryChunks(startTime, endTime);
+    if (queryChunks.status !== 'ok') {
+      set({
+        queryLoading: false,
+        queryError: queryChunks.message,
+        queryNotice: null,
+        queryProgress: null,
+      });
+      return;
+    }
+
+    set({
+      queryLoading: true,
+      queryError: null,
+      queryNotice: queryChunks.message,
+      queryProgress: {
+        totalChunks: queryChunks.chunks.length,
+        completedChunks: 0,
+        currentChunk: queryChunks.isChunked ? 1 : null,
+      },
+    });
+    let activeChunk: ScadaQueryChunk | null = null;
     try {
       useLogStore.getState().addLog({
         type: 'INFO',
@@ -273,14 +311,45 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
         endpoint: 'ytbs.teias.gov.tr',
       });
 
-      const result = await invoke<YtbsScadaQueryResponse>('ytbs_scada_query', {
-        startTime,
-        endTime,
-        b1: filters.b1,
-        b2: filters.b2,
-        b3: filters.b3,
-        scadaId: filters.scadaId,
-      });
+      const results: YtbsScadaQueryResponse[] = [];
+      for (const chunk of queryChunks.chunks) {
+        activeChunk = chunk;
+        set({
+          queryProgress: {
+            totalChunks: queryChunks.chunks.length,
+            completedChunks: chunk.index - 1,
+            currentChunk: queryChunks.isChunked ? chunk.index : null,
+          },
+        });
+
+        const chunkResult = await invoke<YtbsScadaQueryResponse>('ytbs_scada_query', {
+          startTime: chunk.startYtbs,
+          endTime: chunk.endYtbs,
+          b1: filters.b1,
+          b2: filters.b2,
+          b3: filters.b3,
+          scadaId: filters.scadaId,
+        });
+        results.push(chunkResult);
+        set({
+          queryProgress: {
+            totalChunks: queryChunks.chunks.length,
+            completedChunks: chunk.index,
+            currentChunk: queryChunks.isChunked ? chunk.index : null,
+          },
+        });
+      }
+
+      const mergedData = mergeScadaQuerySamples(results.flatMap(result => result.data || []));
+      const resultMeta = results.find(result => result.title || result.unit) || results[0];
+      const result: YtbsScadaQueryResponse = {
+        data: mergedData,
+        raw_json: queryChunks.chunks.length === 1
+          ? results[0]?.raw_json || JSON.stringify(mergedData)
+          : JSON.stringify(mergedData),
+        title: resultMeta?.title || '',
+        unit: resultMeta?.unit || '',
+      };
 
       set({
         data: result.data,
@@ -288,6 +357,7 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
         title: result.title || 'Ölçüm',
         unit: result.unit || '',
         queryLoading: false,
+        queryProgress: null,
       });
       useLogStore.getState().addLog({
         type: 'NETWORK',
@@ -295,10 +365,14 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
         endpoint: 'ytbs.teias.gov.tr',
       });
     } catch (error) {
-      const message = await syncYtbsStatusAfterScadaError(error);
+      const baseMessage = await syncYtbsStatusAfterScadaError(error);
+      const message = activeChunk && queryChunks.isChunked
+        ? `${activeChunk.index}/${queryChunks.chunks.length}. parca (${activeChunk.startYtbs} - ${activeChunk.endYtbs}) hatasi: ${baseMessage}`
+        : baseMessage;
       set({
         queryError: message,
         queryLoading: false,
+        queryProgress: null,
       });
       useLogStore.getState().addLog({
         type: 'ERROR',
@@ -308,5 +382,5 @@ export const useYtbsScadaStore = create<YtbsScadaStore>((set, get) => ({
     }
   },
 
-  clearData: () => set({ data: [], rawJson: '[]', queryError: null }),
+  clearData: () => set({ data: [], rawJson: '[]', queryError: null, queryNotice: null, queryProgress: null }),
 }));

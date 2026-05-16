@@ -86,12 +86,13 @@ const nonZeroSeriesEstimate = calculateThresholdSeriesEstimate({
 
 assert.equal(nonZeroSeriesEstimate.status, 'ok');
 if (nonZeroSeriesEstimate.status === 'ok') {
-  assert.deepEqual(nonZeroSeriesEstimate.points.map(point => point.timestamp), [3000, 5000]);
-  assert.deepEqual(nonZeroSeriesEstimate.points.map(point => point.deltaValue), [1, 2]);
+  assert.deepEqual(nonZeroSeriesEstimate.points.map(point => point.timestamp), [3000, 4000, 5000]);
+  assert.deepEqual(nonZeroSeriesEstimate.points.map(point => point.deltaValue), [1, 0, 2]);
+  assert.deepEqual(nonZeroSeriesEstimate.points.map(point => point.estimatedThresholdEngineering), [1, 1, 2]);
   assert.equal(nonZeroSeriesEstimate.minThresholdPercent, 0.5);
   assert.equal(nonZeroSeriesEstimate.maxThresholdPercent, 1);
-  assert.equal(nonZeroSeriesEstimate.averageThresholdPercent, 0.75);
-  assert.equal(nonZeroSeriesEstimate.averageThresholdEngineering, 1.5);
+  assert.equal(Math.round(nonZeroSeriesEstimate.averageThresholdPercent * 1000) / 1000, 0.667);
+  assert.equal(Math.round(nonZeroSeriesEstimate.averageThresholdEngineering * 1000) / 1000, 1.333);
 }
 
 assert.deepEqual(calculateThresholdSeriesEstimate({
