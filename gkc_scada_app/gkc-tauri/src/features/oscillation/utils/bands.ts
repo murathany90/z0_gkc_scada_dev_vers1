@@ -6,9 +6,9 @@ export const SAMPLING_RATE_HZ = 10;
 
 export const DEFAULT_AMPLITUDE_THRESHOLDS: OscillationAmplitudeThresholds = {
   frequencyMhz: 10,
-  voltagePercent: 2,
-  activePowerPercent: 2,
-  reactivePowerPercent: 2,
+  voltagePercent: 5,
+  activePowerPercent: 5,
+  reactivePowerPercent: 5,
 };
 
 export const OSCILLATION_BANDS: OscillationBand[] = [

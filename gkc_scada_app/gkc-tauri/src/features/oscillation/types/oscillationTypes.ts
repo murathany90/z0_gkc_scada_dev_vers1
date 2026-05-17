@@ -6,6 +6,13 @@ export type PmuSignalKey =
   | 'activePower'
   | 'reactivePower';
 
+export type RawSignalDisplayMode = 'value' | 'pu';
+
+export interface OscillationSmoothingSettings {
+  enabled: boolean;
+  windowSize: number;
+}
+
 export type OscillationBandId = 'INTERAREA' | 'LOCAL' | 'FORCED' | 'TORSION_PASSIVE';
 export type OscillationModeValue = 0 | 1 | 2 | 3 | 4;
 
@@ -99,6 +106,9 @@ export interface SignalBandMetric {
 
 export interface OscillationWindowMetric {
   timestampMs: number;
+  windowStartMs: number;
+  windowEndMs: number;
+  durationSeconds: number;
   pmuId: string;
   signal: PmuSignalKey;
   mode: OscillationModeValue;
@@ -109,6 +119,40 @@ export interface OscillationWindowMetric {
   energyRms: number | null;
   dampingRatioPercent: number | null;
   passiveTorsion: boolean;
+}
+
+export type AnalysisProgressStage =
+  | 'prepare'
+  | 'quality'
+  | 'bands'
+  | 'windows'
+  | 'modes'
+  | 'report'
+  | 'complete';
+
+export interface AnalysisProgress {
+  stage: AnalysisProgressStage;
+  percent: number;
+  label: string;
+}
+
+export interface OscillationEvent {
+  id: string;
+  pmuId: string;
+  signal: PmuSignalKey;
+  mode: OscillationModeValue;
+  bandId: OscillationBandId | null;
+  startMs: number;
+  endMs: number;
+  durationSeconds: number;
+  dominantFrequencyHz: number | null;
+  maxAmplitude: number | null;
+  maxEnergyRms: number | null;
+  minDampingRatioPercent: number | null;
+  averageDampingRatioPercent: number | null;
+  hasNegativeDamping: boolean;
+  passiveTorsion: boolean;
+  windowCount: number;
 }
 
 export interface ModeShapePoint {
@@ -159,6 +203,7 @@ export interface OscillationAnalysisResult {
   };
   metrics: SignalBandMetric[];
   windowMetrics: OscillationWindowMetric[];
+  events: OscillationEvent[];
   commonModes: Array<{
     modeId: string;
     frequencyHz: number;

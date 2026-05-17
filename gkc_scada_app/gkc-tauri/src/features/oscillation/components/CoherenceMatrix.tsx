@@ -1,6 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import type { CoherenceCell } from '../types/oscillationTypes.ts';
-import { type OscillationThemeMode } from './chartHelpers.ts';
+import { formatPmuDisplayName, paletteFor, type OscillationThemeMode } from './chartHelpers.ts';
 
 export function CoherenceMatrix({
   cells,
@@ -14,19 +14,21 @@ export function CoherenceMatrix({
   }
 
   const pmus = [...new Set(cells.flatMap(cell => [cell.sourcePmuId, cell.targetPmuId]))];
+  const pmuLabels = pmus.map(pmuId => formatPmuDisplayName(pmuId));
+  const palette = paletteFor(themeMode);
   const option = {
     animation: false,
     backgroundColor: 'transparent',
-    title: { text: 'Koherens Matrisi', textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
+    title: { text: 'Koherens Matrisi', textStyle: { color: palette.text, fontSize: 13 } },
     tooltip: {
       formatter: (params: { value: [number, number, number] }) => {
         const [x, y, value] = params.value;
-        return `${pmus[y]} - ${pmus[x]}<br/>Koherens: ${Number(value).toFixed(2)}`;
+        return `${pmuLabels[y]} - ${pmuLabels[x]}<br/>Koherens: ${Number(value).toFixed(2)}`;
       },
     },
     grid: { top: 42, left: 64, right: 28, bottom: 36 },
-    xAxis: { type: 'category', data: pmus, axisLabel: { color: 'var(--text-muted)' } },
-    yAxis: { type: 'category', data: pmus, axisLabel: { color: 'var(--text-muted)' } },
+    xAxis: { type: 'category', data: pmuLabels, axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } } },
+    yAxis: { type: 'category', data: pmuLabels, axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } } },
     visualMap: {
       min: 0,
       max: 1,
@@ -34,7 +36,7 @@ export function CoherenceMatrix({
       orient: 'horizontal',
       bottom: 0,
       left: 'center',
-      textStyle: { color: themeMode === 'light' ? '#475569' : '#94a3b8' },
+      textStyle: { color: palette.muted },
       inRange: { color: ['#1e293b', '#2563eb', '#14b8a6', '#22c55e'] },
     },
     series: [{

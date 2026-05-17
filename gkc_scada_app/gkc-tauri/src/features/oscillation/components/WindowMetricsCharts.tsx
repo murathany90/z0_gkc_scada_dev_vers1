@@ -1,9 +1,13 @@
 import ReactECharts from 'echarts-for-react';
 import type { OscillationWindowMetric, PmuSignalKey } from '../types/oscillationTypes.ts';
 import {
+  buildDampingTooltipPayload,
   chartBase,
   connectOscillationTimeChart,
+  formatMetricNumber,
   formatPmuAxisTime,
+  formatPmuDisplayName,
+  paletteFor,
   PMU_COLORS,
   SIGNAL_LABELS,
   SIGNAL_UNITS,
@@ -28,7 +32,10 @@ const signalUnit = (signal: PmuSignalKey): string =>
   signal === 'frequency' ? 'mHz' : SIGNAL_UNITS[signal];
 
 const seriesKey = (metric: OscillationWindowMetric): string => `${metric.pmuId}__${metric.signal}`;
-const seriesName = (metric: OscillationWindowMetric): string => `${metric.pmuId} ${SIGNAL_LABELS[metric.signal]}`;
+const seriesName = (metric: OscillationWindowMetric): string => `${formatPmuDisplayName(metric.pmuId)} ${SIGNAL_LABELS[metric.signal]}`;
+
+const dampingStatusText = (dampingRatioPercent: number): string =>
+  dampingRatioPercent < 0 ? 'Büyüyen salınım' : 'Sönümlenen salınım';
 
 const uniqueSeries = (metrics: OscillationWindowMetric[]): OscillationWindowMetric[] => {
   const seen = new Set<string>();
@@ -88,6 +95,8 @@ export function ModeDampingChart({
   hasSamples,
   onLoadDemo,
   onRunAnalysis,
+  windowSeconds,
+  stepSeconds,
 }: {
   metrics: OscillationWindowMetric[];
   signal: PmuSignalKey;
@@ -95,6 +104,8 @@ export function ModeDampingChart({
   hasSamples: boolean;
   onLoadDemo: () => void;
   onRunAnalysis: () => void;
+  windowSeconds: number;
+  stepSeconds: number;
 }) {
   const signalMetrics = metrics.filter(metric => metric.signal === signal);
   if (!signalMetrics.length) {
@@ -110,23 +121,91 @@ export function ModeDampingChart({
 
   const groups = uniqueSeries(signalMetrics);
   const dataZoomStart = calculateMetricDataZoomStart(signalMetrics, 15);
+  const palette = paletteFor(themeMode);
+  const metricLookup = new Map<string, OscillationWindowMetric>();
+  groups.forEach(group => {
+    signalMetrics
+      .filter(metric => seriesKey(metric) === seriesKey(group))
+      .forEach(metric => {
+        metricLookup.set(`${seriesName(group)} Mod__${metric.timestampMs}`, metric);
+        metricLookup.set(`${seriesName(group)} DR (%)__${metric.timestampMs}`, metric);
+      });
+  });
+  const hiddenDampingLines = groups.reduce<Record<string, boolean>>((selected, group) => {
+    selected[`${seriesName(group)} DR (%)`] = false;
+    return selected;
+  }, {});
   const option = {
     ...chartBase(themeMode),
-    title: { text: `Grafik 2 - ${SIGNAL_LABELS[signal]} Mod + DR`, textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
-    legend: { type: 'scroll', top: 0, right: 58, width: '58%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
+    title: { text: `Grafik 2 - ${SIGNAL_LABELS[signal]} Mod + DR`, textStyle: { color: palette.text, fontSize: 13 } },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      formatter: (params: unknown) => {
+        const items = Array.isArray(params) ? params : [params];
+        const first = items[0] as { value?: [number, number] } | undefined;
+        const timestampMs = first?.value?.[0];
+        if (!Number.isFinite(timestampMs)) return '';
+        const rows = [`<div style="margin-bottom:6px;font-weight:700;color:${palette.muted};">${formatPmuAxisTime(timestampMs as number)}</div>`];
+        items.forEach(item => {
+          const point = item as { marker?: string; seriesName?: string; value?: [number, number] };
+          if (!point.seriesName || !point.value) return;
+          const metric = metricLookup.get(`${point.seriesName}__${point.value[0]}`);
+          const damping = metric?.dampingRatioPercent;
+          const payload = metric
+            ? buildDampingTooltipPayload({
+              metric,
+              pmuName: formatPmuDisplayName(metric.pmuId),
+              modeLabel: MODE_LABELS[metric.mode] ?? String(metric.mode),
+              windowSeconds,
+              stepSeconds,
+            })
+            : null;
+          const statusColor = payload?.statusColor ?? palette.success;
+          const statusSymbol = damping !== null && damping !== undefined && damping < 0 ? '&#9650;' : '&#9660;';
+          if (point.seriesName.endsWith('DR (%)')) {
+            rows.push(`<div style="display:flex;justify-content:space-between;gap:16px;">
+              <span>${point.marker ?? ''}${point.seriesName}</span>
+              <strong>${formatMetricNumber(point.value[1], 2)}%</strong>
+            </div>`);
+          } else {
+            rows.push(`<div style="display:flex;justify-content:space-between;gap:16px;">
+              <span>${point.marker ?? ''}${point.seriesName}</span>
+              <strong>${MODE_LABELS[point.value[1]] ?? point.value[1]}</strong>
+            </div>`);
+          }
+          if (damping !== null && damping !== undefined) {
+            rows.push(`<div style="display:flex;justify-content:space-between;gap:16px;color:${statusColor};">
+              <span>${statusSymbol} ${dampingStatusText(damping)}</span>
+              <strong>DR ${formatMetricNumber(damping, 2)}%</strong>
+            </div>`);
+            if (payload) {
+              rows.push(`<div style="color:${palette.muted};">${payload.frequencyText}</div>`);
+              rows.push(`<div style="color:${palette.muted};">${payload.timeRangeText}</div>`);
+              rows.push(`<div style="color:${palette.muted};">${payload.durationText} · ${payload.windowText} · ${payload.stepText}</div>`);
+            }
+          }
+        });
+        return rows.join('');
+      },
+    },
+    legend: { type: 'scroll', top: 0, right: 58, width: '58%', textStyle: { color: palette.muted, fontSize: 10 }, selected: hiddenDampingLines },
     grid: { top: 44, left: 46, right: 58, bottom: 48 },
     dataZoom: [
-      { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, xAxisIndex: [0] },
-      { type: 'slider', start: dataZoomStart, end: 100, bottom: 8, height: 18, borderColor: 'var(--border-color)', textStyle: { color: 'var(--text-muted)' }, xAxisIndex: [0] },
+      { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, filterMode: 'none', xAxisIndex: [0] },
+      { type: 'slider', start: dataZoomStart, end: 100, minSpan: 0.05, filterMode: 'none', bottom: 8, height: 18, borderColor: palette.tooltipBorder, textStyle: { color: palette.muted }, xAxisIndex: [0] },
     ],
     xAxis: {
       type: 'time',
+      name: 'Zaman',
+      nameTextStyle: { color: palette.muted, fontSize: 10 },
       axisLabel: {
-        color: 'var(--text-muted)',
+        color: palette.muted,
         fontSize: 10,
         hideOverlap: true,
         formatter: (value: number) => formatPmuAxisTime(value),
       },
+      axisLine: { lineStyle: { color: palette.axisLine } },
     },
     yAxis: [
       {
@@ -136,17 +215,19 @@ export function ModeDampingChart({
         max: 4,
         interval: 1,
         axisLabel: {
-          color: 'var(--text-muted)',
+          color: palette.muted,
           fontSize: 10,
           formatter: (value: number) => MODE_LABELS[value] ?? String(value),
         },
-        splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+        axisLine: { lineStyle: { color: palette.axisLine } },
+        splitLine: { lineStyle: { color: palette.splitLine } },
       },
       {
         type: 'value',
-        name: 'DR %',
+        name: 'DR (%)',
         scale: true,
-        axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
+        axisLabel: { color: palette.muted, fontSize: 10, formatter: (value: number) => `${value}%` },
+        axisLine: { lineStyle: { color: palette.axisLine } },
         splitLine: { show: false },
       },
     ],
@@ -155,25 +236,70 @@ export function ModeDampingChart({
       const color = PMU_COLORS[index % PMU_COLORS.length];
       return [
         {
+          id: `mode-${group.pmuId}-${group.signal}`,
           name: `${seriesName(group)} Mod`,
           type: 'line',
-          step: 'end',
           yAxisIndex: 0,
+          step: 'end',
           showSymbol: false,
           data: groupMetrics.map(metric => [metric.timestampMs, metric.mode]),
           lineStyle: { width: 1.4, color },
           itemStyle: { color },
+          markPoint: {
+            symbolSize: 13,
+            label: { show: false },
+            tooltip: {
+              formatter: (params: { data?: { metric?: OscillationWindowMetric; pmuName?: string; modeLabel?: string } }) => {
+                const pointMetric = params.data?.metric;
+                if (!pointMetric) return '';
+                const payload = buildDampingTooltipPayload({
+                  metric: pointMetric,
+                  pmuName: params.data?.pmuName ?? formatPmuDisplayName(pointMetric.pmuId),
+                  modeLabel: params.data?.modeLabel ?? (MODE_LABELS[pointMetric.mode] ?? String(pointMetric.mode)),
+                  windowSeconds,
+                  stepSeconds,
+                });
+                return [
+                  `<strong>${payload.pmuName}</strong>`,
+                  `Mod: ${payload.modeLabel}`,
+                  `DR: ${formatMetricNumber(payload.dampingRatioPercent, 2)}%`,
+                  payload.frequencyText,
+                  payload.timeRangeText,
+                  payload.durationText,
+                  `${payload.windowText} · ${payload.stepText}`,
+                  `<span style="color:${payload.statusColor};">${payload.statusText}</span>`,
+                ].join('<br/>');
+              },
+            },
+            data: groupMetrics
+              .filter(metric => metric.dampingRatioPercent !== null)
+              .map(metric => {
+                const damping = metric.dampingRatioPercent as number;
+                return {
+                  coord: [metric.timestampMs, metric.mode],
+                  name: dampingStatusText(damping),
+                  value: formatMetricNumber(damping, 2),
+                  symbol: 'triangle',
+                  symbolRotate: damping < 0 ? 0 : 180,
+                  itemStyle: { color: damping < 0 ? palette.danger : palette.success },
+                  metric,
+                  pmuName: formatPmuDisplayName(metric.pmuId),
+                  modeLabel: MODE_LABELS[metric.mode] ?? String(metric.mode),
+                };
+              }),
+          },
         },
         {
+          id: `damping-${group.pmuId}-${group.signal}`,
           name: `${seriesName(group)} DR (%)`,
           type: 'line',
           yAxisIndex: 1,
           showSymbol: false,
-          data: groupMetrics
-            .filter(metric => metric.dampingRatioPercent !== null)
-            .map(metric => [metric.timestampMs, metric.dampingRatioPercent as number]),
-          lineStyle: { width: 1.1, type: 'dashed', color },
+          sampling: 'lttb',
+          data: groupMetrics.map(metric => [metric.timestampMs, metric.dampingRatioPercent]),
+          lineStyle: { width: 1.25, color },
           itemStyle: { color },
+          connectNulls: false,
         },
       ];
     }),
@@ -218,22 +344,25 @@ export function EnergyAmplitudeCharts({
   const groups = uniqueSeries(signalMetrics);
   const dataZoomStart = calculateMetricDataZoomStart(signalMetrics, 15);
   const unit = signalUnit(signal);
+  const palette = paletteFor(themeMode);
   const option = {
     ...chartBase(themeMode),
     title: {
       text: `Grafik 3 - ${SIGNAL_LABELS[signal]} Enerji + Genlik`,
-      textStyle: { color: 'var(--text-primary)', fontSize: 13 },
+      textStyle: { color: palette.text, fontSize: 13 },
     },
-    legend: { type: 'scroll', top: 0, right: 58, width: '56%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
+    legend: { type: 'scroll', top: 0, right: 58, width: '56%', textStyle: { color: palette.muted, fontSize: 10 } },
     grid: { top: 42, left: 54, right: 58, bottom: 44 },
     dataZoom: [
-      { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, xAxisIndex: [0] },
-      { type: 'slider', start: dataZoomStart, end: 100, bottom: 8, height: 18, borderColor: 'var(--border-color)', textStyle: { color: 'var(--text-muted)' }, xAxisIndex: [0] },
+      { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, filterMode: 'none', xAxisIndex: [0] },
+      { type: 'slider', start: dataZoomStart, end: 100, minSpan: 0.05, filterMode: 'none', bottom: 8, height: 18, borderColor: palette.tooltipBorder, textStyle: { color: palette.muted }, xAxisIndex: [0] },
     ],
     xAxis: {
       type: 'time',
+      name: 'Zaman',
+      nameTextStyle: { color: palette.muted, fontSize: 10 },
       axisLabel: {
-        color: 'var(--text-muted)',
+        color: palette.muted,
         fontSize: 10,
         hideOverlap: true,
         formatter: (value: number) => formatPmuAxisTime(value),
@@ -244,14 +373,16 @@ export function EnergyAmplitudeCharts({
         type: 'value',
         name: `Genlik (${unit})`,
         scale: true,
-        axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
-        splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+        axisLabel: { color: palette.muted, fontSize: 10 },
+        axisLine: { lineStyle: { color: palette.axisLine } },
+        splitLine: { lineStyle: { color: palette.splitLine } },
       },
       {
         type: 'value',
         name: `Enerji (${unit})`,
         scale: true,
-        axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
+        axisLabel: { color: palette.muted, fontSize: 10 },
+        axisLine: { lineStyle: { color: palette.axisLine } },
         splitLine: { show: false },
       },
     ],
@@ -260,7 +391,8 @@ export function EnergyAmplitudeCharts({
       const color = PMU_COLORS[index % PMU_COLORS.length];
       return [
         {
-          name: `${group.pmuId} Genlik (${unit})`,
+          id: `amplitude-${group.pmuId}-${group.signal}`,
+          name: `${formatPmuDisplayName(group.pmuId)} Genlik (${unit})`,
           type: 'line',
           yAxisIndex: 0,
           showSymbol: false,
@@ -270,7 +402,8 @@ export function EnergyAmplitudeCharts({
           itemStyle: { color },
         },
         {
-          name: `${group.pmuId} Enerji (${unit})`,
+          id: `energy-${group.pmuId}-${group.signal}`,
+          name: `${formatPmuDisplayName(group.pmuId)} Enerji (${unit})`,
           type: 'line',
           yAxisIndex: 1,
           showSymbol: false,

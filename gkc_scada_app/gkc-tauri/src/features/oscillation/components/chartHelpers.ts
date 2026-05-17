@@ -2,6 +2,18 @@ import * as echarts from 'echarts';
 import type { EChartsType } from 'echarts';
 import type { PmuSample, PmuSignalKey, SignalBandMetric } from '../types/oscillationTypes.ts';
 import { getSignalValue } from '../utils/pmuSamples.ts';
+export {
+  buildDampingTooltipPayload,
+  buildFilteredLineSegments,
+  convertRawSignalValue,
+  formatPmuDisplayName,
+  getFilteredLineColor,
+  getFilteredSignalName,
+  getNominalVoltageKv,
+  getRawSignalUnit,
+  movingAverageTimeSeries,
+  normalizeSmoothingWindowSize,
+} from '../utils/visualization.ts';
 
 export type OscillationThemeMode = 'dark' | 'light';
 
@@ -11,6 +23,11 @@ export const paletteFor = (themeMode: OscillationThemeMode) => themeMode === 'li
     muted: '#475569',
     axis: '#64748b',
     grid: 'rgba(148, 163, 184, 0.3)',
+    axisLine: '#cbd5e1',
+    splitLine: 'rgba(148, 163, 184, 0.3)',
+    filteredLine: '#000000',
+    danger: '#ef4444',
+    success: '#22c55e',
     tooltipBg: 'rgba(255,255,255,0.98)',
     tooltipBorder: '#cbd5e1',
   }
@@ -19,6 +36,11 @@ export const paletteFor = (themeMode: OscillationThemeMode) => themeMode === 'li
     muted: '#94a3b8',
     axis: '#94a3b8',
     grid: 'rgba(148, 163, 184, 0.18)',
+    axisLine: '#334155',
+    splitLine: 'rgba(148, 163, 184, 0.18)',
+    filteredLine: '#ffffff',
+    danger: '#ef4444',
+    success: '#22c55e',
     tooltipBg: 'rgba(15, 23, 42, 0.96)',
     tooltipBorder: '#334155',
   };
@@ -140,15 +162,19 @@ export const chartBase = (themeMode: OscillationThemeMode) => {
       },
     },
     grid: { top: 34, left: 42, right: 18, bottom: 48 },
+    legend: {
+      textStyle: { color: palette.muted, fontSize: 10 },
+    },
     toolbox: {
       right: 4,
       top: 0,
       feature: { saveAsImage: { title: 'PNG' } },
       iconStyle: { borderColor: palette.axis },
+      emphasis: { iconStyle: { borderColor: palette.text } },
     },
     dataZoom: [
-      { type: 'inside' },
-      { type: 'slider', bottom: 8, height: 18, borderColor: palette.tooltipBorder, textStyle: { color: palette.muted } },
+      { type: 'inside', filterMode: 'none' },
+      { type: 'slider', filterMode: 'none', bottom: 8, height: 18, borderColor: palette.tooltipBorder, textStyle: { color: palette.muted } },
     ],
   };
 };

@@ -1,6 +1,7 @@
 import { OSCILLATION_BANDS } from '../utils/bands.ts';
 import { PMU_FIDERS, useOscillationStore, type OscillationDataSourceMode } from '../store/oscillationStore.ts';
 import type { OscillationAmplitudeThresholds } from '../types/oscillationTypes.ts';
+import { formatPmuDisplayName } from './chartHelpers.ts';
 import { PmuSelectionControl } from './PmuSelectionControl.tsx';
 
 const SOURCE_LABELS: Record<OscillationDataSourceMode, string> = {
@@ -13,16 +14,20 @@ const THRESHOLD_FIELDS: Array<{
   key: keyof OscillationAmplitudeThresholds;
   shortLabel: string;
   inputLabel: string;
+  unit: string;
   max: number;
   step: number;
 }> = [
-  { key: 'frequencyMhz', shortLabel: 'Frk', inputLabel: 'Frekans genlik eşiği mHz', max: 1000, step: 1 },
-  { key: 'voltagePercent', shortLabel: 'Ger', inputLabel: 'Gerilim genlik eşiği yüzde', max: 100, step: 0.1 },
-  { key: 'activePowerPercent', shortLabel: 'MW', inputLabel: 'Aktif güç genlik eşiği yüzde', max: 100, step: 0.1 },
-  { key: 'reactivePowerPercent', shortLabel: 'MVAr', inputLabel: 'Reaktif güç genlik eşiği yüzde', max: 100, step: 0.1 },
+  { key: 'frequencyMhz', shortLabel: 'Frk', inputLabel: 'Frekans genlik eşiği mHz', unit: 'mHz', max: 1000, step: 1 },
+  { key: 'voltagePercent', shortLabel: 'Ger', inputLabel: 'Gerilim genlik eşiği yüzde', unit: '%', max: 100, step: 0.1 },
+  { key: 'activePowerPercent', shortLabel: 'MW', inputLabel: 'Aktif güç genlik eşiği yüzde', unit: '%', max: 100, step: 0.1 },
+  { key: 'reactivePowerPercent', shortLabel: 'MVAr', inputLabel: 'Reaktif güç genlik eşiği yüzde', unit: '%', max: 100, step: 0.1 },
 ];
 
 const numericOptions = (values: number[]) => values.map(value => <option key={value} value={value}>{value} sn</option>);
+
+const formatThresholdValue = (value: number, unit: string): string =>
+  unit === '%' ? `%${value}` : `${value} ${unit}`;
 
 export function OscillationFilterBar() {
   const store = useOscillationStore();
@@ -33,12 +38,15 @@ export function OscillationFilterBar() {
   const statusText = store.analysisResult
     ? 'Bulgu hazır'
     : store.rawSamples.length
-      ? store.dataSourceMode === 'demo' ? 'Demo veri hazır' : 'Veri hazır'
+      ? store.isRawDataStale ? 'Veri güncel değil' : store.dataSourceMode === 'demo' ? 'Demo veri hazır' : 'Veri hazır'
       : 'Veri bekleniyor';
   const noteText = invalidDuration
     ? 'Maksimum sorgu süresi 4 saattir ve bitiş başlangıçtan sonra olmalıdır.'
+    : store.analysisProgress && store.analyzing
+      ? `${store.analysisProgress.label} - %${store.analysisProgress.percent}`
     : [
       store.queryNotice,
+      store.isRawDataStale ? 'Filtreler değişti; veriyi yeniden getirin.' : null,
       store.queryProgress
         ? `${store.queryProgress.completedPmus}/${store.queryProgress.totalPmus} PMU, ${store.queryProgress.completedChunks}/${store.queryProgress.totalChunks} parça`
         : null,
@@ -46,6 +54,20 @@ export function OscillationFilterBar() {
 
   const handleFetch = async () => {
     await store.fetchPmuData();
+  };
+  const hasRawData = store.rawSamples.length > 0 || store.pmuQueryResults.length > 0 || Object.keys(store.samplesByPmu).length > 0;
+  const hasAnalysisData = Boolean(store.analysisResult || store.reportMarkdown);
+
+  const handleClearRawData = () => {
+    if (window.confirm('Ham PMU verisi, sorgu sonucu ve bağlı analiz temizlensin mi?')) {
+      store.clearRawData();
+    }
+  };
+
+  const handleClearAnalysis = () => {
+    if (window.confirm('Mevcut analiz sonucu ve rapor temizlensin mi? Ham PMU verisi korunacak')) {
+      store.clearAnalysis();
+    }
   };
 
   return (
@@ -121,7 +143,7 @@ export function OscillationFilterBar() {
               disabled={store.selectionMode === 'single' || store.loading}
               onChange={event => store.setReferencePmuId(event.target.value)}
             >
-              {selectedPmus.map(pmu => <option key={pmu.id} value={pmu.id}>{pmu.substationName} ({pmu.id})</option>)}
+              {selectedPmus.map(pmu => <option key={pmu.id} value={pmu.id}>{formatPmuDisplayName(pmu)}</option>)}
             </select>
           </label>
 
@@ -186,7 +208,7 @@ export function OscillationFilterBar() {
             <div className="oscillation-threshold-grid">
               {THRESHOLD_FIELDS.map(field => (
                 <label key={field.key} className="oscillation-threshold-item" htmlFor={`oscillation-threshold-${field.key}`}>
-                  <span>{field.shortLabel}: {store.amplitudeThresholds[field.key]}</span>
+                  <span>{field.shortLabel}: {formatThresholdValue(store.amplitudeThresholds[field.key], field.unit)}</span>
                   <input
                     id={`oscillation-threshold-${field.key}`}
                     name={`oscillation-threshold-${field.key}`}
@@ -211,13 +233,30 @@ export function OscillationFilterBar() {
             <button type="button" className="btn btn-outline btn-compact" disabled={store.loading || store.analyzing} onClick={store.loadDemoData}>
               Demo Verisi
             </button>
-            <button type="button" className="btn btn-primary btn-compact oscillation-run-button" disabled={store.analyzing || !store.rawSamples.length} onClick={store.runAnalysis}>
+            <button type="button" className="btn btn-danger btn-compact" disabled={store.loading || store.analyzing || !hasRawData} onClick={handleClearRawData}>
+              Ham Veriyi Temizle
+            </button>
+            <button type="button" className="btn btn-danger btn-compact" disabled={store.loading || store.analyzing || !hasAnalysisData} onClick={handleClearAnalysis}>
+              Analizi Temizle
+            </button>
+            <button type="button" className="btn btn-primary btn-compact" disabled={store.analyzing || !store.rawSamples.length || store.isRawDataStale} onClick={store.runAnalysis}>
               {store.analyzing ? 'Analiz...' : 'Analizi Çalıştır'}
             </button>
             <button type="button" className="btn btn-outline btn-compact" onClick={store.generateReport} disabled={!store.analysisResult}>Rapor Oluştur</button>
             <button type="button" className="btn btn-outline btn-compact" onClick={store.exportCsv} disabled={!store.rawSamples.length}>CSV Dışa Aktar</button>
           </div>
         </div>
+        {store.analysisProgress && (
+          <div className="oscillation-progress" aria-label="Analiz ilerleme durumu">
+            <div className="oscillation-progress-header">
+              <span>{store.analysisProgress.label}</span>
+              <strong>%{store.analysisProgress.percent}</strong>
+            </div>
+            <div className="oscillation-progress-track">
+              <span style={{ width: `${Math.max(0, Math.min(100, store.analysisProgress.percent))}%` }} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import type {
   OscillationAmplitudeThresholds,
   OscillationBand,
   OscillationClassification,
+  OscillationEvent,
   OscillationWindowMetric,
   PmuFider,
   PmuQualitySummary,
@@ -261,11 +262,20 @@ const calculateWindowMetricsForSeries = ({
       : null;
     const strongestCandidate = selectedActive ?? activeCandidates[0];
     const center = window[Math.floor(window.length / 2)] ?? window[0];
+    const windowStartMs = window[0]?.timestampMs ?? center.timestampMs;
+    const windowEndMs = window[window.length - 1]?.timestampMs ?? center.timestampMs;
+    const durationSeconds = Math.max(0, (windowEndMs - windowStartMs) / 1000);
+    const windowMeta = {
+      windowStartMs,
+      windowEndMs,
+      durationSeconds,
+    };
 
     if (selectedActive) {
       const damping = estimateDampingRatio(detrended, samplingRateHz, selectedActive.peak.dominantFrequencyHz);
       return {
         timestampMs: center.timestampMs,
+        ...windowMeta,
         pmuId,
         signal,
         mode: selectedActive.band.modeValue,
@@ -282,6 +292,7 @@ const calculateWindowMetricsForSeries = ({
     if (TORSION_PASSIVE_BAND && torsionPeak && torsionPeak.amplitude !== null && torsionPeak.amplitude > thresholdValue) {
       return {
         timestampMs: center.timestampMs,
+        ...windowMeta,
         pmuId,
         signal,
         mode: TORSION_PASSIVE_BAND.modeValue,
@@ -297,6 +308,7 @@ const calculateWindowMetricsForSeries = ({
 
     return {
       timestampMs: center.timestampMs,
+      ...windowMeta,
       pmuId,
       signal,
       mode: 0,
@@ -307,6 +319,93 @@ const calculateWindowMetricsForSeries = ({
       energyRms: rms(detrended),
       dampingRatioPercent: null,
       passiveTorsion: false,
+    };
+  });
+};
+
+const finiteOrNull = (value: number | null | undefined): number | null =>
+  Number.isFinite(value) ? Number(value) : null;
+
+const averageNullable = (values: Array<number | null | undefined>): number | null => {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  return finiteValues.length
+    ? finiteValues.reduce((sum, value) => sum + value, 0) / finiteValues.length
+    : null;
+};
+
+const maxNullable = (values: Array<number | null | undefined>): number | null => {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  return finiteValues.length ? Math.max(...finiteValues) : null;
+};
+
+const minNullable = (values: Array<number | null | undefined>): number | null => {
+  const finiteValues = values.filter((value): value is number => Number.isFinite(value));
+  return finiteValues.length ? Math.min(...finiteValues) : null;
+};
+
+const metricStartMs = (metric: OscillationWindowMetric): number =>
+  Number.isFinite(metric.windowStartMs) ? metric.windowStartMs : metric.timestampMs;
+
+const metricEndMs = (metric: OscillationWindowMetric, fallbackWindowSeconds: number): number =>
+  Number.isFinite(metric.windowEndMs) ? metric.windowEndMs : metric.timestampMs + fallbackWindowSeconds * 1000;
+
+export const buildOscillationEvents = (
+  windowMetrics: OscillationWindowMetric[],
+  windowSeconds: number,
+  stepSeconds: number,
+): OscillationEvent[] => {
+  const activeMetrics = windowMetrics
+    .filter(metric => metric.mode > 0)
+    .sort((left, right) =>
+      left.pmuId.localeCompare(right.pmuId)
+      || left.signal.localeCompare(right.signal)
+      || left.mode - right.mode
+      || (left.bandId ?? '').localeCompare(right.bandId ?? '')
+      || metricStartMs(left) - metricStartMs(right)
+    );
+  const groups: OscillationWindowMetric[][] = [];
+  const maxGapMs = Math.max(stepSeconds * 1000 * 1.5, 1000);
+
+  activeMetrics.forEach(metric => {
+    const previousGroup = groups[groups.length - 1];
+    const previousMetric = previousGroup?.[previousGroup.length - 1];
+    const sameGroup = previousMetric
+      && previousMetric.pmuId === metric.pmuId
+      && previousMetric.signal === metric.signal
+      && previousMetric.mode === metric.mode
+      && previousMetric.bandId === metric.bandId
+      && metricStartMs(metric) <= metricEndMs(previousMetric, windowSeconds) + maxGapMs;
+
+    if (sameGroup) {
+      previousGroup.push(metric);
+    } else {
+      groups.push([metric]);
+    }
+  });
+
+  return groups.map((group, index) => {
+    const first = group[0];
+    const startMs = Math.min(...group.map(metric => metricStartMs(metric)));
+    const endMs = Math.max(...group.map(metric => metricEndMs(metric, windowSeconds)));
+    const dampingValues = group.map(metric => metric.dampingRatioPercent);
+    const minDampingRatioPercent = minNullable(dampingValues);
+    return {
+      id: `${first.pmuId}-${first.signal}-${first.bandId ?? 'MODE'}-${startMs}-${index}`,
+      pmuId: first.pmuId,
+      signal: first.signal,
+      mode: first.mode,
+      bandId: first.bandId,
+      startMs,
+      endMs,
+      durationSeconds: Math.max(0, (endMs - startMs) / 1000),
+      dominantFrequencyHz: averageNullable(group.map(metric => metric.dominantFrequencyHz)),
+      maxAmplitude: maxNullable(group.map(metric => finiteOrNull(metric.amplitude))),
+      maxEnergyRms: maxNullable(group.map(metric => finiteOrNull(metric.energyRms))),
+      minDampingRatioPercent,
+      averageDampingRatioPercent: averageNullable(dampingValues),
+      hasNegativeDamping: minDampingRatioPercent !== null && minDampingRatioPercent < 0,
+      passiveTorsion: group.some(metric => metric.passiveTorsion),
+      windowCount: group.length,
     };
   });
 };
@@ -428,6 +527,7 @@ export const calculateOscillationAnalysis = ({
       })
     )
   );
+  const events = buildOscillationEvents(windowMetrics, windowSeconds, stepSeconds);
   const totalSamples = pmuIds.reduce((sum, pmuId) => sum + (samplesByPmu.get(pmuId)?.length ?? 0), 0);
   const missingSampleRatio = qualities.length
     ? qualities.reduce((sum, quality) => sum + quality.missingRatio, 0) / qualities.length
@@ -472,6 +572,7 @@ export const calculateOscillationAnalysis = ({
     },
     metrics,
     windowMetrics,
+    events,
     commonModes,
     modeShape,
     coherenceMatrix,

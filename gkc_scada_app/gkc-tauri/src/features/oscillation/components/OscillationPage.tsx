@@ -27,6 +27,10 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
           selectedPmuIds={store.selectedPmuIds}
           signal={store.activeSignalTab}
           themeMode={themeMode}
+          metrics={store.analysisResult?.windowMetrics ?? []}
+          smoothingSettings={store.smoothingSettings}
+          rawSignalDisplayModes={store.rawSignalDisplayModes}
+          onRawSignalDisplayModeChange={store.setRawSignalDisplayMode}
           onLoadDemo={store.loadDemoData}
           onFetchData={handleFetch}
         />
@@ -37,6 +41,8 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
           hasSamples={store.rawSamples.length > 0}
           onLoadDemo={store.loadDemoData}
           onRunAnalysis={handleRunAnalysis}
+          windowSeconds={store.windowSeconds}
+          stepSeconds={store.stepSeconds}
         />
         <EnergyAmplitudeCharts
           metrics={store.analysisResult?.windowMetrics ?? []}

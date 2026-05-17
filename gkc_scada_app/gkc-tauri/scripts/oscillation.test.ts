@@ -2,19 +2,32 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   calculateOscillationAnalysis,
+  buildOscillationEvents,
   validatePmuSelection,
 } from '../src/features/oscillation/utils/oscillationMetrics.ts';
 import { rawYtbsRowsToPmuSamples } from '../src/features/oscillation/utils/pmuSamples.ts';
 import { fetchSequentialPmuRawData } from '../src/features/oscillation/utils/sequentialQuery.ts';
 import { DEFAULT_AMPLITUDE_THRESHOLDS, OSCILLATION_BANDS } from '../src/features/oscillation/utils/bands.ts';
 import { buildOscillationDemoSamples } from '../src/features/oscillation/utils/demoSamples.ts';
+import {
+  buildDecisionSupportSentences,
+  humanizeClassification,
+} from '../src/features/oscillation/utils/reportBuilder.ts';
+import { runAnalysisInWorker } from '../src/features/oscillation/utils/runAnalysisWorker.ts';
 import { useOscillationStore } from '../src/features/oscillation/store/oscillationStore.ts';
 import {
   calculatePmuDataZoomStart,
+  buildDampingTooltipPayload,
+  buildFilteredLineSegments,
+  convertRawSignalValue,
   formatPmuAxisTime,
+  formatPmuDisplayName,
   formatPmuTooltipTime,
+  getFilteredLineColor,
+  getNominalVoltageKv,
+  movingAverageTimeSeries,
 } from '../src/features/oscillation/components/chartHelpers.ts';
-import type { PmuFider, PmuSample, PmuSignalKey } from '../src/features/oscillation/types/oscillationTypes.ts';
+import type { OscillationWindowMetric, PmuFider, PmuSample, PmuSignalKey } from '../src/features/oscillation/types/oscillationTypes.ts';
 
 const fixtureText = readFileSync('../../ytbs_gkc/gkcpmu/gkc1.txt', 'utf8');
 const fixtureMatch = fixtureText.match(/var grafik_verisi_json = (\[[\s\S]*?\]);/);
@@ -46,14 +59,16 @@ assert.equal(OSCILLATION_BANDS.find(band => band.id === 'INTERAREA')?.fMax, 0.4)
 assert.equal(OSCILLATION_BANDS.find(band => band.id === 'TORSION_PASSIVE')?.passive, true);
 assert.deepEqual(DEFAULT_AMPLITUDE_THRESHOLDS, {
   frequencyMhz: 10,
-  voltagePercent: 2,
-  activePowerPercent: 2,
-  reactivePowerPercent: 2,
+  voltagePercent: 5,
+  activePowerPercent: 5,
+  reactivePowerPercent: 5,
 });
 assert.equal(useOscillationStore.getState().activeSignalTab, 'frequency');
 useOscillationStore.getState().setActiveSignalTab('activePower');
 assert.equal(useOscillationStore.getState().activeSignalTab, 'activePower');
 useOscillationStore.getState().setActiveSignalTab('frequency');
+assert.equal(useOscillationStore.getState().smoothingSettings.enabled, true);
+assert.equal(useOscillationStore.getState().smoothingSettings.windowSize, 7);
 
 const samples = rawYtbsRowsToPmuSamples(realPowerRows.slice(0, 600), temelli);
 assert.equal(samples[0].pmuId, '285');
@@ -66,6 +81,27 @@ assert.equal(formatPmuAxisTime(samples[0].timestampMs + 100).endsWith('.100'), t
 assert.equal(formatPmuAxisTime(samples[0].timestampMs + 900).endsWith('.900'), true);
 assert.equal(calculatePmuDataZoomStart(samples.slice(0, 100), 15), 0);
 assert.ok(calculatePmuDataZoomStart(samples, 0.2) > 0);
+assert.equal(formatPmuDisplayName(temelli), 'TEMELLİ, 400 kV YUNUS EMRE TES');
+assert.equal(getNominalVoltageKv(temelli), 400);
+assert.equal(convertRawSignalValue(50, 'frequency', 'pu', temelli), 1);
+assert.equal(convertRawSignalValue(400, 'voltage', 'pu', temelli), 1);
+assert.equal(convertRawSignalValue(399, 'voltage', 'value', temelli), 399);
+assert.deepEqual(
+  movingAverageTimeSeries([
+    [0, 10],
+    [100, 20],
+    [200, 30],
+    [300, 40],
+    [400, 50],
+  ], 3),
+  [
+    [0, 15],
+    [100, 20],
+    [200, 30],
+    [300, 40],
+    [400, 45],
+  ],
+);
 
 const analysis = calculateOscillationAnalysis({
   selectionMode: 'single',
@@ -92,6 +128,7 @@ assert.ok(analysis.metrics.some(metric => metric.signal === 'activePower' && met
 assert.ok(analysis.metrics.every(metric => metric.dominantFrequencyHz === null || metric.dominantFrequencyHz <= 4.5));
 assert.deepEqual(analysis.query.amplitudeThresholds, DEFAULT_AMPLITUDE_THRESHOLDS);
 assert.ok(Array.isArray(analysis.windowMetrics), 'analysis should include sliding window metrics');
+assert.ok(Array.isArray(analysis.events), 'analysis should include grouped oscillation events');
 assert.equal(analysis.commonModes.length >= 0, true);
 
 const syntheticStartMs = new Date('2026-05-16T22:00:00.000Z').getTime();
@@ -131,10 +168,189 @@ const demoAnalysis = calculateOscillationAnalysis({
   stepSeconds: 30,
 });
 assert.ok(demoAnalysis.windowMetrics.length > 0, 'demo data should produce sliding window metrics');
+assert.ok(demoAnalysis.events.some(event => event.signal === 'frequency' && event.mode === 1), 'demo analysis should group frequency interarea windows into an event');
+assert.ok(demoAnalysis.events.every(event => event.durationSeconds > 0), 'oscillation events should include positive event duration');
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 1 && metric.signal === 'frequency'), 'demo data should include interarea frequency mode');
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 2 && metric.signal === 'activePower'), 'demo data should include local MW mode');
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 3 && metric.signal === 'reactivePower'), 'demo data should include forced MVAr mode');
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 4 && metric.passiveTorsion), 'demo data should include passive torsion diagnostics');
+
+useOscillationStore.setState({
+  dataSourceMode: 'ytbs',
+  rawSamples: samples,
+  rawRowsByPmu: { '285': realPowerRows.slice(0, 2) as Array<Record<string, unknown>> },
+  samplesByPmu: { '285': samples },
+  pmuQueryResults: [{ pmuId: '285', status: 'ok', rawRows: [], completedChunks: 1, totalChunks: 1 }],
+  analysisResult: analysis,
+  reportMarkdown: 'rapor',
+  queryNotice: 'sorgu tamamlandi',
+  queryProgress: {
+    totalPmus: 1,
+    completedPmus: 1,
+    currentPmuId: null,
+    totalChunks: 1,
+    completedChunks: 1,
+    currentChunk: null,
+  },
+  error: 'analiz hatasi',
+  activeTab: 'report',
+});
+useOscillationStore.getState().clearAnalysis();
+assert.equal(useOscillationStore.getState().rawSamples.length, samples.length, 'clearAnalysis should keep raw PMU samples');
+assert.equal(useOscillationStore.getState().samplesByPmu['285']?.length, samples.length, 'clearAnalysis should keep grouped PMU samples');
+assert.equal(useOscillationStore.getState().analysisResult, null, 'clearAnalysis should clear analysis result');
+assert.equal(useOscillationStore.getState().reportMarkdown, '', 'clearAnalysis should clear report markdown');
+assert.equal(useOscillationStore.getState().error, null, 'clearAnalysis should clear active error');
+assert.equal(useOscillationStore.getState().activeTab, 'summary', 'clearAnalysis should return detail tab to summary');
+
+useOscillationStore.setState({
+  dataSourceMode: 'ytbs',
+  rawSamples: samples,
+  rawRowsByPmu: { '285': realPowerRows.slice(0, 2) as Array<Record<string, unknown>> },
+  samplesByPmu: { '285': samples },
+  pmuQueryResults: [{ pmuId: '285', status: 'ok', rawRows: [], completedChunks: 1, totalChunks: 1 }],
+  analysisResult: analysis,
+  reportMarkdown: 'rapor',
+  queryNotice: 'sorgu tamamlandi',
+  queryProgress: {
+    totalPmus: 1,
+    completedPmus: 1,
+    currentPmuId: null,
+    totalChunks: 1,
+    completedChunks: 1,
+    currentChunk: null,
+  },
+  error: 'sorgu hatasi',
+});
+useOscillationStore.getState().clearRawData();
+assert.equal(useOscillationStore.getState().dataSourceMode, 'none', 'clearRawData should reset data source mode');
+assert.equal(useOscillationStore.getState().rawSamples.length, 0, 'clearRawData should clear raw PMU samples');
+assert.deepEqual(useOscillationStore.getState().samplesByPmu, {}, 'clearRawData should clear grouped PMU samples');
+assert.deepEqual(useOscillationStore.getState().rawRowsByPmu, {}, 'clearRawData should clear raw PMU rows');
+assert.deepEqual(useOscillationStore.getState().pmuQueryResults, [], 'clearRawData should clear PMU query results');
+assert.equal(useOscillationStore.getState().analysisResult, null, 'clearRawData should clear analysis result');
+assert.equal(useOscillationStore.getState().queryNotice, null, 'clearRawData should clear query notice');
+assert.equal(useOscillationStore.getState().queryProgress, null, 'clearRawData should clear query progress');
+assert.equal(useOscillationStore.getState().error, null, 'clearRawData should clear active error');
+
+useOscillationStore.setState({
+  rawSamples: samples,
+  samplesByPmu: { '285': samples },
+  selectedPmuIds: ['285'],
+  referencePmuId: '285',
+  analysisResult: analysis,
+  reportMarkdown: 'stale',
+  activeTab: 'modal',
+});
+useOscillationStore.getState().setDateRange('2026-05-16T21:00', '2026-05-16T23:00');
+assert.equal(useOscillationStore.getState().analysisResult, null, 'date changes should clear stale analysis');
+assert.equal(useOscillationStore.getState().reportMarkdown, '', 'date changes should clear stale report');
+assert.equal(useOscillationStore.getState().rawSamples.length, 0, 'date changes should clear stale raw data');
+assert.deepEqual(useOscillationStore.getState().samplesByPmu, {}, 'date changes should clear grouped stale PMU samples');
+assert.equal(useOscillationStore.getState().isRawDataStale, false, 'date changes should leave no stale raw data behind');
+
+useOscillationStore.setState({
+  rawSamples: samples,
+  samplesByPmu: { '285': samples },
+  selectedPmuIds: ['285'],
+  referencePmuId: '285',
+  analysisResult: analysis,
+  reportMarkdown: 'stale',
+});
+useOscillationStore.getState().setSelectedPmuIds(['704']);
+assert.equal(useOscillationStore.getState().analysisResult, null, 'PMU selection changes should clear stale analysis');
+assert.equal(useOscillationStore.getState().reportMarkdown, '', 'PMU selection changes should clear stale report');
+assert.equal(useOscillationStore.getState().rawSamples.length, 0, 'PMU selection changes should clear stale raw samples');
+
+assert.equal(getFilteredLineColor('dark'), '#ffffff');
+assert.equal(getFilteredLineColor('light'), '#000000');
+const segmentMetrics: OscillationWindowMetric[] = [
+  {
+    timestampMs: syntheticStartMs,
+    pmuId: '285',
+    signal: 'frequency',
+    mode: 1,
+    bandId: 'INTERAREA',
+    dominantFrequencyHz: 0.2,
+    amplitude: 0.02,
+    thresholdValue: 0.01,
+    energyRms: 1,
+    dampingRatioPercent: -1.8,
+    passiveTorsion: false,
+  },
+  {
+    timestampMs: syntheticStartMs + 200,
+    pmuId: '285',
+    signal: 'frequency',
+    mode: 1,
+    bandId: 'INTERAREA',
+    dominantFrequencyHz: 0.21,
+    amplitude: 0.02,
+    thresholdValue: 0.01,
+    energyRms: 1,
+    dampingRatioPercent: 2.4,
+    passiveTorsion: false,
+  },
+];
+const filteredSegments = buildFilteredLineSegments(
+  [
+    [syntheticStartMs, 1],
+    [syntheticStartMs + 100, 1.1],
+    [syntheticStartMs + 200, 1.2],
+    [syntheticStartMs + 300, 1.3],
+  ],
+  segmentMetrics,
+  'frequency',
+  '285',
+  'dark',
+);
+assert.ok(filteredSegments.some(segment => segment.color === '#ef4444' && segment.data.some(point => point[1] !== null)), 'negative DR segments should be red');
+assert.ok(filteredSegments.some(segment => segment.color === '#22c55e' && segment.data.some(point => point[1] !== null)), 'positive DR segments should be green');
+assert.ok(filteredSegments.some(segment => segment.color === '#ffffff' && segment.lineStyle.type === 'solid'), 'filtered base line should be a solid theme line');
+assert.ok(filteredSegments
+  .filter(segment => segment.kind !== 'base')
+  .every(segment => segment.data.every(point => point[1] !== null)), 'colored overlay segments should be continuous so zoom does not drop sparse null-only series');
+const dampingTooltip = buildDampingTooltipPayload({
+  metric: segmentMetrics[0],
+  pmuName: 'TEMELLI, 400 kV YUNUS EMRE TES',
+  modeLabel: 'Mod 1',
+  windowSeconds: 120,
+  stepSeconds: 30,
+});
+assert.equal(dampingTooltip.frequencyHz, 0.2);
+assert.ok(dampingTooltip.frequencyText.includes('Hz'), 'DR tooltip payload should include oscillation frequency text');
+assert.equal(dampingTooltip.frequencyText.includes('Salınım frekansı'), true, 'DR tooltip should use correct Turkish characters');
+assert.ok(dampingTooltip.windowText.includes('120 sn'), 'DR tooltip should include analysis window size');
+assert.ok(dampingTooltip.stepText.includes('30 sn'), 'DR tooltip should include analysis step size');
+
+const groupedEvents = buildOscillationEvents(segmentMetrics, 120, 30);
+assert.equal(groupedEvents.length, 1, 'adjacent active windows should be grouped into a single oscillation event');
+assert.equal(groupedEvents[0].durationSeconds > 0, true, 'grouped event should report oscillation duration');
+assert.equal(groupedEvents[0].hasNegativeDamping, true, 'grouped event should flag negative damping');
+assert.equal(humanizeClassification('MOD_YOK'), 'Salınım yok');
+assert.equal(humanizeClassification('TR_INTERAREA_ADAY_MOD'), 'Bölgeler arası salınım adayı');
+const decisionSentences = buildDecisionSupportSentences({
+  result: { ...demoAnalysis, events: groupedEvents },
+  pmuDevices: [temelli],
+});
+assert.ok(decisionSentences.some(sentence => sentence.includes('Bölgeler Arası') && sentence.includes('salınım tespit edilmiştir')), 'decision support should explain detected interarea oscillations in operator language');
+
+const progressMessages: number[] = [];
+await runAnalysisInWorker({
+  selectionMode: 'single',
+  samplesByPmuEntries: [['285', demoSamplesByPmu['285']]],
+  pmuDevices: [temelli],
+  referencePmuId: '285',
+  startTime: new Date(syntheticStartMs).toISOString(),
+  endTime: new Date(syntheticStartMs + 180_000).toISOString(),
+  selectedSignals: ['frequency'],
+  amplitudeThresholds: DEFAULT_AMPLITUDE_THRESHOLDS,
+  samplingRateHz: 10,
+  windowSeconds: 120,
+  stepSeconds: 30,
+}, progress => progressMessages.push(progress.percent));
+assert.ok(progressMessages[0] > 0, 'analysis worker should report initial progress');
+assert.equal(progressMessages.at(-1), 100, 'analysis worker should report completion progress');
 
 const makeSyntheticSamples = ({
   pmuId,
@@ -193,18 +409,18 @@ assert.ok(frequencyInterarea.windowMetrics.some(metric =>
 ), '12 mHz frequency oscillation should exceed 10 mHz threshold as interarea mode');
 
 const activePowerLocal = analyzeSynthetic(
-  makeSyntheticSamples({ pmuId: 'MW', signal: 'activePower', base: 1000, amplitude: 25, oscillationHz: 1 }),
+  makeSyntheticSamples({ pmuId: 'MW', signal: 'activePower', base: 1000, amplitude: 60, oscillationHz: 1 }),
   'activePower',
 );
 assert.ok(activePowerLocal.windowMetrics.some(metric =>
   metric.signal === 'activePower'
   && metric.mode === 2
   && metric.bandId === 'LOCAL'
-  && metric.thresholdValue >= 19.5
-  && metric.thresholdValue <= 20.5
+  && metric.thresholdValue >= 49.5
+  && metric.thresholdValue <= 50.5
   && metric.amplitude !== null
   && metric.amplitude > metric.thresholdValue
-), '25 MW local oscillation should exceed 2% of 1000 MW window mean');
+), '60 MW local oscillation should exceed 5% of 1000 MW window mean');
 
 const belowThreshold = analyzeSynthetic(
   makeSyntheticSamples({ pmuId: 'QUIET', signal: 'frequency', base: 50, amplitude: 0.005, oscillationHz: 0.2 }),

@@ -40,6 +40,7 @@ import { buildScadaQueryChunks } from './utils/scadaQueryChunks';
 import { buildYtbsChartGroups, type YtbsChartGroup, type YtbsTimeResolution } from './utils/ytbsPmu';
 import { buildYtbsQueryChunks } from './utils/ytbsQueryChunks';
 import { OscillationPage } from './features/oscillation/components/OscillationPage';
+import { useOscillationStore } from './features/oscillation/store/oscillationStore';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
 
@@ -330,6 +331,9 @@ function App() {
   const [scadaPointPage, setScadaPointPage] = useState(1);
   const [showScadaPointDetails, setShowScadaPointDetails] = useState(false);
   const [scadaDataRatePeriodMinutes, setScadaDataRatePeriodMinutes] = useState(1);
+  const oscillationSmoothingSettings = useOscillationStore(state => state.smoothingSettings);
+  const setOscillationSmoothingEnabled = useOscillationStore(state => state.setSmoothingEnabled);
+  const setOscillationSmoothingWindowSize = useOscillationStore(state => state.setSmoothingWindowSize);
   const [scadaPointFilters, setScadaPointFilters] = useState<{
     kind: ScadaMeasurementKind | 'all';
     b1Adi: string;
@@ -1737,6 +1741,59 @@ function App() {
           {/* Ayarlar ve Loglar */}
           {activeTab === 'config' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="card">
+                <div className="card-header">
+                  <span className="card-title">Salınım Algılayıcı Grafik Yumuşatma Ayarları</span>
+                  <span className={`oscillation-source-pill ${oscillationSmoothingSettings.enabled ? 'source-ytbs' : 'source-none'}`}>
+                    {oscillationSmoothingSettings.enabled ? 'Aktif' : 'Kapalı'}
+                  </span>
+                </div>
+                <div className="card-body">
+                  <div className="oscillation-settings-grid">
+                    <label className="oscillation-toggle-row" htmlFor="oscillation-smoothing-enabled">
+                      <input
+                        id="oscillation-smoothing-enabled"
+                        type="checkbox"
+                        checked={oscillationSmoothingSettings.enabled}
+                        onChange={event => setOscillationSmoothingEnabled(event.target.checked)}
+                      />
+                      <span>Filtrelenmiş F/Q/P/V serileri</span>
+                    </label>
+                    <div className="oscillation-setting-range">
+                      <div className="oscillation-setting-header">
+                        <span>Pencere Boyutu</span>
+                        <strong>
+                          {oscillationSmoothingSettings.windowSize} örnek · {(oscillationSmoothingSettings.windowSize / 10).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} sn
+                        </strong>
+                      </div>
+                      <input
+                        type="range"
+                        min={1}
+                        max={61}
+                        step={2}
+                        value={oscillationSmoothingSettings.windowSize}
+                        disabled={!oscillationSmoothingSettings.enabled}
+                        onChange={event => setOscillationSmoothingWindowSize(Number(event.target.value))}
+                      />
+                    </div>
+                    <label className="oscillation-field" htmlFor="oscillation-smoothing-window-size">
+                      <span className="oscillation-field-label">Window Size</span>
+                      <input
+                        id="oscillation-smoothing-window-size"
+                        type="number"
+                        min={1}
+                        max={101}
+                        step={2}
+                        className="oscillation-control"
+                        value={oscillationSmoothingSettings.windowSize}
+                        disabled={!oscillationSmoothingSettings.enabled}
+                        onChange={event => setOscillationSmoothingWindowSize(Number(event.target.value))}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <div className="card">
                 <div className="card-header">
                   <span className="card-title">🔐 MerkezRMS Giriş Bilgileri (Faz 1 Test)</span>

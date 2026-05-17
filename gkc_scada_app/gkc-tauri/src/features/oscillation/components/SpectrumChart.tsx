@@ -1,6 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import type { SignalBandMetric } from '../types/oscillationTypes.ts';
-import { chartBase, SIGNAL_LABELS, type OscillationThemeMode } from './chartHelpers.ts';
+import { chartBase, formatPmuDisplayName, paletteFor, SIGNAL_LABELS, type OscillationThemeMode } from './chartHelpers.ts';
 
 export function SpectrumChart({
   metrics,
@@ -14,27 +14,30 @@ export function SpectrumChart({
     return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Spektrum için analiz sonucu yok.</div>;
   }
 
+  const palette = paletteFor(themeMode);
   const option = {
     ...chartBase(themeMode),
-    title: { text: 'PMU Spektrum Karşılaştırması', textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
-    legend: { top: 0, right: 58, textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
+    title: { text: 'PMU Spektrum Karşılaştırması', textStyle: { color: palette.text, fontSize: 13 } },
+    legend: { top: 0, right: 58, textStyle: { color: palette.muted, fontSize: 10 } },
     xAxis: {
       type: 'value',
       name: 'Hz',
       min: 0,
       max: 4.5,
-      axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
+      axisLabel: { color: palette.muted, fontSize: 10 },
+      axisLine: { lineStyle: { color: palette.axisLine } },
     },
     yAxis: {
       type: 'value',
       name: 'Spektral güç',
       scale: true,
-      axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
-      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+      axisLabel: { color: palette.muted, fontSize: 10 },
+      axisLine: { lineStyle: { color: palette.axisLine } },
+      splitLine: { lineStyle: { color: palette.splitLine } },
     },
     visualMap: undefined,
     series: spectrumMetrics.slice(0, 12).map(metric => ({
-      name: `${metric.pmuId} ${SIGNAL_LABELS[metric.signal]} ${metric.bandId}`,
+      name: `${formatPmuDisplayName(metric.pmuId)} ${SIGNAL_LABELS[metric.signal]} ${metric.bandId}`,
       type: 'line',
       showSymbol: false,
       sampling: 'lttb',

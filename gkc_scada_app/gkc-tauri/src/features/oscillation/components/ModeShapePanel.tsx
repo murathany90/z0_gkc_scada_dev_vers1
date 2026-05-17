@@ -1,6 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import type { ModeShapePoint } from '../types/oscillationTypes.ts';
-import { chartBase, formatMetricNumber, type OscillationThemeMode } from './chartHelpers.ts';
+import { chartBase, formatMetricNumber, formatPmuDisplayName, paletteFor, type OscillationThemeMode } from './chartHelpers.ts';
 
 export function ModeShapePanel({
   points,
@@ -13,20 +13,22 @@ export function ModeShapePanel({
     return <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Tek PMU veya ortak mod bulunamadığı için mode shape hesaplanamaz.</div>;
   }
 
+  const palette = paletteFor(themeMode);
   const barOption = {
     ...chartBase(themeMode),
     dataZoom: [],
-    title: { text: 'PMU Katılım Genliği', textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
-    xAxis: { type: 'category', data: points.map(point => point.pmuId), axisLabel: { color: 'var(--text-muted)' } },
-    yAxis: { type: 'value', axisLabel: { color: 'var(--text-muted)' }, splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } } },
+    title: { text: 'PMU Katılım Genliği', textStyle: { color: palette.text, fontSize: 13 } },
+    xAxis: { type: 'category', data: points.map(point => formatPmuDisplayName(point.pmuId)), axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } } },
+    yAxis: { type: 'value', axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } }, splitLine: { lineStyle: { color: palette.splitLine } } },
     series: [{ type: 'bar', data: points.map(point => point.magnitude), itemStyle: { color: '#38bdf8' } }],
   };
 
   const polarOption = {
     animation: false,
-    title: { text: 'Referansa Göre Faz', textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
-    angleAxis: { type: 'value', min: -180, max: 180, axisLabel: { color: 'var(--text-muted)' } },
-    radiusAxis: { axisLabel: { color: 'var(--text-muted)' } },
+    backgroundColor: 'transparent',
+    title: { text: 'Referansa Göre Faz', textStyle: { color: palette.text, fontSize: 13 } },
+    angleAxis: { type: 'value', min: -180, max: 180, axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } } },
+    radiusAxis: { axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } }, splitLine: { lineStyle: { color: palette.splitLine } } },
     polar: {},
     tooltip: {
       formatter: (params: { data: [number, number, string] }) =>
@@ -35,7 +37,7 @@ export function ModeShapePanel({
     series: [{
       type: 'scatter',
       coordinateSystem: 'polar',
-      data: points.map(point => [point.relativePhaseDegree, point.magnitude, point.pmuId]),
+      data: points.map(point => [point.relativePhaseDegree, point.magnitude, formatPmuDisplayName(point.pmuId)]),
       symbolSize: 10,
       itemStyle: { color: '#22c55e' },
     }],

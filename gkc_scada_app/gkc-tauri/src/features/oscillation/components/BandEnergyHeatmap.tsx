@@ -1,6 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import type { SignalBandMetric } from '../types/oscillationTypes.ts';
-import { chartBase, formatMetricNumber, type OscillationThemeMode } from './chartHelpers.ts';
+import { chartBase, formatMetricNumber, formatPmuDisplayName, paletteFor, type OscillationThemeMode } from './chartHelpers.ts';
 
 export function BandEnergyHeatmap({
   metrics,
@@ -10,23 +10,25 @@ export function BandEnergyHeatmap({
   themeMode: OscillationThemeMode;
 }) {
   const pmus = [...new Set(metrics.map(metric => metric.pmuId))];
+  const pmuLabels = pmus.map(pmuId => formatPmuDisplayName(pmuId));
   const bands = [...new Set(metrics.map(metric => metric.bandId))];
   const values = metrics.map(metric => metric.spectralEnergy ?? 0);
   const maxValue = values.length ? Math.max(...values) : 1;
+  const palette = paletteFor(themeMode);
 
   const option = {
     ...chartBase(themeMode),
     dataZoom: [],
-    title: { text: 'PMU x Bant Enerji', textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
+    title: { text: 'PMU x Bant Enerji', textStyle: { color: palette.text, fontSize: 13 } },
     tooltip: {
       formatter: (params: { value: [number, number, number] }) => {
         const [x, y, value] = params.value;
-        return `${pmus[y]} / ${bands[x]}<br/>Enerji: ${formatMetricNumber(value)}`;
+        return `${pmuLabels[y]} / ${bands[x]}<br/>Enerji: ${formatMetricNumber(value)}`;
       },
     },
     grid: { top: 42, left: 64, right: 28, bottom: 36 },
-    xAxis: { type: 'category', data: bands, axisLabel: { color: 'var(--text-muted)' } },
-    yAxis: { type: 'category', data: pmus, axisLabel: { color: 'var(--text-muted)' } },
+    xAxis: { type: 'category', data: bands, axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } } },
+    yAxis: { type: 'category', data: pmuLabels, axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } } },
     visualMap: {
       min: 0,
       max: maxValue || 1,
@@ -34,7 +36,7 @@ export function BandEnergyHeatmap({
       orient: 'horizontal',
       bottom: 0,
       left: 'center',
-      textStyle: { color: 'var(--text-muted)' },
+      textStyle: { color: palette.muted },
       inRange: { color: ['#0f172a', '#2563eb', '#22c55e', '#f59e0b'] },
     },
     series: [{
