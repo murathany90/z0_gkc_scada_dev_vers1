@@ -149,7 +149,6 @@ export interface OscillationAnalysisResult {
     windowSeconds: number;
     stepSeconds: number;
     selectedSignals: PmuSignalKey[];
-    selectedBands: string[];
     amplitudeThresholds: OscillationAmplitudeThresholds;
   };
   dataQuality: {

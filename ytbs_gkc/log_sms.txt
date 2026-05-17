@@ -1,0 +1,164 @@
+
+<?xml version='1.0' encoding='UTF-8' ?>
+<!DOCTYPE html>
+<html lang="tr" xmlns="http://www.w3.org/1999/xhtml"><head id="j_idt2"><link rel="stylesheet" href="/ytbs/jakarta.faces.resource/theme.css.jsf?ln=primefaces-poseidon-wedgewood-light&amp;v=15.0.5&amp;e=15.0.5" /><link rel="stylesheet" href="/ytbs/jakarta.faces.resource/primeicons/primeicons.css.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5" /><link rel="stylesheet" href="/ytbs/jakarta.faces.resource/components.css.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5" /><script src="/ytbs/jakarta.faces.resource/jquery/jquery.js.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5"></script><script src="/ytbs/jakarta.faces.resource/jquery/jquery-plugins.js.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5"></script><script src="/ytbs/jakarta.faces.resource/core.js.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5"></script><script src="/ytbs/jakarta.faces.resource/components.js.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5"></script><script src="/ytbs/jakarta.faces.resource/inputnumber/inputnumber.js.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5"></script><script src="/ytbs/jakarta.faces.resource/locales/locale-tr.js.jsf?ln=primefaces&amp;v=15.0.5&amp;e=15.0.5"></script><script>if(window.PrimeFaces){PrimeFaces.settings={locale:'tr',viewId:'/frm_sms_dogrulama.xhtml',contextPath:'/ytbs',cookiesSecure:false,cookiesSameSite:'Strict',validateEmptyFields:true,considerEmptyStringNull:false,errorPages:{'':'/ytbs/frm_exception.jsf','jakarta.faces.application.ViewExpiredException':'/ytbs/frm_login.jsf'}};}</script>
+	<link href="CSS/style.css" rel="stylesheet" type="text/css" media="screen" />
+	<style media="screen" type="text/css">
+.generic {
+	text-align: left
+}
+</style>
+	<style>
+#golgeliDiv {
+	margin-top: 10px;
+	width: 60%;
+	height: 500px;
+	min-width: 700px;
+	margin-bottom: 30px;
+	background-color: white;
+	border-style: solid;
+	border-width: thin;
+	border-color: silver;
+	box-shadow: 10px 10px 5px 0px rgba(105, 105, 105);
+	-moz-box-shadow: 10px 10px 5px 0px rgba(105, 105, 105);
+	-webkit-box-shadow: 10px 10px 5px 0px rgba(105, 105, 105);
+	-ms-box-shadow: 10px 10px 5px 0px rgba(105, 105, 105);
+	-o-box-shadow: 10px 10px 5px 0px rgba(105, 105, 105);
+}
+
+#arkaplan {
+	background-image: linear-gradient(white, lightslategray);
+	height: 100%;
+	width: 100%;
+	min-height: 900px;
+	min-width: 700px;
+}
+
+</style>
+	<title>YTBS</title>
+	<meta name="title" content="YÜK TEVZİ BİLGİ SİSTEMİ" />
+	<meta name="keywords" content="YTBS, TEİAŞ, elektrik, izleme, analiz, TÜBİTAK" />
+	<meta name="description" content="Yük Tevzi Bilgi Sistemi (YTBS), TEİAŞ Yük Tevzi Müdürlükleri için geliştirilen elektrik şebekesi izleme, raporlama, analiz ve tahmin sistemidir." /></head><body onload="">
+	<div id="main">
+	<div id="header">
+		<div id="header2"></div>
+		<div class="saat">
+		<a target="_blank" href="http://www.teias.gov.tr" rel="noopener noreferrer"><img src="img/logo/teias.png" width="42px" height="50px" style="float: bottom; margin-right: 10px" alt="TEİAŞ Logo" /></a> 
+		<a target="_blank" href="http://mam.tubitak.gov.tr" rel="noopener noreferrer"><img src="img/logo/tubitakmam.png" width="34px" height="50px" style="float: bottom; margin-right: 5px" alt="TÜBİTAK Logo" /></a>
+		</div>
+	</div>
+		<div id="context">
+			<div id="arkaplan">
+				<div style="text-align: center;display: flex;justify-content: center;">
+					<div id="golgeliDiv">
+<form id="loginSmsForm" name="loginSmsForm" method="post" action="/ytbs/frm_sms_dogrulama.jsf" enctype="application/x-www-form-urlencoded">
+<input type="hidden" name="loginSmsForm" value="loginSmsForm" />
+<div id="loginSmsForm:panel1" class="ui-panel ui-widget ui-widget-content" style="width:600px;  margin-top:50px; margin-bottom:50px; margin-left:auto; margin-right:auto;text-align:center;position: relative" data-widget="widget_loginSmsForm_panel1" role="region" aria-labelledby="loginSmsForm:panel1_header"><div id="loginSmsForm:panel1_header" class="ui-panel-titlebar ui-widget-header ui-helper-clearfix"><span class="ui-panel-title">MESAJ DOĞRULAMA GİRİŞ EKRANI</span></div><div id="loginSmsForm:panel1_content" class="ui-panel-content ui-widget-content"><span id="loginSmsForm:j_idt9"></span><script>$(function(){PrimeFaces.focus('loginSmsForm:smskodu');});</script>
+								<div id="kullaniciAdiBilgisi" style="width: 580px; height: 40px; text-align: left;">Sayın MURATHAN YENİCELİ,
+								</div>
+								<div id="kullaniciCepBilgisi" style="width: 580px; height: 40px; text-align: left;">Lütfen 535*****2418 numaralı cep telefonunuza gelen 6 haneli SMS şifrenizi giriniz.
+								</div><table id="loginSmsForm:loginPanel" style="margin-bottom:10px; width:580px;">
+<tbody>
+<tr>
+<td class="generic">Doğrulama Kodu Gönderme Tercihi :</td>
+<td class="generic"><div id="loginSmsForm:kanal" class="ui-selectonemenu ui-widget ui-state-default"><div class="ui-helper-hidden-accessible"><select id="loginSmsForm:kanal_input" name="loginSmsForm:kanal_input" tabindex="-1" autocomplete="off" aria-hidden="true"><option value="VODAFONE_FAST" selected="selected" data-escape="true">Vodafone FAST</option><option value="AVEA" data-escape="true">Avea</option><option value="VODAFONE" data-escape="true">Vodafone</option><option value="EPOSTA" data-escape="true">Eposta</option></select></div><span id="loginSmsForm:kanal_label" class="ui-selectonemenu-label ui-inputfield" tabindex="0" aria-controls="loginSmsForm:kanal_panel" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-required="true">&nbsp;</span><div class="ui-selectonemenu-trigger ui-state-default"><span class="ui-icon ui-icon-triangle-1-s ui-c"></span></div><div id="loginSmsForm:kanal_panel" class="ui-selectonemenu-panel ui-widget ui-widget-content ui-helper-hidden ui-shadow ui-input-overlay" tabindex="-1"><div class="ui-selectonemenu-items-wrapper" style="max-height:200px"></div></div></div><script id="loginSmsForm:kanal_s">$(function(){PrimeFaces.cw("SelectOneMenu","widget_loginSmsForm_kanal",{id:"loginSmsForm:kanal",appendTo:"@(body)",renderPanelContentOnClient:true});});</script></td>
+</tr>
+<tr>
+<td class="generic">SMS Kodu :</td>
+<td class="generic"><span id="loginSmsForm:smskodu" class="ui-inputnumber ui-widget" style="width:100%;margin-left:0px;"><input id="loginSmsForm:smskodu_input" name="loginSmsForm:smskodu_input" type="text" autocomplete="off" value="" style="text-align: right;" class="ui-inputfield ui-inputtext ui-widget ui-state-default" inputmode="numeric" size="6" /><input id="loginSmsForm:smskodu_hinput" name="loginSmsForm:smskodu_hinput" type="hidden" value="" /></span><script id="loginSmsForm:smskodu_s">$(function(){PrimeFaces.cw("InputNumber","widget_loginSmsForm_smskodu",{id:"loginSmsForm:smskodu",disabled:false,valueToRender:"",decimalCharacter:",",decimalPlaces:"0",digitGroupSeparator:"",minimumValue:"0",maximumValue:"2147483647",emptyInputBehavior:"null",leadingZero:"allow",showWarnings:false});});</script></td>
+</tr>
+<tr>
+<td class="generic"><svg xmlns="http://www.w3.org/2000/svg" id="loginSmsForm:j_idt18" width="1" height="1"></svg></td>
+<td class="generic"><div id="loginSmsForm:j_idt19" role="alert" aria-atomic="true" aria-live="polite" class="ui-message"></div><script id="loginSmsForm:j_idt19_s">$(function(){PrimeFaces.cw("Message","widget_loginSmsForm_j_idt19",{id:"loginSmsForm:j_idt19",target:"loginSmsForm:smskodu_input"});});</script></td>
+</tr>
+<tr>
+<td class="generic">
+										<div id="displaySure" style="width: 120px; height: 40px;"></div></td>
+<td class="generic">
+										<div id="displayCep" style="width: 300px; height: 40px;"></div></td>
+</tr>
+<tr>
+<td class="generic"><button id="loginSmsForm:btnGiris" name="loginSmsForm:btnGiris" class="ui-button ui-widget ui-state-default ui-button-text-only" onclick="PrimeFaces.ab({s:&quot;loginSmsForm:btnGiris&quot;,f:&quot;loginSmsForm&quot;,u:&quot;loginSmsForm&quot;});return false;" style="width:200px;  height:40px;" type="submit"><span class="ui-button-text ui-c">GİRİŞ</span></button><script id="loginSmsForm:btnGiris_s">$(function(){PrimeFaces.cw("CommandButton","widget_loginSmsForm_btnGiris",{id:"loginSmsForm:btnGiris"});});</script></td>
+<td class="generic"><button id="loginSmsForm:btnSmsKodGonder" name="loginSmsForm:btnSmsKodGonder" class="ui-button ui-widget ui-state-default ui-button-text-only" onclick="PrimeFaces.bcn(this,event,[function(event){resetLoginState();},function(event){PrimeFaces.ab({s:&quot;loginSmsForm:btnSmsKodGonder&quot;,f:&quot;loginSmsForm&quot;,u:&quot;loginSmsForm,growlMessage&quot;});return false;}]);" style="width:200px;  height:40px;" type="submit"><span class="ui-button-text ui-c">YENİ ŞİFRE GÖNDER</span></button><script id="loginSmsForm:btnSmsKodGonder_s">$(function(){PrimeFaces.cw("CommandButton","widget_loginSmsForm_btnSmsKodGonder",{id:"loginSmsForm:btnSmsKodGonder"});});</script></td>
+</tr>
+</tbody>
+</table>
+</div></div><script id="loginSmsForm:panel1_s">$(function(){PrimeFaces.cw("Panel","widget_loginSmsForm_panel1",{id:"loginSmsForm:panel1"});});</script><input type="hidden" name="jakarta.faces.ViewState" id="j_id1:jakarta.faces.ViewState:0" value="-5716404187504215066:1997066847674213844" autocomplete="off" />
+</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script>
+		function enterKeyAction(btnSearch) {
+			var keyCode = event.keyCode ? event.keyCode
+					: event.which ? event.which : event.charCode;
+
+			// Test if enter buttom has been hit
+			if (keyCode == 13) {
+				var fireOnThis = document.getElementById(btnSearch);
+
+				// Create mouse event 
+				if (document.createEvent) {
+					// Code for FireFox
+					var evObj = document.createEvent('MouseEvents');
+					evObj.initEvent('click', true, false);
+					fireOnThis.dispatchEvent(evObj);
+				} else if (document.createEventObject) {
+					// Code for Internet Explore
+					fireOnThis.fireEvent('onclick');
+				}
+			}
+		}
+	</script>
+	<script type="text/javascript">
+		/*<![CDATA[*/
+			
+		var counter = 90;
+		function resetLoginState() {
+				    document.getElementById("displaySure").innerHTML = "";
+				    document.getElementById("loginSmsForm:btnGiris").disabled = false;
+				    document.getElementById("displayCep").innerHTML = "";
+				    counter=90;
+		}
+		
+		window.onload = function() {
+			var minutes = 0;
+			var seconds = 0;
+			var minutesStr;
+			var secondsStr;
+		
+			setInterval(
+					function() {
+						counter--;
+						if (counter >= 0) {
+							minutes = Math.floor(counter / 60) | 0;
+							seconds = (counter % 60) | 0;
+
+							document.getElementById("loginSmsForm:btnSmsKodGonder").disabled = true;
+							document.getElementById("loginSmsForm:btnSmsKodGonder").style.opacity = "0.5";
+							if (seconds < 10) {
+								seconds = "0" + seconds;
+							}
+
+							document.getElementById("displaySure").innerHTML = "Kalan Süre: "
+									+ minutes + ":" + seconds;
+
+						} else {
+						 
+							clearInterval(counter);
+						
+							document.getElementById("loginSmsForm:btnSmsKodGonder").disabled = false;
+							document.getElementById("loginSmsForm:btnSmsKodGonder").style.opacity = "1";
+							document.getElementById("loginSmsForm:btnGiris").disabled = true;
+							document.getElementById("displayCep").innerHTML = "Tekrar SMS şifresi talep ediniz.";
+							document.getElementById("displaySure").innerHTML = "Süre doldu";
+						}
+
+					}, 1000);
+
+		}
+		/*]]>*/
+	</script><span id="growlMessage"></span><script id="growlMessage_s">$(function(){PrimeFaces.cw("Growl","widget_growlMessage",{id:"growlMessage",sticky:false,life:6000,escape:true,keepAlive:false,msgs:[{summary:"Bilgi",detail:"",severity:'info'}]});});</script></body>
+</html>

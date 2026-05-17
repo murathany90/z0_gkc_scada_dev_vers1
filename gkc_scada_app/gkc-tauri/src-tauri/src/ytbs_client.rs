@@ -11,6 +11,7 @@ use reqwest::{cookie::Jar, Client};
 use std::sync::Arc;
 
 const YTBS_LOGIN_URL: &str = "https://ytbs.teias.gov.tr/ytbs/frm_login.jsf";
+const YTBS_SMS_URL: &str = "https://ytbs.teias.gov.tr/ytbs/frm_sms_dogrulama.jsf";
 const YTBS_MAIN_URL: &str = "https://ytbs.teias.gov.tr/ytbs/YTBSAnaSayfa.jsf";
 
 /// YTBS web portalıyla etkileşim kuran istemci
@@ -18,6 +19,7 @@ const YTBS_MAIN_URL: &str = "https://ytbs.teias.gov.tr/ytbs/YTBSAnaSayfa.jsf";
 pub struct YtbsClient {
     client: Client,
     view_state: Option<String>,
+    sms_channel: Option<String>,
     goster_button_id: Option<String>,
     pub status: YtbsSessionStatus,
     pub last_activity: Option<chrono::DateTime<chrono::Utc>>,
@@ -233,6 +235,61 @@ mod scada_parser_tests {
         let login_page = r#"<form id="loginForm"><input id="loginForm:username" /></form>"#;
         assert!(YtbsClient::is_session_expired_response(login_page));
     }
+
+    #[test]
+    fn ytbs_sms_page_is_not_authenticated_even_with_main_div() {
+        let response = r#"
+            <script>PrimeFaces.settings={viewId:'/frm_sms_dogrulama.xhtml',contextPath:'/ytbs'};</script>
+            <div id="main">
+                <form id="loginSmsForm" name="loginSmsForm" method="post" action="/ytbs/frm_sms_dogrulama.jsf">
+                    <input id="loginSmsForm:smskodu_input" name="loginSmsForm:smskodu_input" />
+                    <button id="loginSmsForm:btnGiris" name="loginSmsForm:btnGiris">GIRIS</button>
+                    <button id="loginSmsForm:btnSmsKodGonder" name="loginSmsForm:btnSmsKodGonder">YENI SIFRE GONDER</button>
+                    <input type="hidden" name="jakarta.faces.ViewState" value="sms-view-state" />
+                </form>
+            </div>
+        "#;
+
+        assert!(YtbsClient::is_sms_verification_response(response));
+        assert!(!YtbsClient::is_authenticated_response(response));
+    }
+
+    #[test]
+    fn ytbs_sms_success_page_is_authenticated() {
+        let response = r#"
+            <script>PrimeFaces.settings={viewId:'/YTBSAnaSayfa.xhtml',contextPath:'/ytbs'};</script>
+            <form id="formMenu" name="formMenu" method="post" action="/ytbs/YTBSAnaSayfa.jsf">
+                <div id="formMenu:mb" class="menubar"></div>
+            </form>
+        "#;
+
+        assert!(!YtbsClient::is_sms_verification_response(response));
+        assert!(YtbsClient::is_authenticated_response(response));
+    }
+
+    #[test]
+    fn ytbs_sms_verify_params_match_real_form_fields() {
+        let params =
+            YtbsClient::build_sms_verify_params("123456", "VODAFONE_FAST", "sms-view-state");
+
+        assert!(params.contains(&("loginSmsForm".to_string(), "loginSmsForm".to_string())));
+        assert!(params.contains(&(
+            "loginSmsForm:kanal_input".to_string(),
+            "VODAFONE_FAST".to_string()
+        )));
+        assert!(params.contains(&(
+            "loginSmsForm:smskodu_input".to_string(),
+            "123456".to_string()
+        )));
+        assert!(params.contains(&(
+            "loginSmsForm:smskodu_hinput".to_string(),
+            "123456".to_string()
+        )));
+        assert!(params.contains(&(
+            "loginSmsForm:btnGiris".to_string(),
+            "loginSmsForm:btnGiris".to_string()
+        )));
+    }
 }
 
 impl YtbsClient {
@@ -250,6 +307,7 @@ impl YtbsClient {
         Ok(Self {
             client,
             view_state: None,
+            sms_channel: None,
             goster_button_id: None,
             status: YtbsSessionStatus::Disconnected,
             last_activity: None,
@@ -268,6 +326,7 @@ impl YtbsClient {
         kanal: &str,
     ) -> Result<YtbsSessionStatus, String> {
         self.status = YtbsSessionStatus::LoggingIn;
+        self.sms_channel = Some(kanal.to_string());
 
         // 1. Login sayfasını GET ile al → ViewState token ve JSESSIONID cookie çıkar
         let login_page = self
@@ -334,24 +393,20 @@ impl YtbsClient {
             return Err("Kullanıcı adı veya şifre hatalı".into());
         }
 
-        // 2. LOGIN FORMU HÂLÂ GÖRÜNÜYOR MU? (En kritik kontrol)
+        // 2. SMS DOĞRULAMA EKRANI MI?
+        //    YTBS 24 saatlik doğrulama süresi dolunca login sonrası ayrı
+        //    loginSmsForm tabanlı ekrana yönlendirir.
+        if Self::is_sms_verification_response(&response_text) {
+            self.status = YtbsSessionStatus::SmsRequired;
+            return Ok(YtbsSessionStatus::SmsRequired);
+        }
+
+        // 3. LOGIN FORMU HÂLÂ GÖRÜNÜYOR MU? (En kritik kontrol)
         //    Yanlış şifrede sunucu login sayfasını tekrar gösterir
         //    loginForm:btnLogin veya loginForm:username hâlâ varsa → giriş başarısız
-        let login_form_still_visible = response_text.contains("loginForm:btnLogin")
-            || response_text.contains("loginForm:username")
-            || response_text.contains("loginForm:password");
+        let login_form_still_visible = Self::is_login_form_response(&response_text);
 
         if login_form_still_visible {
-            // Login formu hâlâ görünüyor — SMS doğrulama da login sayfasında olabilir
-            // SMS kontrolü yap
-            if response_text.contains("dogrulamaKodu")
-                || response_text.contains("btnDogrula")
-                || response_text.contains("Do\u{011f}rulama Kodu")
-            {
-                self.status = YtbsSessionStatus::SmsRequired;
-                return Ok(YtbsSessionStatus::SmsRequired);
-            }
-
             // SMS formu yok ama login formu görünüyor → başarısız giriş
             self.status = YtbsSessionStatus::Disconnected;
             return Err(
@@ -359,21 +414,14 @@ impl YtbsClient {
             );
         }
 
-        // 3. DOĞRUDAN GİRİŞ BAŞARILI: Ana sayfa öğeleri varsa (login formu yok)
-        //    formMenu, idlemonitor, formTable → ana sayfadayız
-        if response_text.contains("idlemonitor")
-            || response_text.contains("IdleMonitor")
-            || response_text.contains("formMenu")
-            || response_text.contains("formTable")
-            || response_text.contains("YTBSAnaSayfa")
-            || response_text.contains("id=\"main\"")
-        {
+        // 4. DOĞRUDAN GİRİŞ BAŞARILI: Ana sayfa öğeleri varsa (login/SMS formu yok)
+        if Self::is_authenticated_response(&response_text) {
             self.status = YtbsSessionStatus::Connected;
             self.last_activity = Some(chrono::Utc::now());
             return Ok(YtbsSessionStatus::Connected);
         }
 
-        // 4. TAMAMEN BELİRSİZ: Yanıt hiçbir kalıba uymuyorsa hata ver
+        // 5. TAMAMEN BELİRSİZ: Yanıt hiçbir kalıba uymuyorsa hata ver
         self.status = YtbsSessionStatus::Disconnected;
         let preview = &response_text[..response_text.len().min(500)];
         Err(format!(
@@ -391,16 +439,12 @@ impl YtbsClient {
 
         // Doğrulama form parametreleri
         // Form alan adları login yanıtından tespit edilmeli — yaygın PrimeFaces kalıpları denenir
-        let form_params = [
-            ("loginForm", "loginForm"),
-            ("loginForm:dogrulamaKodu", code),
-            ("loginForm:btnDogrula", ""),
-            ("jakarta.faces.ViewState", view_state),
-        ];
+        let kanal = self.sms_channel.as_deref().unwrap_or("VODAFONE_FAST");
+        let form_params = Self::build_sms_verify_params(code, kanal, view_state);
 
         let response = self
             .client
-            .post(YTBS_LOGIN_URL)
+            .post(YTBS_SMS_URL)
             .header("Content-Type", "application/x-www-form-urlencoded")
             .form(&form_params)
             .send()
@@ -416,20 +460,35 @@ impl YtbsClient {
             self.view_state = Some(vs);
         }
 
-        if response_text.contains("formMenu")
-            || response_text.contains("YTBSAnaSayfa")
-            || response_text.contains("Anasayfa")
+        if response_text.contains("Hatalı")
+            || response_text.contains("hatalı")
+            || response_text.contains("HatalÄ±")
+            || response_text.contains("geçersiz")
+            || response_text.contains("Geçersiz")
+            || response_text.contains("geÃ§ersiz")
+            || response_text.contains("ui-messages-error")
         {
-            self.status = YtbsSessionStatus::Connected;
-            self.last_activity = Some(chrono::Utc::now());
-            Ok(())
-        } else if response_text.contains("Hatalı") || response_text.contains("geçersiz") {
+            self.status = YtbsSessionStatus::SmsRequired;
             Err("Doğrulama kodu geçersiz".into())
-        } else {
-            // Yanıt belirsiz ama devam edelim
+        } else if Self::is_authenticated_response(&response_text) {
             self.status = YtbsSessionStatus::Connected;
             self.last_activity = Some(chrono::Utc::now());
             Ok(())
+        } else if Self::is_sms_verification_response(&response_text) {
+            self.status = YtbsSessionStatus::SmsRequired;
+            Err("SMS doğrulaması tamamlanmadı. Kodu kontrol edip tekrar deneyin.".into())
+        } else if Self::is_login_form_response(&response_text)
+            || Self::is_session_expired_response(&response_text)
+        {
+            self.status = YtbsSessionStatus::Disconnected;
+            Err("SMS doğrulama oturumu sona erdi, yeniden giriş gerekli".into())
+        } else {
+            self.status = YtbsSessionStatus::SmsRequired;
+            let preview = &response_text[..response_text.len().min(500)];
+            Err(format!(
+                "Beklenmeyen SMS doğrulama yanıtı. İlk 500 karakter: {}",
+                preview
+            ))
         }
     }
 
@@ -947,6 +1006,71 @@ impl YtbsClient {
 
     /// HTML/XML yanıtından ViewState token'ını çıkar
     /// YTBS, jakarta.faces.ViewState kullanıyor (DOM analizinde doğrulandı)
+    fn is_sms_verification_response(response: &str) -> bool {
+        let response_lower = response.to_lowercase();
+
+        response_lower.contains("frm_sms_dogrulama")
+            || response.contains("loginSmsForm")
+            || response.contains("loginSmsForm:smskodu_input")
+            || response.contains("loginSmsForm:btnGiris")
+            || response.contains("loginSmsForm:btnSmsKodGonder")
+    }
+
+    fn is_login_form_response(response: &str) -> bool {
+        response.contains("loginForm:username")
+            || response.contains("loginForm:password")
+            || response.contains("loginForm:btnLogin")
+            || response.contains("id=\"loginForm\"")
+            || response.contains("name=\"loginForm\"")
+    }
+
+    fn is_authenticated_response(response: &str) -> bool {
+        if Self::is_sms_verification_response(response) || Self::is_login_form_response(response) {
+            return false;
+        }
+
+        let redirects_to_home = response.contains("<redirect") && response.contains("YTBSAnaSayfa");
+        let has_home_view = response.contains("YTBSAnaSayfa.jsf")
+            || response.contains("YTBSAnaSayfa.xhtml")
+            || response.contains("viewId:'/YTBSAnaSayfa.xhtml'")
+            || response.contains("viewId=\"/YTBSAnaSayfa.xhtml\"");
+        let has_real_menu = response.contains("id=\"formMenu\"")
+            || response.contains("name=\"formMenu\"")
+            || response.contains("formMenu:mb");
+
+        redirects_to_home || (has_home_view && has_real_menu)
+    }
+
+    fn build_sms_verify_params(code: &str, kanal: &str, view_state: &str) -> Vec<(String, String)> {
+        vec![
+            ("jakarta.faces.partial.ajax".to_string(), "true".to_string()),
+            (
+                "jakarta.faces.source".to_string(),
+                "loginSmsForm:btnGiris".to_string(),
+            ),
+            (
+                "jakarta.faces.partial.execute".to_string(),
+                "@all".to_string(),
+            ),
+            (
+                "jakarta.faces.partial.render".to_string(),
+                "loginSmsForm".to_string(),
+            ),
+            (
+                "loginSmsForm:btnGiris".to_string(),
+                "loginSmsForm:btnGiris".to_string(),
+            ),
+            ("loginSmsForm".to_string(), "loginSmsForm".to_string()),
+            ("loginSmsForm:kanal_input".to_string(), kanal.to_string()),
+            ("loginSmsForm:smskodu_input".to_string(), code.to_string()),
+            ("loginSmsForm:smskodu_hinput".to_string(), code.to_string()),
+            (
+                "jakarta.faces.ViewState".to_string(),
+                view_state.to_string(),
+            ),
+        ]
+    }
+
     fn is_session_expired_response(response: &str) -> bool {
         let response_lower = response.to_lowercase();
 
@@ -960,11 +1084,7 @@ impl YtbsClient {
             return true;
         }
 
-        response.contains("loginForm:username")
-            || response.contains("loginForm:password")
-            || response.contains("loginForm:btnLogin")
-            || response.contains("id=\"loginForm\"")
-            || response.contains("name=\"loginForm\"")
+        Self::is_login_form_response(response)
     }
 
     fn extract_view_state(html: &str) -> Option<String> {
@@ -1407,7 +1527,10 @@ mod tests {
         let top_options = client.scada_options(None, None, None).await.unwrap();
         println!("Canlı B1 seçenek sayısı: {}", top_options.b1.len());
         assert!(
-            top_options.b1.iter().any(|option| option.value == "OYAK1GES"),
+            top_options
+                .b1
+                .iter()
+                .any(|option| option.value == "OYAK1GES"),
             "Canlı B1 seçeneklerinde OYAK1GES bulunamadı"
         );
 

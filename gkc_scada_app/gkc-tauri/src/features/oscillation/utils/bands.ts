@@ -1,4 +1,4 @@
-import type { OscillationAmplitudeThresholds, OscillationBand, OscillationBandId } from '../types/oscillationTypes.ts';
+import type { OscillationAmplitudeThresholds, OscillationBand } from '../types/oscillationTypes.ts';
 
 export const MAX_RELIABLE_ANALYSIS_HZ = 4.5;
 export const NYQUIST_HZ = 5;
@@ -19,7 +19,7 @@ export const OSCILLATION_BANDS: OscillationBand[] = [
     fMax: 0.4,
     enabled: true,
     primary: true,
-    modeValue: 2,
+    modeValue: 1,
     confidence: 'high',
     description: 'Bölgeler arası düşük frekanslı güç sistemi salınım bandı.',
   },
@@ -29,7 +29,7 @@ export const OSCILLATION_BANDS: OscillationBand[] = [
     fMin: 0.4,
     fMax: 2,
     enabled: true,
-    modeValue: 1,
+    modeValue: 2,
     confidence: 'high',
     description: 'Yerel jeneratör, santral veya bölgesel elektromekanik salınım bandı.',
   },
@@ -59,17 +59,5 @@ export const OSCILLATION_BANDS: OscillationBand[] = [
 export const ACTIVE_OSCILLATION_BANDS = OSCILLATION_BANDS.filter(band => !band.passive);
 export const TORSION_PASSIVE_BAND = OSCILLATION_BANDS.find(band => band.id === 'TORSION_PASSIVE');
 
-export const getEnabledBands = (selectedBandIds: string[] = []): OscillationBand[] => {
-  const selectedIds = new Set<OscillationBandId>(
-    selectedBandIds.filter((id): id is OscillationBandId =>
-      OSCILLATION_BANDS.some(band => band.id === id)
-    )
-  );
-  const candidates = selectedIds.size
-    ? OSCILLATION_BANDS.filter(band => selectedIds.has(band.id))
-    : ACTIVE_OSCILLATION_BANDS;
-
-  return candidates.filter(band => band.enabled && !band.passive && band.fMax <= MAX_RELIABLE_ANALYSIS_HZ);
-};
-
-export const allBandIds = (): OscillationBandId[] => OSCILLATION_BANDS.map(band => band.id);
+export const getEnabledBands = (): OscillationBand[] =>
+  ACTIVE_OSCILLATION_BANDS.filter(band => band.enabled && band.fMax <= MAX_RELIABLE_ANALYSIS_HZ);

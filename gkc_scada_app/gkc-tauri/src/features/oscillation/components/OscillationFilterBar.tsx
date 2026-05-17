@@ -1,21 +1,28 @@
 import { OSCILLATION_BANDS } from '../utils/bands.ts';
-import { PMU_FIDERS, useOscillationStore } from '../store/oscillationStore.ts';
-import type { PmuSignalKey } from '../types/oscillationTypes.ts';
+import { PMU_FIDERS, useOscillationStore, type OscillationDataSourceMode } from '../store/oscillationStore.ts';
+import type { OscillationAmplitudeThresholds } from '../types/oscillationTypes.ts';
 import { PmuSelectionControl } from './PmuSelectionControl.tsx';
-import { SIGNAL_LABELS } from './chartHelpers.ts';
 
-const SIGNAL_OPTIONS: PmuSignalKey[] = ['frequency', 'voltage', 'activePower', 'reactivePower'];
+const SOURCE_LABELS: Record<OscillationDataSourceMode, string> = {
+  none: 'YTBS PMU / Demo PMU',
+  ytbs: 'YTBS PMU verisi',
+  demo: 'Demo PMU verisi',
+};
+
+const THRESHOLD_FIELDS: Array<{
+  key: keyof OscillationAmplitudeThresholds;
+  shortLabel: string;
+  inputLabel: string;
+  max: number;
+  step: number;
+}> = [
+  { key: 'frequencyMhz', shortLabel: 'Frk', inputLabel: 'Frekans genlik eşiği mHz', max: 1000, step: 1 },
+  { key: 'voltagePercent', shortLabel: 'Ger', inputLabel: 'Gerilim genlik eşiği yüzde', max: 100, step: 0.1 },
+  { key: 'activePowerPercent', shortLabel: 'MW', inputLabel: 'Aktif güç genlik eşiği yüzde', max: 100, step: 0.1 },
+  { key: 'reactivePowerPercent', shortLabel: 'MVAr', inputLabel: 'Reaktif güç genlik eşiği yüzde', max: 100, step: 0.1 },
+];
 
 const numericOptions = (values: number[]) => values.map(value => <option key={value} value={value}>{value} sn</option>);
-const thresholdInputStyle = {
-  width: '100%',
-  padding: 6,
-  borderRadius: 4,
-  border: '1px solid var(--border-color)',
-  background: 'var(--bg-primary)',
-  color: 'var(--text-primary)',
-  fontSize: 11,
-};
 
 export function OscillationFilterBar() {
   const store = useOscillationStore();
@@ -23,171 +30,194 @@ export function OscillationFilterBar() {
   const durationMs = new Date(store.endTime).getTime() - new Date(store.startTime).getTime();
   const durationHours = Number.isFinite(durationMs) ? durationMs / 3_600_000 : 0;
   const invalidDuration = !Number.isFinite(durationMs) || durationMs <= 0 || durationHours > 4;
+  const statusText = store.analysisResult
+    ? 'Bulgu hazır'
+    : store.rawSamples.length
+      ? store.dataSourceMode === 'demo' ? 'Demo veri hazır' : 'Veri hazır'
+      : 'Veri bekleniyor';
+  const noteText = invalidDuration
+    ? 'Maksimum sorgu süresi 4 saattir ve bitiş başlangıçtan sonra olmalıdır.'
+    : [
+      store.queryNotice,
+      store.queryProgress
+        ? `${store.queryProgress.completedPmus}/${store.queryProgress.totalPmus} PMU, ${store.queryProgress.completedChunks}/${store.queryProgress.totalChunks} parça`
+        : null,
+    ].filter(Boolean).join(' - ');
+
   const handleFetch = async () => {
     await store.fetchPmuData();
-    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <div className="card oscillation-filter-card">
-      <div className="card-header">
-        <span className="card-title">Salınım Algılayıcı — PMU Modal Analiz ve Raporlama</span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gerçek YTBS PMU verisi</span>
+      <div className="card-header oscillation-filter-header">
+        <span className="card-title">Salınım Algılayıcı - PMU Modal Analiz ve Raporlama</span>
+        <span className={`oscillation-source-pill source-${store.dataSourceMode}`}>{SOURCE_LABELS[store.dataSourceMode]}</span>
       </div>
-      <div className="card-body" style={{ padding: '8px 12px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(280px, 1.4fr) 160px 150px 150px 140px minmax(260px, 1fr) 150px', gap: 8, alignItems: 'end' }}>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>SEÇİM MODU</label>
-            <select id="oscillation-selection-mode" name="oscillation-selection-mode" aria-label="Secim modu" value={store.selectionMode} disabled={store.loading} onChange={event => store.setSelectionMode(event.target.value === 'multi' ? 'multi' : 'single')}
-              style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+
+      <div className="card-body oscillation-filter-body">
+        <div className="oscillation-filter-summary-row">
+          {OSCILLATION_BANDS.map(band => (
+            <div key={band.id} className={`oscillation-mode-card${band.passive ? ' passive' : ''}`}>
+              <strong>Mod {band.modeValue}</strong>
+              <span>{band.name}</span>
+              <small>{band.fMin}-{band.fMax} Hz</small>
+              <em>{band.passive ? 'Pasif diagnostik' : 'Aktif'}</em>
+            </div>
+          ))}
+          <div className="oscillation-mini-stat">
+            <span>Seçilen PMU</span>
+            <strong>{store.selectedPmuIds.length}<small>/6</small></strong>
+          </div>
+          <div className="oscillation-mini-stat">
+            <span>PMU Örneği</span>
+            <strong>{store.rawSamples.length}</strong>
+          </div>
+          <div className="oscillation-mini-stat status">
+            <span>Status</span>
+            <strong>{statusText}</strong>
+          </div>
+          <div className={`oscillation-mini-notice${invalidDuration ? ' error' : ''}`}>
+            <span>{noteText || SOURCE_LABELS[store.dataSourceMode]}</span>
+          </div>
+        </div>
+
+        <div className="oscillation-filter-controls-grid">
+          <label className="oscillation-field" htmlFor="oscillation-selection-mode">
+            <span className="oscillation-field-label">Seçim Modu</span>
+            <select
+              id="oscillation-selection-mode"
+              name="oscillation-selection-mode"
+              aria-label="Seçim modu"
+              className="oscillation-control"
+              value={store.selectionMode}
+              disabled={store.loading}
+              onChange={event => store.setSelectionMode(event.target.value === 'multi' ? 'multi' : 'single')}
+            >
               <option value="single">Tekli PMU</option>
               <option value="multi">Çoklu PMU</option>
             </select>
+          </label>
+
+          <div className="oscillation-field oscillation-pmu-field">
+            <label className="oscillation-field-label" htmlFor="oscillation-pmu-select">PMU GKÇ Fiderleri</label>
+            <PmuSelectionControl
+              controlId="oscillation-pmu-select"
+              mode={store.selectionMode}
+              selectedPmuIds={store.selectedPmuIds}
+              onChange={store.setSelectedPmuIds}
+              disabled={store.loading}
+            />
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>PMU GKÇ FİDERLERİ</label>
-            <PmuSelectionControl controlId="oscillation-pmu-select" mode={store.selectionMode} selectedPmuIds={store.selectedPmuIds} onChange={store.setSelectedPmuIds} disabled={store.loading} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>REFERANS PMU</label>
-            <select id="oscillation-reference-pmu" name="oscillation-reference-pmu" aria-label="Referans PMU" value={store.referencePmuId ?? ''} disabled={store.selectionMode === 'single' || store.loading} onChange={event => store.setReferencePmuId(event.target.value)}
-              style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+
+          <label className="oscillation-field" htmlFor="oscillation-reference-pmu">
+            <span className="oscillation-field-label">Referans PMU</span>
+            <select
+              id="oscillation-reference-pmu"
+              name="oscillation-reference-pmu"
+              aria-label="Referans PMU"
+              className="oscillation-control"
+              value={store.referencePmuId ?? ''}
+              disabled={store.selectionMode === 'single' || store.loading}
+              onChange={event => store.setReferencePmuId(event.target.value)}
+            >
               {selectedPmus.map(pmu => <option key={pmu.id} value={pmu.id}>{pmu.substationName} ({pmu.id})</option>)}
             </select>
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>BAŞLANGIÇ</label>
-            <input id="oscillation-start-time" name="oscillation-start-time" aria-label="Baslangic" type="datetime-local" value={store.startTime} disabled={store.loading} onChange={event => store.setDateRange(event.target.value, store.endTime)}
-              style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>BİTİŞ</label>
-            <input id="oscillation-end-time" name="oscillation-end-time" aria-label="Bitis" type="datetime-local" value={store.endTime} disabled={store.loading} onChange={event => store.setDateRange(store.startTime, event.target.value)}
-              style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }} />
-          </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>PENCERE / ADIM</label>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <select id="oscillation-window-seconds" name="oscillation-window-seconds" aria-label="Analiz penceresi" value={store.windowSeconds} onChange={event => store.setWindowSeconds(Number(event.target.value))} style={{ width: '50%', padding: 6, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+          </label>
+
+          <label className="oscillation-field" htmlFor="oscillation-start-time">
+            <span className="oscillation-field-label">Başlangıç</span>
+            <input
+              id="oscillation-start-time"
+              name="oscillation-start-time"
+              aria-label="Başlangıç"
+              type="datetime-local"
+              className="oscillation-control"
+              value={store.startTime}
+              disabled={store.loading}
+              onChange={event => store.setDateRange(event.target.value, store.endTime)}
+            />
+          </label>
+
+          <label className="oscillation-field" htmlFor="oscillation-end-time">
+            <span className="oscillation-field-label">Bitiş</span>
+            <input
+              id="oscillation-end-time"
+              name="oscillation-end-time"
+              aria-label="Bitiş"
+              type="datetime-local"
+              className="oscillation-control"
+              value={store.endTime}
+              disabled={store.loading}
+              onChange={event => store.setDateRange(store.startTime, event.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="oscillation-filter-bottom-grid">
+          <div className="oscillation-field">
+            <span className="oscillation-field-label">Pencere / Adım</span>
+            <div className="oscillation-window-controls">
+              <select
+                id="oscillation-window-seconds"
+                name="oscillation-window-seconds"
+                aria-label="Analiz penceresi"
+                className="oscillation-control"
+                value={store.windowSeconds}
+                onChange={event => store.setWindowSeconds(Number(event.target.value))}
+              >
                 {numericOptions([60, 120, 300, 900])}
               </select>
-              <select id="oscillation-step-seconds" name="oscillation-step-seconds" aria-label="Analiz adimi" value={store.stepSeconds} onChange={event => store.setStepSeconds(Number(event.target.value))} style={{ width: '50%', padding: 6, borderRadius: 4, border: '1px solid var(--border-color)', background: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 11 }}>
+              <select
+                id="oscillation-step-seconds"
+                name="oscillation-step-seconds"
+                aria-label="Analiz adımı"
+                className="oscillation-control"
+                value={store.stepSeconds}
+                onChange={event => store.setStepSeconds(Number(event.target.value))}
+              >
                 {numericOptions([10, 30, 60])}
               </select>
             </div>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>SALINIM GENLİK EŞİKLERİ</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(58px, 1fr))', gap: 4 }}>
-              <input
-                id="oscillation-threshold-frequency"
-                name="oscillation-threshold-frequency"
-                aria-label="Frekans genlik esigi mHz"
-                title="Frekans eşiği (mHz)"
-                type="number"
-                min={0}
-                max={1000}
-                step={1}
-                value={store.amplitudeThresholds.frequencyMhz}
-                onChange={event => store.setAmplitudeThreshold('frequencyMhz', Number(event.target.value))}
-                style={thresholdInputStyle}
-              />
-              <input
-                id="oscillation-threshold-voltage"
-                name="oscillation-threshold-voltage"
-                aria-label="Gerilim genlik esigi yuzde"
-                title="Gerilim eşiği (%)"
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                value={store.amplitudeThresholds.voltagePercent}
-                onChange={event => store.setAmplitudeThreshold('voltagePercent', Number(event.target.value))}
-                style={thresholdInputStyle}
-              />
-              <input
-                id="oscillation-threshold-active-power"
-                name="oscillation-threshold-active-power"
-                aria-label="Aktif guc genlik esigi yuzde"
-                title="Aktif güç eşiği (%)"
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                value={store.amplitudeThresholds.activePowerPercent}
-                onChange={event => store.setAmplitudeThreshold('activePowerPercent', Number(event.target.value))}
-                style={thresholdInputStyle}
-              />
-              <input
-                id="oscillation-threshold-reactive-power"
-                name="oscillation-threshold-reactive-power"
-                aria-label="Reaktif guc genlik esigi yuzde"
-                title="Reaktif güç eşiği (%)"
-                type="number"
-                min={0}
-                max={100}
-                step={0.1}
-                value={store.amplitudeThresholds.reactivePowerPercent}
-                onChange={event => store.setAmplitudeThreshold('reactivePowerPercent', Number(event.target.value))}
-                style={thresholdInputStyle}
-              />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(58px, 1fr))', gap: 4, marginTop: 2, fontSize: 9, color: 'var(--text-muted)' }}>
-              <span>Frekans mHz</span><span>Gerilim %</span><span>MW %</span><span>MVAr %</span>
+
+          <div className="oscillation-field oscillation-threshold-group">
+            <span className="oscillation-field-label">Eşikler</span>
+            <div className="oscillation-threshold-grid">
+              {THRESHOLD_FIELDS.map(field => (
+                <label key={field.key} className="oscillation-threshold-item" htmlFor={`oscillation-threshold-${field.key}`}>
+                  <span>{field.shortLabel}: {store.amplitudeThresholds[field.key]}</span>
+                  <input
+                    id={`oscillation-threshold-${field.key}`}
+                    name={`oscillation-threshold-${field.key}`}
+                    aria-label={field.inputLabel}
+                    type="number"
+                    min={0}
+                    max={field.max}
+                    step={field.step}
+                    className="oscillation-control"
+                    value={store.amplitudeThresholds[field.key]}
+                    onChange={event => store.setAmplitudeThreshold(field.key, Number(event.target.value))}
+                  />
+                </label>
+              ))}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-primary" disabled={store.loading || invalidDuration} onClick={handleFetch} style={{ fontSize: 11, fontWeight: 700 }}>
+
+          <div className="oscillation-actions" aria-label="Salınım aksiyonları">
+            <button type="button" className="btn btn-primary btn-compact" disabled={store.loading || invalidDuration} onClick={handleFetch}>
               {store.loading ? 'Sorgulanıyor...' : 'Veriyi Getir'}
             </button>
-            <button className="btn" disabled={store.analyzing || !store.rawSamples.length} onClick={store.runAnalysis} style={{ fontSize: 11 }}>
+            <button type="button" className="btn btn-outline btn-compact" disabled={store.loading || store.analyzing} onClick={store.loadDemoData}>
+              Demo Verisi
+            </button>
+            <button type="button" className="btn btn-primary btn-compact oscillation-run-button" disabled={store.analyzing || !store.rawSamples.length} onClick={store.runAnalysis}>
               {store.analyzing ? 'Analiz...' : 'Analizi Çalıştır'}
             </button>
+            <button type="button" className="btn btn-outline btn-compact" onClick={store.generateReport} disabled={!store.analysisResult}>Rapor Oluştur</button>
+            <button type="button" className="btn btn-outline btn-compact" onClick={store.exportCsv} disabled={!store.rawSamples.length}>CSV Dışa Aktar</button>
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
-          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Sinyaller</span>
-          {SIGNAL_OPTIONS.map(signal => (
-            <label key={signal} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <input
-                id={`oscillation-signal-${signal}`}
-                name={`oscillation-signal-${signal}`}
-                type="checkbox"
-                checked={store.selectedSignals.includes(signal)}
-                onChange={event => {
-                  const next = event.target.checked
-                    ? [...store.selectedSignals, signal]
-                    : store.selectedSignals.filter(item => item !== signal);
-                  store.setSelectedSignals(next);
-                }}
-              />
-              {SIGNAL_LABELS[signal]}
-            </label>
-          ))}
-          <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 10 }}>Bantlar</span>
-          {OSCILLATION_BANDS.map(band => (
-            <span key={band.id} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: band.passive ? 0.65 : 1 }}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: band.passive ? 'var(--text-muted)' : 'var(--accent-blue)', display: 'inline-block' }} />
-              {band.modeValue}: {band.id} {band.fMin}-{band.fMax} Hz{band.passive ? ' pasif' : ''}
-            </span>
-          ))}
-          <button className="btn" onClick={store.generateReport} disabled={!store.analysisResult} style={{ fontSize: 11, marginLeft: 'auto' }}>Rapor Oluştur</button>
-          <button className="btn" onClick={store.exportCsv} disabled={!store.rawSamples.length} style={{ fontSize: 11 }}>CSV Dışa Aktar</button>
-        </div>
-
-        {(invalidDuration || store.queryNotice || store.queryProgress) && (
-          <div style={{ marginTop: 8, fontSize: 11, color: invalidDuration ? 'var(--accent-red)' : 'var(--accent-yellow)' }}>
-            {invalidDuration
-              ? 'Maksimum sorgu süresi 4 saattir ve bitiş başlangıçtan sonra olmalıdır.'
-              : [
-                store.queryNotice,
-                store.queryProgress
-                  ? `${store.queryProgress.completedPmus}/${store.queryProgress.totalPmus} PMU, ${store.queryProgress.completedChunks}/${store.queryProgress.totalChunks} parça`
-                  : null,
-              ].filter(Boolean).join(' - ')}
-          </div>
-        )}
       </div>
     </div>
   );

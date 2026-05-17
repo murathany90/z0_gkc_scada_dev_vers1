@@ -1,4 +1,4 @@
-import { DEFAULT_AMPLITUDE_THRESHOLDS, OSCILLATION_BANDS, TORSION_PASSIVE_BAND, allBandIds, getEnabledBands } from './bands.ts';
+import { DEFAULT_AMPLITUDE_THRESHOLDS, OSCILLATION_BANDS, TORSION_PASSIVE_BAND, getEnabledBands } from './bands.ts';
 import { buildCoherenceMatrix } from './coherence.ts';
 import { calculateModeShape, buildCoherenceAverageMap } from './modeShape.ts';
 import { getSignalValue } from './pmuSamples.ts';
@@ -462,7 +462,6 @@ export const calculateOscillationAnalysis = ({
       windowSeconds,
       stepSeconds,
       selectedSignals,
-      selectedBands: allBandIds(),
       amplitudeThresholds,
     },
     dataQuality: {

@@ -3,16 +3,18 @@ import type { OscillationWindowMetric, PmuSignalKey } from '../types/oscillation
 import {
   chartBase,
   connectOscillationTimeChart,
+  formatPmuAxisTime,
   PMU_COLORS,
   SIGNAL_LABELS,
   SIGNAL_UNITS,
   type OscillationThemeMode,
 } from './chartHelpers.ts';
+import { OscillationEmptyState } from './OscillationEmptyState.tsx';
 
 const MODE_LABELS: Record<number, string> = {
   0: 'Yok',
-  1: 'Local',
-  2: 'Interarea',
+  1: 'Interarea',
+  2: 'Local',
   3: 'Forced',
   4: 'Torsiyon',
 };
@@ -38,24 +40,94 @@ const uniqueSeries = (metrics: OscillationWindowMetric[]): OscillationWindowMetr
   });
 };
 
+const calculateMetricDataZoomStart = (metrics: OscillationWindowMetric[], initialWindowMinutes = 15): number => {
+  if (metrics.length < 2) return 0;
+  const timestamps = metrics
+    .map(metric => metric.timestampMs)
+    .filter(Number.isFinite);
+  if (timestamps.length < 2) return 0;
+
+  const first = Math.min(...timestamps);
+  const last = Math.max(...timestamps);
+  const durationMs = last - first;
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
+
+  const windowMs = initialWindowMinutes * 60_000;
+  if (durationMs <= windowMs) return 0;
+  return Math.max(0, Math.min(100, ((durationMs - windowMs) / durationMs) * 100));
+};
+
+const emptyAction = ({
+  signal,
+  hasSamples,
+  onLoadDemo,
+  onRunAnalysis,
+}: {
+  signal: PmuSignalKey;
+  hasSamples: boolean;
+  onLoadDemo: () => void;
+  onRunAnalysis: () => void;
+}) => hasSamples
+  ? {
+    title: `${SIGNAL_LABELS[signal]} için analiz çalıştırılmadı`,
+    message: 'Yüklenen PMU verisi için kayan pencere analizi çalıştırıldığında grafikler dolacaktır.',
+    primaryActionLabel: 'Analizi Çalıştır',
+    onPrimaryAction: onRunAnalysis,
+  }
+  : {
+    title: `${SIGNAL_LABELS[signal]} analiz sonucu yok`,
+    message: 'Önce YTBS PMU verisi alın veya demo verisini yükleyin.',
+    primaryActionLabel: 'Demo Verisi Yükle',
+    onPrimaryAction: onLoadDemo,
+  };
+
 export function ModeDampingChart({
   metrics,
+  signal,
   themeMode,
+  hasSamples,
+  onLoadDemo,
+  onRunAnalysis,
 }: {
   metrics: OscillationWindowMetric[];
+  signal: PmuSignalKey;
   themeMode: OscillationThemeMode;
+  hasSamples: boolean;
+  onLoadDemo: () => void;
+  onRunAnalysis: () => void;
 }) {
-  if (!metrics.length) {
-    return <div className="card"><div className="card-body" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Mod ve DR grafiği için analiz sonucu yok.</div></div>;
+  const signalMetrics = metrics.filter(metric => metric.signal === signal);
+  if (!signalMetrics.length) {
+    const empty = emptyAction({ signal, hasSamples, onLoadDemo, onRunAnalysis });
+    return (
+      <div className="card">
+        <div className="card-body">
+          <OscillationEmptyState {...empty} />
+        </div>
+      </div>
+    );
   }
 
-  const groups = uniqueSeries(metrics);
+  const groups = uniqueSeries(signalMetrics);
+  const dataZoomStart = calculateMetricDataZoomStart(signalMetrics, 15);
   const option = {
     ...chartBase(themeMode),
-    title: { text: 'Grafik 2 - Mod ve Sönümleme Oranı', textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
+    title: { text: `Grafik 2 - ${SIGNAL_LABELS[signal]} Mod + DR`, textStyle: { color: 'var(--text-primary)', fontSize: 13 } },
     legend: { type: 'scroll', top: 0, right: 58, width: '58%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
     grid: { top: 44, left: 46, right: 58, bottom: 48 },
-    xAxis: { type: 'time', axisLabel: { color: 'var(--text-muted)', fontSize: 10, hideOverlap: true } },
+    dataZoom: [
+      { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, xAxisIndex: [0] },
+      { type: 'slider', start: dataZoomStart, end: 100, bottom: 8, height: 18, borderColor: 'var(--border-color)', textStyle: { color: 'var(--text-muted)' }, xAxisIndex: [0] },
+    ],
+    xAxis: {
+      type: 'time',
+      axisLabel: {
+        color: 'var(--text-muted)',
+        fontSize: 10,
+        hideOverlap: true,
+        formatter: (value: number) => formatPmuAxisTime(value),
+      },
+    },
     yAxis: [
       {
         type: 'value',
@@ -79,7 +151,7 @@ export function ModeDampingChart({
       },
     ],
     series: groups.flatMap((group, index) => {
-      const groupMetrics = metrics.filter(metric => seriesKey(metric) === seriesKey(group));
+      const groupMetrics = signalMetrics.filter(metric => seriesKey(metric) === seriesKey(group));
       const color = PMU_COLORS[index % PMU_COLORS.length];
       return [
         {
@@ -93,7 +165,7 @@ export function ModeDampingChart({
           itemStyle: { color },
         },
         {
-          name: `${seriesName(group)} DR`,
+          name: `${seriesName(group)} DR (%)`,
           type: 'line',
           yAxisIndex: 1,
           showSymbol: false,
@@ -118,88 +190,104 @@ export function ModeDampingChart({
 
 export function EnergyAmplitudeCharts({
   metrics,
-  selectedSignals,
+  signal,
   themeMode,
+  hasSamples,
+  onLoadDemo,
+  onRunAnalysis,
 }: {
   metrics: OscillationWindowMetric[];
-  selectedSignals: PmuSignalKey[];
+  signal: PmuSignalKey;
   themeMode: OscillationThemeMode;
+  hasSamples: boolean;
+  onLoadDemo: () => void;
+  onRunAnalysis: () => void;
 }) {
-  if (!metrics.length) {
-    return <div className="card"><div className="card-body" style={{ color: 'var(--text-muted)', fontSize: 12 }}>Enerji ve genlik grafiği için analiz sonucu yok.</div></div>;
+  const signalMetrics = metrics.filter(metric => metric.signal === signal);
+  if (!signalMetrics.length) {
+    const empty = emptyAction({ signal, hasSamples, onLoadDemo, onRunAnalysis });
+    return (
+      <div className="card">
+        <div className="card-body">
+          <OscillationEmptyState {...empty} />
+        </div>
+      </div>
+    );
   }
+
+  const groups = uniqueSeries(signalMetrics);
+  const dataZoomStart = calculateMetricDataZoomStart(signalMetrics, 15);
+  const unit = signalUnit(signal);
+  const option = {
+    ...chartBase(themeMode),
+    title: {
+      text: `Grafik 3 - ${SIGNAL_LABELS[signal]} Enerji + Genlik`,
+      textStyle: { color: 'var(--text-primary)', fontSize: 13 },
+    },
+    legend: { type: 'scroll', top: 0, right: 58, width: '56%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
+    grid: { top: 42, left: 54, right: 58, bottom: 44 },
+    dataZoom: [
+      { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, xAxisIndex: [0] },
+      { type: 'slider', start: dataZoomStart, end: 100, bottom: 8, height: 18, borderColor: 'var(--border-color)', textStyle: { color: 'var(--text-muted)' }, xAxisIndex: [0] },
+    ],
+    xAxis: {
+      type: 'time',
+      axisLabel: {
+        color: 'var(--text-muted)',
+        fontSize: 10,
+        hideOverlap: true,
+        formatter: (value: number) => formatPmuAxisTime(value),
+      },
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: `Genlik (${unit})`,
+        scale: true,
+        axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
+        splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+      },
+      {
+        type: 'value',
+        name: `Enerji (${unit})`,
+        scale: true,
+        axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
+        splitLine: { show: false },
+      },
+    ],
+    series: groups.flatMap((group, index) => {
+      const groupMetrics = signalMetrics.filter(metric => seriesKey(metric) === seriesKey(group));
+      const color = PMU_COLORS[index % PMU_COLORS.length];
+      return [
+        {
+          name: `${group.pmuId} Genlik (${unit})`,
+          type: 'line',
+          yAxisIndex: 0,
+          showSymbol: false,
+          sampling: 'lttb',
+          data: groupMetrics.map(metric => [metric.timestampMs, displayValue(signal, metric.amplitude)]),
+          lineStyle: { width: 1.3, color },
+          itemStyle: { color },
+        },
+        {
+          name: `${group.pmuId} Enerji (${unit})`,
+          type: 'line',
+          yAxisIndex: 1,
+          showSymbol: false,
+          sampling: 'lttb',
+          areaStyle: { opacity: 0.08 },
+          data: groupMetrics.map(metric => [metric.timestampMs, displayValue(signal, metric.energyRms)]),
+          lineStyle: { width: 1.1, type: 'dashed', color },
+          itemStyle: { color },
+        },
+      ];
+    }),
+  };
 
   return (
     <div className="card">
-      <div className="card-header">
-        <span className="card-title">Grafik 3 - Enerji ve Genlik</span>
-        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Sinyal bazlı alt gridler</span>
-      </div>
-      <div className="card-body" style={{ display: 'grid', gap: 10, padding: 8 }}>
-        {selectedSignals.map(signal => {
-          const signalMetrics = metrics.filter(metric => metric.signal === signal);
-          if (!signalMetrics.length) return null;
-          const groups = uniqueSeries(signalMetrics);
-          const option = {
-            ...chartBase(themeMode),
-            title: {
-              text: `${SIGNAL_LABELS[signal]} - Genlik ve RMS Enerji`,
-              textStyle: { color: 'var(--text-primary)', fontSize: 12 },
-            },
-            legend: { type: 'scroll', top: 0, right: 58, width: '56%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
-            grid: { top: 42, left: 54, right: 58, bottom: 44 },
-            xAxis: { type: 'time', axisLabel: { color: 'var(--text-muted)', fontSize: 10, hideOverlap: true } },
-            yAxis: [
-              {
-                type: 'value',
-                name: `Genlik (${signalUnit(signal)})`,
-                scale: true,
-                axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
-                splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
-              },
-              {
-                type: 'value',
-                name: `Enerji (${signalUnit(signal)})`,
-                scale: true,
-                axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
-                splitLine: { show: false },
-              },
-            ],
-            series: groups.flatMap((group, index) => {
-              const groupMetrics = signalMetrics.filter(metric => seriesKey(metric) === seriesKey(group));
-              const color = PMU_COLORS[index % PMU_COLORS.length];
-              return [
-                {
-                  name: `${group.pmuId} Genlik`,
-                  type: 'line',
-                  yAxisIndex: 0,
-                  showSymbol: false,
-                  sampling: 'lttb',
-                  data: groupMetrics.map(metric => [metric.timestampMs, displayValue(signal, metric.amplitude)]),
-                  lineStyle: { width: 1.3, color },
-                  itemStyle: { color },
-                },
-                {
-                  name: `${group.pmuId} Enerji`,
-                  type: 'line',
-                  yAxisIndex: 1,
-                  showSymbol: false,
-                  sampling: 'lttb',
-                  areaStyle: { opacity: 0.08 },
-                  data: groupMetrics.map(metric => [metric.timestampMs, displayValue(signal, metric.energyRms)]),
-                  lineStyle: { width: 1.1, type: 'dashed', color },
-                  itemStyle: { color },
-                },
-              ];
-            }),
-          };
-
-          return (
-            <div key={signal} style={{ minHeight: 260 }}>
-              <ReactECharts option={option} style={{ height: 260, width: '100%' }} notMerge={true} lazyUpdate={true} onChartReady={connectOscillationTimeChart} />
-            </div>
-          );
-        })}
+      <div className="card-body" style={{ padding: 6, height: 300 }}>
+        <ReactECharts option={option} style={{ height: '100%', width: '100%' }} notMerge={true} lazyUpdate={true} onChartReady={connectOscillationTimeChart} />
       </div>
     </div>
   );

@@ -334,3 +334,6 @@ Salınım Algılayıcı canlı veri testlerinde kullanılan PMU ölçüm noktala
 - `704 YEŞİLHİSAR, 400 kV KARAPINAR MEKE GÖLÜ`
 
 Bu noktalarda PMU verisi yoğun olabileceği için sorgu süreleri uzayabilir. Boş/verisiz dönen PMU sonuçları başarılı bir şekilde veri kalitesi bulgusu olarak gösterilmeli; analiz sadece gelen gerçek örnekler için çalışmalıdır.
+
+
+codex oturum devam etme: C:\npm\codex.cmd resume --last -a never -s danger-full-access

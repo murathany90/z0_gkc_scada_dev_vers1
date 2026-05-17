@@ -117,6 +117,27 @@ const saveHealthCache = (healthStatus: Record<string, HealthCheckState>) => {
   localStorage.setItem('ytbs_health_cache', JSON.stringify(healthStatus));
 };
 
+const mapYtbsStatus = (status: unknown): YtbsStatus => {
+  const statusMap: Record<string, YtbsStatus> = {
+    Connected: 'connected',
+    SmsRequired: 'sms_required',
+    LoggingIn: 'logging_in',
+    SessionExpired: 'expired',
+    Disconnected: 'disconnected',
+  };
+  return statusMap[String(status)] || 'disconnected';
+};
+
+const mapDataSource = (source: unknown): DataSourceType => {
+  const sourceMap: Record<string, DataSourceType> = {
+    Primary: 'primary',
+    Ytbs: 'ytbs',
+    Mock: 'mock',
+    None: 'none',
+  };
+  return sourceMap[String(source)] || 'none';
+};
+
 const toYtbsGerilimParam = (gerilim: string | number): string => {
   const normalized = String(gerilim).trim();
   const map: Record<string, string> = {
@@ -179,20 +200,29 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
         endpoint: 'ytbs.teias.gov.tr',
       });
 
-      const result = await invoke<string>('ytbs_login', { username, password, kanal });
+      const result = await invoke<YtbsStatusInfo>('ytbs_login', { username, password, kanal });
+      const nextStatus = mapYtbsStatus(result.status);
 
-      if (result.includes('SMS')) {
-        set({ status: 'sms_required', isLoading: false });
+      if (nextStatus === 'sms_required') {
+        set({ status: 'sms_required', dataSource: mapDataSource(result.data_source), isLoading: false });
         useLogStore.getState().addLog({
           type: 'INFO',
           message: 'YTBS giriş başarılı, SMS doğrulaması bekleniyor.',
           endpoint: 'ytbs.teias.gov.tr',
         });
-      } else {
-        set({ status: 'connected', isLoading: false });
+      } else if (nextStatus === 'connected') {
+        set({ status: 'connected', dataSource: mapDataSource(result.data_source), isLoading: false });
         useLogStore.getState().addLog({
           type: 'NETWORK',
           message: 'YTBS bağlantısı başarılı.',
+          endpoint: 'ytbs.teias.gov.tr',
+          details: result.message,
+        });
+      } else {
+        set({ status: nextStatus, dataSource: mapDataSource(result.data_source), isLoading: false, error: result.message });
+        useLogStore.getState().addLog({
+          type: 'ERROR',
+          message: `YTBS giriş beklenmeyen durum: ${result.message}`,
           endpoint: 'ytbs.teias.gov.tr',
         });
       }
@@ -268,22 +298,9 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   checkStatus: async () => {
     try {
       const info = await invoke<YtbsStatusInfo>('ytbs_status');
-      const statusMap: Record<string, YtbsStatus> = {
-        'Connected': 'connected',
-        'SmsRequired': 'sms_required',
-        'LoggingIn': 'logging_in',
-        'SessionExpired': 'expired',
-        'Disconnected': 'disconnected',
-      };
-      const sourceMap: Record<string, DataSourceType> = {
-        'Primary': 'primary',
-        'Ytbs': 'ytbs',
-        'Mock': 'mock',
-        'None': 'none',
-      };
       set({
-        status: statusMap[info.status] || 'disconnected',
-        dataSource: sourceMap[info.data_source] || 'none',
+        status: mapYtbsStatus(info.status),
+        dataSource: mapDataSource(info.data_source),
       });
     } catch (_e) {
       // Sessiz hata

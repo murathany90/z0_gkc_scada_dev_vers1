@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { DEVICE_LIST, DEVICE_MAP, type GkcDevice } from '../../../data/deviceList.ts';
 import { DEFAULT_AMPLITUDE_THRESHOLDS, SAMPLING_RATE_HZ } from '../utils/bands.ts';
+import { buildOscillationDemoSamples } from '../utils/demoSamples.ts';
 import { validatePmuSelection } from '../utils/oscillationMetrics.ts';
 import { rawYtbsRowsToPmuSamples } from '../utils/pmuSamples.ts';
 import { buildOscillationCsv, buildMarkdownReport } from '../utils/reportBuilder.ts';
@@ -19,8 +20,12 @@ import type {
 } from '../types/oscillationTypes.ts';
 
 export type OscillationDetailsTab = 'summary' | 'signals' | 'modal' | 'data' | 'report';
+export type OscillationDataSourceMode = 'none' | 'ytbs' | 'demo';
+export const OSCILLATION_SIGNAL_TABS: PmuSignalKey[] = ['frequency', 'voltage', 'activePower', 'reactivePower'];
 
 interface OscillationStoreState {
+  dataSourceMode: OscillationDataSourceMode;
+  activeSignalTab: PmuSignalKey;
   selectionMode: PmuSelectionMode;
   selectedPmuIds: string[];
   referencePmuId?: string;
@@ -51,6 +56,8 @@ interface OscillationStoreState {
   setWindowSeconds: (seconds: number) => void;
   setStepSeconds: (seconds: number) => void;
   setActiveTab: (tab: OscillationDetailsTab) => void;
+  setActiveSignalTab: (signal: PmuSignalKey) => void;
+  loadDemoData: () => void;
   fetchPmuData: () => Promise<void>;
   runAnalysis: () => Promise<void>;
   clearAnalysis: () => void;
@@ -115,7 +122,28 @@ const selectedDevices = (ids: string[]): PmuFider[] =>
     .filter((device): device is GkcDevice => device !== undefined && device.olcumModu === 'PMU')
     .map(toPmuFider);
 
+const ensureDemoPmuIds = (mode: PmuSelectionMode, ids: string[]): string[] => {
+  const availableIds = new Set(PMU_FIDERS.map(pmu => pmu.id));
+  const selected = unique(ids).filter(id => availableIds.has(id));
+
+  if (mode === 'single') {
+    const first = selected.slice(0, 1);
+    const fallback = PMU_FIDERS[0]?.id;
+    return first.length ? first : fallback ? [fallback] : [];
+  }
+
+  const next = selected.slice(0, 6);
+  PMU_FIDERS.forEach(pmu => {
+    if (next.length < 2 && !next.includes(pmu.id)) {
+      next.push(pmu.id);
+    }
+  });
+  return next.slice(0, 6);
+};
+
 export const useOscillationStore = create<OscillationStoreState>((set, get) => ({
+  dataSourceMode: 'none',
+  activeSignalTab: 'frequency',
   selectionMode: 'single',
   selectedPmuIds: ['285'],
   referencePmuId: '285',
@@ -173,6 +201,55 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
   setWindowSeconds: seconds => set({ windowSeconds: seconds }),
   setStepSeconds: seconds => set({ stepSeconds: seconds }),
   setActiveTab: tab => set({ activeTab: tab }),
+  setActiveSignalTab: signal => set({
+    activeSignalTab: OSCILLATION_SIGNAL_TABS.includes(signal) ? signal : 'frequency',
+  }),
+
+  loadDemoData: () => {
+    const state = get();
+    const selectedPmuIds = ensureDemoPmuIds(state.selectionMode, state.selectedPmuIds);
+    const validation = validatePmuSelection(state.selectionMode, selectedPmuIds);
+    if (!validation.valid) {
+      set({ error: validation.message, dataSourceMode: 'none' });
+      return;
+    }
+
+    const pmuDevices = selectedDevices(selectedPmuIds);
+    const seconds = 180;
+    const startMs = Date.now() - seconds * 1000;
+    const endMs = startMs + seconds * 1000;
+    const samplesByPmu = buildOscillationDemoSamples(pmuDevices, startMs, seconds, SAMPLING_RATE_HZ);
+    const allSamples = Object.values(samplesByPmu)
+      .flat()
+      .sort((left, right) => left.timestampMs - right.timestampMs);
+
+    set({
+      dataSourceMode: 'demo',
+      selectedPmuIds,
+      referencePmuId: selectedPmuIds.includes(state.referencePmuId ?? '')
+        ? state.referencePmuId
+        : selectedPmuIds[0],
+      startTime: toInputValue(new Date(startMs)),
+      endTime: toInputValue(new Date(endMs)),
+      rawSamples: allSamples,
+      rawRowsByPmu: Object.fromEntries(selectedPmuIds.map(pmuId => [pmuId, []])),
+      samplesByPmu,
+      pmuQueryResults: selectedPmuIds.map(pmuId => ({
+        pmuId,
+        status: 'ok',
+        rawRows: [],
+        completedChunks: 1,
+        totalChunks: 1,
+      })),
+      analysisResult: null,
+      reportMarkdown: '',
+      queryProgress: null,
+      queryNotice: `Demo PMU verisi yüklendi: ${selectedPmuIds.length} PMU, ${allSamples.length} örnek, ${SAMPLING_RATE_HZ} Hz.`,
+      loading: false,
+      analyzing: false,
+      error: null,
+    });
+  },
 
   fetchPmuData: async () => {
     const state = get();
@@ -183,8 +260,19 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
       return;
     }
 
+    if (!isTauri()) {
+      set({
+        loading: false,
+        error: null,
+        queryProgress: null,
+        queryNotice: 'Tarayıcı modunda gerçek YTBS PMU sorgusu için Tauri masaüstü ortamı gerekir. Demo verisi yükleyerek ekranı test edebilirsiniz.',
+      });
+      return;
+    }
+
     const gerilimByPmuId = new Map(selectedPmuIds.map(pmuId => [pmuId, toYtbsGerilimParam(DEVICE_MAP.get(pmuId))]));
     set({
+      dataSourceMode: 'none',
       loading: true,
       error: null,
       queryNotice: 'Gerçek YTBS PMU verileri sıralı olarak sorgulanıyor.',
@@ -228,6 +316,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
       ].filter((part): part is string => Boolean(part));
 
       set({
+        dataSourceMode: allSamples.length ? 'ytbs' : 'none',
         loading: false,
         queryProgress: null,
         queryNotice: noticeParts.join(' '),
@@ -239,6 +328,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
       });
     } catch (error) {
       set({
+        dataSourceMode: 'none',
         loading: false,
         queryProgress: null,
         queryNotice: null,
@@ -250,7 +340,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
   runAnalysis: async () => {
     const state = get();
     if (!state.rawSamples.length) {
-      set({ error: 'Analiz için önce gerçek YTBS PMU verisi çekilmelidir.' });
+      set({ error: 'Analiz için önce PMU verisi yüklenmelidir.' });
       return;
     }
 
@@ -283,6 +373,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
   },
 
   clearAnalysis: () => set({
+    dataSourceMode: 'none',
     rawSamples: [],
     rawRowsByPmu: {},
     samplesByPmu: {},
@@ -297,7 +388,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
   exportCsv: () => {
     const samples = get().rawSamples;
     if (!samples.length) {
-      set({ error: 'CSV için gerçek PMU verisi bulunamadı.' });
+      set({ error: 'CSV için PMU verisi bulunamadı.' });
       return;
     }
     downloadTextFile(buildOscillationCsv(samples), `SALINIM_PMU_VERI_${Date.now()}.csv`, 'text/csv;charset=utf-8');

@@ -12,24 +12,36 @@ import {
   toTimeSeries,
   type OscillationThemeMode,
 } from './chartHelpers.ts';
+import { OscillationEmptyState } from './OscillationEmptyState.tsx';
 
 export function RawDataCharts({
   samplesByPmu,
   selectedPmuIds,
-  selectedSignals,
+  signal,
   themeMode,
+  onLoadDemo,
+  onFetchData,
 }: {
   samplesByPmu: Record<string, PmuSample[]>;
   selectedPmuIds: string[];
-  selectedSignals: PmuSignalKey[];
+  signal: PmuSignalKey;
   themeMode: OscillationThemeMode;
+  onLoadDemo: () => void;
+  onFetchData: () => void;
 }) {
   const selectedSamples = selectedPmuIds.flatMap(pmuId => samplesByPmu[pmuId] ?? []);
   if (!selectedSamples.length) {
     return (
       <div className="card">
-        <div className="card-body" style={{ padding: 28, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-          Gerçek YTBS PMU verisi bekleniyor. Veri yoksa analiz veya demo grafik üretilmez.
+        <div className="card-body">
+          <OscillationEmptyState
+            title={`${SIGNAL_LABELS[signal]} grafiği için PMU verisi bekleniyor`}
+            message="YTBS masaüstü sorgusu çalıştırın veya sentetik demo verisini yükleyin."
+            primaryActionLabel="Demo Verisi Yükle"
+            onPrimaryAction={onLoadDemo}
+            secondaryActionLabel="Veriyi Getir"
+            onSecondaryAction={onFetchData}
+          />
         </div>
       </div>
     );
@@ -39,13 +51,13 @@ export function RawDataCharts({
   const option = {
     ...chartBase(themeMode),
     title: {
-      text: 'Grafik 1 - Ham Veri',
-      subtext: 'Frekans, Gerilim, Aktif Güç ve Reaktif Güç ortak zaman ekseninde',
+      text: `Grafik 1 - ${SIGNAL_LABELS[signal]} Ham PMU Verisi`,
+      subtext: `${SIGNAL_LABELS[signal]} (${SIGNAL_UNITS[signal]}) ortak zaman ekseninde`,
       textStyle: { color: 'var(--text-primary)', fontSize: 13 },
       subtextStyle: { color: 'var(--text-muted)', fontSize: 10 },
     },
-    legend: { type: 'scroll', top: 0, right: 58, width: '62%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
-    grid: { top: 46, left: 54, right: 118, bottom: 48 },
+    legend: { type: 'scroll', top: 0, right: 58, width: '58%', textStyle: { color: 'var(--text-muted)', fontSize: 10 } },
+    grid: { top: 46, left: 54, right: 72, bottom: 48 },
     dataZoom: [
       { type: 'inside', start: dataZoomStart, end: 100, minSpan: 0.05, xAxisIndex: [0] },
       { type: 'slider', start: dataZoomStart, end: 100, bottom: 8, height: 18, borderColor: 'var(--border-color)', textStyle: { color: 'var(--text-muted)' }, xAxisIndex: [0] },
@@ -60,38 +72,34 @@ export function RawDataCharts({
       },
       axisLine: { lineStyle: { color: 'var(--border-color)' } },
     },
-    yAxis: selectedSignals.map((signal, index) => ({
+    yAxis: {
       type: 'value',
       name: `${SIGNAL_LABELS[signal]} (${SIGNAL_UNITS[signal]})`,
       scale: true,
-      position: index % 2 === 0 ? 'left' : 'right',
-      offset: Math.floor(index / 2) * 52,
       axisLabel: { color: 'var(--text-muted)', fontSize: 10 },
-      axisLine: { show: true, lineStyle: { color: PMU_COLORS[index % PMU_COLORS.length] } },
-      splitLine: index === 0 ? { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } } : { show: false },
-    })),
-    series: selectedSignals.flatMap((signal, signalIndex) =>
-      selectedPmuIds.map((pmuId, pmuIndex) => {
-        const pmu = PMU_FIDERS.find(item => item.id === pmuId);
-        return {
-          name: `${pmu?.substationName ?? pmuId} ${SIGNAL_LABELS[signal]}`,
-          type: 'line',
-          yAxisIndex: signalIndex,
-          showSymbol: false,
-          sampling: 'lttb',
-          progressive: 5000,
-          data: toTimeSeries(samplesByPmu[pmuId] ?? [], signal),
-          lineStyle: { width: 1.15 },
-          itemStyle: { color: PMU_COLORS[(pmuIndex + signalIndex) % PMU_COLORS.length] },
-          connectNulls: false,
-        };
-      })
-    ),
+      axisLine: { show: true, lineStyle: { color: PMU_COLORS[0] } },
+      splitLine: { lineStyle: { color: 'rgba(148, 163, 184, 0.18)' } },
+    },
+    series: selectedPmuIds.map((pmuId, pmuIndex) => {
+      const pmu = PMU_FIDERS.find(item => item.id === pmuId);
+      const color = PMU_COLORS[pmuIndex % PMU_COLORS.length];
+      return {
+        name: `${pmu?.substationName ?? pmuId} ${SIGNAL_LABELS[signal]} (${SIGNAL_UNITS[signal]})`,
+        type: 'line',
+        showSymbol: false,
+        sampling: 'lttb',
+        progressive: 5000,
+        data: toTimeSeries(samplesByPmu[pmuId] ?? [], signal),
+        lineStyle: { width: 1.15, color },
+        itemStyle: { color },
+        connectNulls: false,
+      };
+    }),
   };
 
   return (
     <div className="card">
-      <div className="card-body" style={{ padding: 6, height: 360 }}>
+      <div className="card-body" style={{ padding: 6, height: 330 }}>
         <ReactECharts
           option={option}
           style={{ height: '100%', width: '100%' }}

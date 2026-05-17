@@ -125,14 +125,14 @@ pub async fn ytbs_login(
     username: String,
     password: String,
     kanal: String,
-) -> Result<String, String> {
+) -> Result<YtbsStatusInfo, String> {
     let mut ytbs_lock = state.ytbs_client.lock().await;
 
     // Yeni YTBS istemcisi oluştur
     let mut client = YtbsClient::new()?;
     let result = client.login(&username, &password, &kanal).await?;
 
-    let status_msg = match result {
+    let status_msg = match result.clone() {
         YtbsSessionStatus::SmsRequired => "SMS doğrulaması gerekli".to_string(),
         YtbsSessionStatus::Connected => {
             // Doğrudan bağlandı, MGKP sayfasına git
@@ -150,7 +150,12 @@ pub async fn ytbs_login(
     };
 
     *ytbs_lock = Some(client);
-    Ok(status_msg)
+    let data_source = state.active_data_source.lock().await.clone();
+    Ok(YtbsStatusInfo {
+        status: result,
+        data_source,
+        message: status_msg,
+    })
 }
 
 /// SMS doğrulama kodu gönder
