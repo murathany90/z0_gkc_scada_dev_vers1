@@ -14,6 +14,12 @@ import {
   humanizeClassification,
 } from '../src/features/oscillation/utils/reportBuilder.ts';
 import { runAnalysisInWorker } from '../src/features/oscillation/utils/runAnalysisWorker.ts';
+import {
+  buildPrintReportSections,
+  PRINT_REPORT_CHART_SLOTS,
+  PRINT_REPORT_SIGNALS,
+  PRINT_REPORT_TITLE,
+} from '../src/features/oscillation/utils/printReport.ts';
 import { useOscillationStore } from '../src/features/oscillation/store/oscillationStore.ts';
 import {
   calculatePmuDataZoomStart,
@@ -174,6 +180,14 @@ assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 1 && metric.
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 2 && metric.signal === 'activePower'), 'demo data should include local MW mode');
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 3 && metric.signal === 'reactivePower'), 'demo data should include forced MVAr mode');
 assert.ok(demoAnalysis.windowMetrics.some(metric => metric.mode === 4 && metric.passiveTorsion), 'demo data should include passive torsion diagnostics');
+assert.equal(PRINT_REPORT_TITLE, 'Salınım Algılayıcı - PMU Modal Analiz ve Raporlama');
+assert.deepEqual(PRINT_REPORT_SIGNALS, ['frequency', 'voltage', 'activePower', 'reactivePower']);
+assert.deepEqual(PRINT_REPORT_CHART_SLOTS.map(slot => slot.id), ['raw', 'modeDamping', 'energyAmplitude']);
+const printSections = buildPrintReportSections(demoAnalysis, demoPmus);
+assert.equal(printSections.length, 4, 'PDF report should create one detailed landscape section for each PMU metric');
+assert.ok(printSections.every(section => section.chartSlots.length === 3), 'each metric PDF page should include raw, mode/DR and energy/amplitude charts');
+assert.ok(printSections.some(section => section.signal === 'frequency' && section.events.some(event => event.mode === 1)), 'frequency PDF page should include interarea oscillation events');
+assert.ok(printSections.some(section => section.signal === 'activePower' && section.thresholdLabel.includes('%5')), 'active power PDF page should show its oscillation threshold');
 
 useOscillationStore.setState({
   dataSourceMode: 'ytbs',

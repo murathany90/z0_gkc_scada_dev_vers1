@@ -337,3 +337,306 @@ Bu noktalarda PMU verisi yoğun olabileceği için sorgu süreleri uzayabilir. B
 
 
 codex oturum devam etme: C:\npm\codex.cmd resume --last -a never -s danger-full-access
+
+---
+
+## 11. Salınım Algılayıcı - PMU Modal Analiz ve Raporlama Geliştirmeleri
+
+Bu bölüm, son geliştirme döngüsünde Salınım Algılayıcı sayfasına eklenen zaman filtresi güvenliği, modal analiz ilerlemesi, grafik üstü tespit katmanları, Karar Destek Sistemi çıktısı ve PDF rapor üretimi davranışını ayrıntılı biçimde açıklar.
+
+### 11.1. Genel Amaç
+
+Salınım Algılayıcı sayfası, PMU verisini WAMPAC odaklı bir operatör asistanı gibi yorumlamak üzere tasarlanmıştır.
+
+Kullanıcı artık yalnızca ham sinyal grafiği görmez; sistem frekans, gerilim, aktif güç ve reaktif güç ölçümleri üzerinden salınım modlarını sınıflandırır.
+
+Analiz sonucunda her ölçüm metriği için ham veri, filtrelenmiş veri, mod tespiti, damping ratio, enerji ve genlik bilgisi birlikte raporlanır.
+
+Bu yaklaşım, kontrol odası operatörünün olay zamanını, olay süresini, salınım frekansını ve sönümleme eğilimini aynı raporda değerlendirmesini sağlar.
+
+### 11.2. Son Geliştirme Özeti
+
+1. Zaman filtresi değişince eski PMU verisinin yanlışlıkla analiz edilmesi engellendi.
+2. Başlangıç zamanı, bitiş zamanı veya PMU seçimi değiştiğinde ham veri ve analiz sonucu temizlenir.
+3. Pencere, adım veya eşik değiştiğinde yalnız analiz sonucu temizlenir; ham veri korunur.
+4. Analizi Çalıştır butonu güncel ham veri yoksa devre dışı kalır.
+5. Analiz worker akışı yüzde bazlı ilerleme mesajları üretir.
+6. İlerleme çubuğu veri hazırlama, veri kalitesi, bant metrikleri, kayan pencere, ortak mod ve rapor aşamalarını gösterir.
+7. Grafiklerde dataZoom kullanılırken kırmızı/yeşil tespit katmanlarının kaybolmasını önleyen sürekli segment yapısı eklendi.
+8. Grafik tooltip alanlarında Salınım frekansı, salınım zamanı, süre, pencere ve adım bilgisi gösterilir.
+9. Türkçe karakterlerin bozulmaması için HTML dili Türkçe olarak ayarlandı.
+10. Karar Destek Sistemi alanı ham log görünümünden çıkarıldı.
+11. Rapor alanı yönetici özeti, bulgular ve veri kalitesi tabloları içeren okunur bir yapıya taşındı.
+12. PDF RAPOR butonu CSV Dışa Aktar butonunun yanına yerleştirildi.
+13. PDF RAPOR çıktısı yalnız salınım raporunu basar; menü, filtre kartı ve uygulama kabuğu basılmaz.
+14. PDF ilk sayfası yönetici özeti olarak düzenlendi.
+15. PDF sonraki sayfaları Frekans, Gerilim, Aktif Güç ve Reaktif Güç için ayrı yatay sayfalardır.
+16. Her metrik sayfasında grafikler üstte, özet ve bant tabloları altta yer alır.
+17. Her metrik sayfasında ham PMU grafiği, Mod + DR grafiği ve Enerji + Genlik grafiği bulunur.
+18. Tespit edilen salınım olayları kırmızı satır vurgusuyla raporlanır.
+19. Negatif damping görülen olaylar kritik satır sınıfıyla ayrıca belirginleştirilir.
+20. MOD_YOK gibi ham teknik kodlar operatör diline çevrilir.
+
+### 11.3. Dört Modlu Salınım Sınıflandırması
+
+Salınım Algılayıcı, dört temel modal bant üzerinden çalışır.
+
+1. Mod 1 Interarea, yani Bölgeler Arası salınım bandıdır.
+2. Mod 1 frekans aralığı 0.1 Hz ile 0.4 Hz arasındadır.
+3. Mod 1 geniş alan sistem kararlılığı açısından en kritik elektromekanik banttır.
+4. Mod 1 tespiti, uzak bölgeler arasında enerji alışverişi kaynaklı düşük frekanslı salınım riskini gösterir.
+5. Mod 1 için negatif damping varsa olay büyüme eğiliminde kabul edilir.
+6. Mod 1 raporlarında operatöre interarea salınım cümlesi üretilir.
+7. Mod 2 Local, yani Yerel salınım bandıdır.
+8. Mod 2 frekans aralığı 0.4 Hz ile 2 Hz arasındadır.
+9. Mod 2 çoğunlukla tek bölge, santral veya yakın elektriksel alan davranışını temsil eder.
+10. Mod 2 olayları yerel elektromekanik salınım adayı olarak raporlanır.
+11. Mod 2 aktif güç ve gerilimde belirginleşebilir.
+12. Mod 2 için sönümleme oranı izleme açısından önemlidir.
+13. Mod 3 Forced, yani Zorlanmış salınım bandıdır.
+14. Mod 3 frekans aralığı 2 Hz ile 4.5 Hz arasındadır.
+15. Mod 3 sürekli dış etki, kontrol döngüsü veya ekipman kaynaklı zorlanmış bileşenleri temsil edebilir.
+16. Mod 3 özellikle reaktif güç ve aktif güç sinyallerinde gözlemlenebilir.
+17. Mod 3 olayları zorlanmış salınım adayı olarak raporlanır.
+18. Mod 4 Torsiyon, pasif diagnostik banttır.
+19. Mod 4 frekans aralığı 4.5 Hz ile 5 Hz arasındadır.
+20. Mod 4 doğrudan aktif alarm sınıfı yerine diagnostik izleme amacıyla kullanılır.
+21. Mod 4 tespitleri torsiyonel davranış şüphesi oluşturur.
+22. Mod 4 raporda pasif torsiyon bilgisiyle ayrıştırılır.
+23. Yok durumu salınım yok anlamına gelir.
+24. Salınım yok ifadesi ham MOD_YOK kodu yerine kullanıcıya gösterilir.
+25. Sınıflandırma etiketleri operatör diline çevrilir.
+
+### 11.4. Dört Ölçüm Metriği
+
+Salınım Algılayıcı dört PMU ölçüm metriğini birlikte değerlendirir.
+
+1. Frekans metriği F harfiyle temsil edilir.
+2. Frekans birimi Hz olarak raporlanır.
+3. Frekans eşik değeri mHz cinsinden tanımlanır.
+4. Varsayılan frekans salınım eşiği 10 mHz olarak kullanılır.
+5. Frekans grafiği sistem frekansındaki düşük genlikli elektromekanik hareketleri izler.
+6. Frekans interarea salınım tespitinde birincil sinyallerden biridir.
+7. Frekans PDF sayfasında ham frekans, filtrelenmiş frekans, mod tespiti ve DR bilgisi yer alır.
+8. Gerilim metriği V harfiyle temsil edilir.
+9. Gerilim birimi kV olarak raporlanır.
+10. Gerilim eşiği yüzde olarak tanımlanır.
+11. Varsayılan gerilim salınım eşiği yüzde 5 olarak kullanılır.
+12. Gerilim grafiği bara veya fider gerilimindeki salınım bileşenlerini izler.
+13. Gerilim için per-unit görünüm desteklenir, ancak PDF raporda temel değer ekseni okunur şekilde verilir.
+14. Gerilim PDF sayfasında ham gerilim, filtrelenmiş gerilim, mod tespiti ve enerji/genlik grafikleri bulunur.
+15. Aktif Güç metriği P harfiyle temsil edilir.
+16. Aktif Güç birimi MW olarak raporlanır.
+17. Aktif Güç eşiği yüzde olarak tanımlanır.
+18. Varsayılan aktif güç salınım eşiği yüzde 5 olarak kullanılır.
+19. Aktif Güç yerel ve bölgeler arası güç salınımlarını anlamak için önemlidir.
+20. Aktif Güç PDF sayfasında MW ekseni, mod sınıfı ve olay yorumları birlikte verilir.
+21. Reaktif Güç metriği Q harfiyle temsil edilir.
+22. Reaktif Güç birimi MVAr olarak raporlanır.
+23. Reaktif Güç eşiği yüzde olarak tanımlanır.
+24. Varsayılan reaktif güç salınım eşiği yüzde 5 olarak kullanılır.
+25. Reaktif Güç özellikle zorlanmış salınım ve gerilim destek davranışları için takip edilir.
+26. Reaktif Güç PDF sayfasında MVAr ekseni, enerji/genlik çizimi ve olay yorumu bulunur.
+
+### 11.5. Eşik Mantığı
+
+1. Frekans eşiği mutlak mHz büyüklüğüyle değerlendirilir.
+2. Frekans sinyalinde 10 mHz üstü salınımlar aktif bulgu adayıdır.
+3. Gerilim eşiği pencere ortalamasına göre yüzde olarak hesaplanır.
+4. Aktif güç eşiği pencere ortalamasına göre yüzde olarak hesaplanır.
+5. Reaktif güç eşiği pencere ortalamasına göre yüzde olarak hesaplanır.
+6. Pencere ortalaması sıfıra yakınsa güvenli eşik hesaplama kullanılır.
+7. Her sinyal için bant RMS, genlik ve baskın frekans hesaplanır.
+8. Eşik üstü pencereler aktif mod olarak işaretlenir.
+9. Eşik altı pencereler salınım yok olarak raporlanır.
+10. Aktif pencereler ardışık ise tek olay altında gruplanır.
+11. Olay başlangıcı ilk aktif pencerenin başlangıcıdır.
+12. Olay bitişi son aktif pencerenin bitişidir.
+13. Olay süresi saniye cinsinden hesaplanır.
+14. PDF raporda olay süresi hem tablo hem yorum içinde görünür.
+15. Negatif damping varsa olay kritik kabul edilir.
+16. Pozitif veya sıfır damping varsa olay izlenen/sönümlenen salınım olarak değerlendirilir.
+17. Damping Ratio yüzde cinsinden raporlanır.
+18. DR yüzde 5 referans çizgisi ve pozitif/negatif eğilimler grafikte izlenebilir.
+19. Kırmızı katman negatif damping veya büyüme eğilimini vurgular.
+20. Yeşil katman sönümlenen veya izlenen salınımı vurgular.
+
+### 11.6. Zaman Filtresi Güvenliği
+
+1. Ham veri artık sorgu parametreleriyle birlikte saklanır.
+2. Saklanan ham veri sorgusunda seçim modu bulunur.
+3. Saklanan ham veri sorgusunda seçili PMU kimlikleri bulunur.
+4. Saklanan ham veri sorgusunda başlangıç zamanı bulunur.
+5. Saklanan ham veri sorgusunda bitiş zamanı bulunur.
+6. Analiz başlatılırken mevcut filtreler ham veri sorgusuyla karşılaştırılır.
+7. Filtreler uyuşmazsa analiz başlatılmaz.
+8. Kullanıcıya verinin güncel olmadığı bilgisi gösterilir.
+9. PMU değişirse ham veri temizlenir.
+10. Başlangıç zamanı değişirse ham veri temizlenir.
+11. Bitiş zamanı değişirse ham veri temizlenir.
+12. Çoklu PMU seçimi değişirse ham veri temizlenir.
+13. Pencere değişirse yalnız analiz temizlenir.
+14. Adım değişirse yalnız analiz temizlenir.
+15. Eşik değişirse yalnız analiz temizlenir.
+16. Bu davranış eski ham verinin yeni zaman aralığı için yanlış yorumlanmasını engeller.
+
+### 11.7. Analiz İlerleme Göstergesi
+
+1. Analiz worker akışı artık progress mesajı üretir.
+2. Veri hazırlama aşaması ilk ilerleme durumudur.
+3. Veri kalitesi aşaması örnek sayısı ve eksiklik kontrollerini temsil eder.
+4. Bant metrikleri aşaması spektral hesaplamaları temsil eder.
+5. Kayan pencere aşaması zaman bazlı mod takibini temsil eder.
+6. Ortak mod ve rapor aşaması olay gruplama ve yorum üretimini temsil eder.
+7. Tamamlandı aşaması yüzde 100 olarak gösterilir.
+8. Kullanıcı Analizi Çalıştır butonuna bastığında süreç geri bildirimi alır.
+9. Progress bar filtre kartı içinde görünür.
+10. Progress metni yüzde ile birlikte gösterilir.
+11. Worker desteklenmiyorsa fallback analiz de progress üretir.
+12. Bu yapı uzun PMU analizlerinde kullanıcı belirsizliğini azaltır.
+
+### 11.8. Grafik Yapısı
+
+1. Grafik 1 ham PMU verisini gösterir.
+2. Grafik 1 filtrelenmiş sinyali de gösterir.
+3. Grafik 1 üzerinde kırmızı ve yeşil tespit katmanları bulunur.
+4. Kırmızı katman negatif damping veya kritik eğilim için kullanılır.
+5. Yeşil katman sönümlenen veya izlenen olaylar için kullanılır.
+6. Grafik 1 x ekseni Zaman olarak adlandırılır.
+7. Grafik 1 y ekseni sinyal adına ve birime göre adlandırılır.
+8. Grafik 2 Mod + DR grafiğidir.
+9. Grafik 2 sol y ekseninde mod sınıfı bulunur.
+10. Grafik 2 sağ y ekseninde DR yüzde değeri bulunur.
+11. Grafik 2 üzerinde üçgen marker ile damping yönü gösterilir.
+12. Yukarı üçgen büyüyen salınımı ifade eder.
+13. Aşağı üçgen sönümlenen salınımı ifade eder.
+14. Grafik 3 Enerji + Genlik grafiğidir.
+15. Grafik 3 bant enerjisini ve salınım genliğini birlikte gösterir.
+16. Grafik 3 olayın baskınlığını anlamaya yardımcı olur.
+17. Tüm grafiklerde dataZoom filterMode none olarak kullanılır.
+18. Bu ayar zoom sırasında overlay serilerinin kaybolmasını engeller.
+19. Overlay çizimleri sparse-null seriler yerine sürekli segment olarak üretilir.
+20. Bu yapı yakınlaştırma sonrası renkli tespit katmanlarını korur.
+
+### 11.9. Tooltip İçeriği
+
+1. Tooltip metinleri Türkçe karakterlerle gösterilir.
+2. Salınım frekansı ifadesi doğru yazılır.
+3. Salınım zamanı başlangıç ve bitiş olarak gösterilir.
+4. Salınım süresi saniye veya dakika/saniye formatıyla gösterilir.
+5. Analiz penceresi tooltip içine eklenir.
+6. Analiz adımı tooltip içine eklenir.
+7. PMU adı tooltip içinde okunur biçimde gösterilir.
+8. Mod etiketi tooltip içinde operatör diliyle yer alır.
+9. DR değeri yüzde olarak gösterilir.
+10. Tooltip, grafik üzerindeki marker ile aynı renk mantığını kullanır.
+
+### 11.10. Karar Destek Sistemi
+
+1. Karar Destek Sistemi ham log metni üretmez.
+2. Önce yönetici özeti verilir.
+3. Ardından olay bazlı karar cümleleri üretilir.
+4. Cümlelerde PMU fider adı yer alır.
+5. Cümlelerde olay zaman aralığı yer alır.
+6. Cümlelerde salınım süresi yer alır.
+7. Cümlelerde baskın frekans yer alır.
+8. Cümlelerde mod bandı yer alır.
+9. Cümlelerde damping yorumlanır.
+10. Negatif damping kararsızlık riski olarak yorumlanır.
+11. Negatif olmayan damping izlenen/sönümlenen olay olarak yorumlanır.
+12. Bulgular tablosu karar cümlelerinin dayandığı veriyi gösterir.
+13. Veri kalitesi tablosu raporun güvenilirliğini gösterir.
+14. Operatör raporu alarm üretmez; mühendislik değerlendirmesi sağlar.
+15. Karar destek formatı WAMPAC arayüz mantığına yaklaştırılmıştır.
+
+### 11.11. PDF RAPOR Butonu
+
+1. PDF RAPOR butonu filtre kartındaki aksiyon grubunda bulunur.
+2. PDF RAPOR butonu CSV Dışa Aktar butonunun yanına taşınmıştır.
+3. Analiz sonucu yoksa PDF RAPOR butonu devre dışıdır.
+4. PDF RAPOR butonu uygulama menülerini yazdırmaz.
+5. PDF RAPOR butonu yalnız salınım raporu DOM alanını yazdırır.
+6. PDF RAPOR çıktısında ilk sayfa yönetici özetidir.
+7. PDF RAPOR çıktısında ikinci sayfa Frekans metriğidir.
+8. PDF RAPOR çıktısında üçüncü sayfa Gerilim metriğidir.
+9. PDF RAPOR çıktısında dördüncü sayfa Aktif Güç metriğidir.
+10. PDF RAPOR çıktısında beşinci sayfa Reaktif Güç metriğidir.
+11. PDF sayfaları A4 landscape düzendedir.
+12. Her metrik sayfasında grafikler üst bölümde bulunur.
+13. Her metrik sayfasında özet bilgiler grafiklerin hemen altında bulunur.
+14. PDF raporda Türkçe karakterler HTML lang tr ve UTF-8 kaynaklarla korunur.
+15. PDF çıktısında karar destek cümleleri, tablolar ve grafikler aynı raporda birleşir.
+
+### 11.12. PDF Sayfa Düzeni
+
+1. Yönetici özeti sayfasında ana başlık Salınım Algılayıcı - PMU Modal Analiz ve Raporlama olarak görünür.
+2. Yönetici özeti sayfasında analiz kapsamı açıklanır.
+3. Yönetici özeti sayfasında seçilen PMU sayısı gösterilir.
+4. Yönetici özeti sayfasında PMU fiderleri listelenir.
+5. Yönetici özeti sayfasında pencere ve adım bilgisi verilir.
+6. Yönetici özeti sayfasında örnekleme frekansı verilir.
+7. Yönetici özeti sayfasında salınım eşikleri tablo halinde verilir.
+8. Yönetici özeti sayfasında veri kalitesi tablo halinde verilir.
+9. Frekans sayfasında ham frekans grafiği bulunur.
+10. Frekans sayfasında Mod + DR grafiği bulunur.
+11. Frekans sayfasında Enerji + Genlik grafiği bulunur.
+12. Gerilim sayfasında ham gerilim grafiği bulunur.
+13. Gerilim sayfasında Mod + DR grafiği bulunur.
+14. Gerilim sayfasında Enerji + Genlik grafiği bulunur.
+15. Aktif Güç sayfasında ham MW grafiği bulunur.
+16. Aktif Güç sayfasında Mod + DR grafiği bulunur.
+17. Aktif Güç sayfasında Enerji + Genlik grafiği bulunur.
+18. Reaktif Güç sayfasında ham MVAr grafiği bulunur.
+19. Reaktif Güç sayfasında Mod + DR grafiği bulunur.
+20. Reaktif Güç sayfasında Enerji + Genlik grafiği bulunur.
+21. Her metrik sayfasında eşik ve birim bilgisi başlık satırında yer alır.
+22. Her metrik sayfasında olay yorumu bulunur.
+23. Her metrik sayfasında bant metrikleri tablosu bulunur.
+24. Her metrik sayfasında tespit satırları kırmızı vurgulanır.
+25. Her metrik sayfasında salınım yok satırları nötr kalır.
+
+### 11.13. Operatör Kullanım Akışı
+
+1. Operatör Salınım Algılayıcı sekmesine geçer.
+2. Operatör tekli veya çoklu PMU seçim modunu belirler.
+3. Operatör PMU GKÇ fiderlerini seçer.
+4. Operatör başlangıç ve bitiş zamanını girer.
+5. Operatör pencere ve adım değerlerini kontrol eder.
+6. Operatör frekans, gerilim, aktif güç ve reaktif güç eşiklerini kontrol eder.
+7. Operatör Veriyi Getir ile gerçek YTBS PMU sorgusu yapar.
+8. Operatör demo doğrulama için Demo Verisi kullanabilir.
+9. Operatör Analizi Çalıştır butonuna basar.
+10. Operatör progress bar üzerinden analiz aşamasını izler.
+11. Operatör Frekans, Gerilim, Aktif Güç ve Reaktif Güç sekmeleri arasında geçiş yapar.
+12. Operatör Grafik 1 üzerinde ham ve filtrelenmiş sinyali inceler.
+13. Operatör Grafik 2 üzerinde mod ve DR davranışını inceler.
+14. Operatör Grafik 3 üzerinde enerji ve genlik davranışını inceler.
+15. Operatör Analiz Özeti sekmesinde olay tablosunu inceler.
+16. Operatör Sinyal Bazlı Analiz sekmesinde bant metriklerini inceler.
+17. Operatör Modal Analiz sekmesinde ortak modları inceler.
+18. Operatör Rapor sekmesinde Karar Destek Sistemi çıktısını inceler.
+19. Operatör CSV Dışa Aktar ile ham PMU verisini alabilir.
+20. Operatör PDF RAPOR ile grafik ve özet içeren raporu yazdırabilir.
+
+### 11.14. Doğrulama Notları
+
+1. `npm run test:oscillation` salınım analiz kontratını doğrular.
+2. Testler zaman filtresi temizliğini doğrular.
+3. Testler progress mesajlarını doğrular.
+4. Testler salınım olaylarının süre üretmesini doğrular.
+5. Testler sınıflandırma etiketlerinin insan diline çevrilmesini doğrular.
+6. Testler tooltip payload içinde Salınım frekansı metnini doğrular.
+7. Testler kırmızı/yeşil overlay segmentlerinin sürekli olmasını doğrular.
+8. Testler PDF rapor yapısının dört metrik sayfası üretmesini doğrular.
+9. Testler her metrik sayfasında üç grafik slotu olmasını doğrular.
+10. `npm run build` TypeScript ve Vite üretim derlemesini doğrular.
+11. `npm run test:ytbs-pmu` gerçek PMU parse davranışını korur.
+12. `npm run test:scada-query-chunks` SCADA sorgu chunk davranışını korur.
+13. Tarayıcı QA sırasında demo veri yüklenmelidir.
+14. Tarayıcı QA sırasında analiz çalıştırılmalıdır.
+15. Tarayıcı QA sırasında PDF RAPOR butonunun aktif olduğu doğrulanmalıdır.
+16. Tarayıcı QA sırasında print DOM içinde grafik alanları aranmalıdır.
+17. Tarayıcı QA sırasında konsolda hata ve uyarı olmamalıdır.
+18. Tarayıcı QA sırasında 1366 piksel masaüstü görünüm kontrol edilmelidir.
+19. Tarayıcı QA sırasında dar genişlik görünüm kontrol edilmelidir.
+20. PDF önizleme sırasında özet + dört metrik sayfası ayrı sayfalarda görünmelidir.

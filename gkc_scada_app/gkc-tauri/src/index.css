@@ -1000,7 +1000,96 @@ body {
 }
 
 .oscillation-print-report {
-  display: none;
+  position: fixed;
+  top: 0;
+  left: -12000px;
+  width: 1120px;
+  min-height: 780px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: #ffffff;
+  color: #111827;
+  font-family: Arial, sans-serif;
+}
+
+.oscillation-print-page {
+  width: 1120px;
+  min-height: 780px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 24px;
+  background: #ffffff;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.oscillation-print-page h1,
+.oscillation-print-page h2,
+.oscillation-print-page h3,
+.oscillation-print-page p {
+  color: #111827;
+}
+
+.oscillation-print-summary-grid,
+.oscillation-print-metric-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.oscillation-print-summary-grid section:last-child {
+  grid-column: 1 / -1;
+}
+
+.oscillation-print-decision-list {
+  display: grid;
+  gap: 6px;
+}
+
+.oscillation-print-decision-list p {
+  padding: 7px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+.oscillation-print-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 5px;
+}
+
+.oscillation-print-page-header span {
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.oscillation-print-chart-main,
+.oscillation-print-chart-secondary {
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.oscillation-print-chart-main {
+  height: 250px;
+}
+
+.oscillation-print-chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.oscillation-print-chart-secondary {
+  height: 188px;
 }
 
 @media (max-width: 1100px) {
@@ -1157,17 +1246,22 @@ body {
     inset: 0 auto auto 0;
     display: block;
     width: 100%;
+    min-height: auto;
+    opacity: 1;
+    pointer-events: auto;
+    z-index: auto;
     background: #ffffff;
     color: #111827;
   }
 
   .oscillation-print-page {
-    min-height: 185mm;
+    width: 100%;
+    min-height: 188mm;
     page-break-after: always;
     break-after: page;
     display: grid;
     align-content: start;
-    gap: 8px;
+    gap: 3mm;
     padding: 0;
     font-family: Arial, sans-serif;
   }
@@ -1194,6 +1288,32 @@ body {
     font-size: 11px;
     line-height: 1.35;
     color: #1f2937;
+  }
+
+  .oscillation-print-page-header {
+    padding-bottom: 2mm;
+  }
+
+  .oscillation-print-chart-main {
+    height: 62mm;
+  }
+
+  .oscillation-print-chart-row {
+    gap: 3mm;
+  }
+
+  .oscillation-print-chart-secondary {
+    height: 43mm;
+  }
+
+  .oscillation-print-metric-summary {
+    grid-template-columns: 0.9fr 1.25fr;
+    gap: 3mm;
+  }
+
+  .oscillation-print-summary-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 3mm;
   }
 
   .oscillation-table {

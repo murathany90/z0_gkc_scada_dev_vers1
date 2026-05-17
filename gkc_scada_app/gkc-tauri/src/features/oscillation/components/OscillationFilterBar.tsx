@@ -29,7 +29,7 @@ const numericOptions = (values: number[]) => values.map(value => <option key={va
 const formatThresholdValue = (value: number, unit: string): string =>
   unit === '%' ? `%${value}` : `${value} ${unit}`;
 
-export function OscillationFilterBar() {
+export function OscillationFilterBar({ onPrintReport }: { onPrintReport?: () => void }) {
   const store = useOscillationStore();
   const selectedPmus = PMU_FIDERS.filter(pmu => store.selectedPmuIds.includes(pmu.id));
   const durationMs = new Date(store.endTime).getTime() - new Date(store.startTime).getTime();
@@ -244,6 +244,7 @@ export function OscillationFilterBar() {
             </button>
             <button type="button" className="btn btn-outline btn-compact" onClick={store.generateReport} disabled={!store.analysisResult}>Rapor Oluştur</button>
             <button type="button" className="btn btn-outline btn-compact" onClick={store.exportCsv} disabled={!store.rawSamples.length}>CSV Dışa Aktar</button>
+            <button type="button" className="btn btn-outline btn-compact" onClick={onPrintReport} disabled={!store.analysisResult}>PDF RAPOR</button>
           </div>
         </div>
         {store.analysisProgress && (

@@ -1,6 +1,7 @@
 import { PMU_FIDERS, useOscillationStore } from '../store/oscillationStore.ts';
 import { OscillationDetailsTabs } from './OscillationDetailsTabs.tsx';
 import { OscillationFilterBar } from './OscillationFilterBar.tsx';
+import { OscillationPrintReport } from './OscillationPrintReport.tsx';
 import { OscillationSignalTabs } from './OscillationSignalTabs.tsx';
 import { RawDataCharts } from './RawDataCharts.tsx';
 import { EnergyAmplitudeCharts, ModeDampingChart } from './WindowMetricsCharts.tsx';
@@ -11,10 +12,14 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
   const pmuDevices = PMU_FIDERS.filter(pmu => store.selectedPmuIds.includes(pmu.id));
   const handleFetch = () => { void store.fetchPmuData(); };
   const handleRunAnalysis = () => { void store.runAnalysis(); };
+  const handlePrintReport = () => {
+    if (!store.analysisResult) return;
+    window.setTimeout(() => window.print(), 160);
+  };
 
   return (
     <>
-      <OscillationFilterBar />
+      <OscillationFilterBar onPrintReport={handlePrintReport} />
       {store.error && (
         <div className="card" style={{ borderColor: 'var(--accent-red)', marginBottom: 12 }}>
           <div className="card-body" style={{ color: 'var(--accent-red)', fontSize: 12 }}>{store.error}</div>
@@ -63,6 +68,15 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
           reportMarkdown={store.reportMarkdown}
         />
       </div>
+      <OscillationPrintReport
+        result={store.analysisResult}
+        pmuDevices={pmuDevices}
+        samplesByPmu={store.samplesByPmu}
+        selectedPmuIds={store.selectedPmuIds}
+        smoothingSettings={store.smoothingSettings}
+        windowSeconds={store.windowSeconds}
+        stepSeconds={store.stepSeconds}
+      />
     </>
   );
 }
