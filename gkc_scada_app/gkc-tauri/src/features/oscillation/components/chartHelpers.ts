@@ -1,3 +1,5 @@
+import * as echarts from 'echarts';
+import type { EChartsType } from 'echarts';
 import type { PmuSample, PmuSignalKey, SignalBandMetric } from '../types/oscillationTypes.ts';
 import { getSignalValue } from '../utils/pmuSamples.ts';
 
@@ -43,6 +45,20 @@ export const SIGNAL_COLORS: Record<PmuSignalKey, string> = {
 };
 
 export const PMU_COLORS = ['#22c55e', '#38bdf8', '#f97316', '#a78bfa', '#f43f5e', '#14b8a6'];
+export const OSCILLATION_TIME_CHART_GROUP = 'oscillation-time-axis-lock';
+
+const connectedGroups = new Set<string>();
+
+export const connectOscillationTimeChart = (
+  chart: EChartsType,
+  groupId = OSCILLATION_TIME_CHART_GROUP,
+): void => {
+  chart.group = groupId;
+  if (!connectedGroups.has(groupId)) {
+    echarts.connect(groupId);
+    connectedGroups.add(groupId);
+  }
+};
 
 export const formatMetricNumber = (value: number | null | undefined, digits = 3): string =>
   Number.isFinite(value) ? Number(value).toLocaleString('tr-TR', { maximumFractionDigits: digits }) : '-';

@@ -6,6 +6,9 @@ export type PmuSignalKey =
   | 'activePower'
   | 'reactivePower';
 
+export type OscillationBandId = 'INTERAREA' | 'LOCAL' | 'FORCED' | 'TORSION_PASSIVE';
+export type OscillationModeValue = 0 | 1 | 2 | 3 | 4;
+
 export interface PmuFider {
   id: string;
   name: string;
@@ -42,14 +45,23 @@ export interface PmuSample {
 }
 
 export interface OscillationBand {
-  id: string;
+  id: OscillationBandId;
   name: string;
   fMin: number;
   fMax: number;
   enabled: boolean;
   primary?: boolean;
+  modeValue: Exclude<OscillationModeValue, 0>;
+  passive?: boolean;
   confidence: 'low' | 'medium' | 'high' | 'limited' | 'not-supported';
   description?: string;
+}
+
+export interface OscillationAmplitudeThresholds {
+  frequencyMhz: number;
+  voltagePercent: number;
+  activePowerPercent: number;
+  reactivePowerPercent: number;
 }
 
 export type OscillationClassification =
@@ -71,7 +83,7 @@ export interface SpectrumPoint {
 export interface SignalBandMetric {
   pmuId: string;
   signal: PmuSignalKey;
-  bandId: string;
+  bandId: OscillationBandId;
   dominantFrequencyHz: number | null;
   bandRms: number | null;
   peakAmplitude: number | null;
@@ -83,6 +95,20 @@ export interface SignalBandMetric {
   classificationLabel: OscillationClassification;
   dataQualityScore: number;
   spectrum?: SpectrumPoint[];
+}
+
+export interface OscillationWindowMetric {
+  timestampMs: number;
+  pmuId: string;
+  signal: PmuSignalKey;
+  mode: OscillationModeValue;
+  bandId: OscillationBandId | null;
+  dominantFrequencyHz: number | null;
+  amplitude: number | null;
+  thresholdValue: number;
+  energyRms: number | null;
+  dampingRatioPercent: number | null;
+  passiveTorsion: boolean;
 }
 
 export interface ModeShapePoint {
@@ -124,6 +150,7 @@ export interface OscillationAnalysisResult {
     stepSeconds: number;
     selectedSignals: PmuSignalKey[];
     selectedBands: string[];
+    amplitudeThresholds: OscillationAmplitudeThresholds;
   };
   dataQuality: {
     expectedSamplesPerSignal: number;
@@ -132,10 +159,11 @@ export interface OscillationAnalysisResult {
     pmuQuality: PmuQualitySummary[];
   };
   metrics: SignalBandMetric[];
+  windowMetrics: OscillationWindowMetric[];
   commonModes: Array<{
     modeId: string;
     frequencyHz: number;
-    bandId: string;
+    bandId: OscillationBandId;
     participatingPmuIds: string[];
     averageCoherence?: number;
     averageDampingRatioPercent?: number;

@@ -38,8 +38,8 @@ export function SpectrumChart({
       type: 'line',
       showSymbol: false,
       sampling: 'lttb',
-      markArea: metric.bandId === 'B2'
-        ? { silent: true, itemStyle: { color: 'rgba(34,197,94,0.09)' }, data: [[{ xAxis: 0.1 }, { xAxis: 0.2 }]] }
+      markArea: metric.bandId === 'INTERAREA'
+        ? { silent: true, itemStyle: { color: 'rgba(34,197,94,0.09)' }, data: [[{ xAxis: 0.1 }, { xAxis: 0.4 }]] }
         : undefined,
       data: (metric.spectrum ?? []).map(point => [point.frequencyHz, point.power]),
     })),

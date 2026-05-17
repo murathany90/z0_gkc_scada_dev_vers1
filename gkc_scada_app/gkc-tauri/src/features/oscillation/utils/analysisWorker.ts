@@ -1,6 +1,7 @@
 import { calculateOscillationAnalysis } from './oscillationMetrics.ts';
 import type {
   OscillationAnalysisResult,
+  OscillationAmplitudeThresholds,
   PmuFider,
   PmuSample,
   PmuSelectionMode,
@@ -20,7 +21,7 @@ export interface AnalysisWorkerRequest {
   startTime: string;
   endTime: string;
   selectedSignals: PmuSignalKey[];
-  selectedBandIds: string[];
+  amplitudeThresholds: OscillationAmplitudeThresholds;
   samplingRateHz: number;
   windowSeconds: number;
   stepSeconds: number;

@@ -2,6 +2,12 @@ import type { SpectrumPoint } from '../types/oscillationTypes.ts';
 
 const TWO_PI = Math.PI * 2;
 
+export interface PeakAmplitudeEstimate {
+  dominantFrequencyHz: number | null;
+  amplitude: number | null;
+  spectrum: SpectrumPoint[];
+}
+
 export const mean = (values: number[]): number =>
   values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 
@@ -131,6 +137,41 @@ export const spectralEnergy = (
   return values.reduce((sum, point) => sum + point.power, 0);
 };
 
+export const estimatePeakAmplitude = (
+  values: number[],
+  samplingRateHz: number,
+  fMin: number,
+  fMax: number,
+): PeakAmplitudeEstimate => {
+  const finiteValues = values.filter(Number.isFinite);
+  const spectrum = buildSpectrum(finiteValues, samplingRateHz, fMin, fMax);
+  const dominantFrequencyHz = estimateDominantFrequency(spectrum, fMin, fMax);
+  if (!dominantFrequencyHz || finiteValues.length < 8) {
+    return { dominantFrequencyHz, amplitude: null, spectrum };
+  }
+
+  const detrended = linearDetrend(finiteValues);
+  let real = 0;
+  let imaginary = 0;
+  let windowSum = 0;
+  detrended.forEach((value, index) => {
+    const windowValue = hannWindow(detrended.length, index);
+    const windowed = value * windowValue;
+    const angle = TWO_PI * dominantFrequencyHz * index / samplingRateHz;
+    real += windowed * Math.cos(angle);
+    imaginary -= windowed * Math.sin(angle);
+    windowSum += windowValue;
+  });
+
+  const magnitude = Math.sqrt(real * real + imaginary * imaginary);
+  const amplitude = windowSum > 0 ? (2 * magnitude) / windowSum : null;
+  return {
+    dominantFrequencyHz,
+    amplitude: amplitude !== null && Number.isFinite(amplitude) ? amplitude : null,
+    spectrum,
+  };
+};
+
 export const estimateDampingRatio = (
   detrendedValues: number[],
   samplingRateHz: number,
@@ -140,42 +181,40 @@ export const estimateDampingRatio = (
     return { dampingRatioPercent: null, dampingSigma: null };
   }
 
-  const envelopeWindow = Math.max(3, Math.round(samplingRateHz / dominantFrequencyHz / 3));
-  const envelopes: Array<{ t: number; value: number }> = [];
+  const minPeakDistance = Math.max(1, Math.round(samplingRateHz / dominantFrequencyHz / 2));
+  const peaks: Array<{ index: number; value: number }> = [];
 
-  for (let index = 0; index < detrendedValues.length; index += envelopeWindow) {
-    const segment = detrendedValues.slice(index, index + envelopeWindow);
-    const segmentRms = rms(segment);
-    if (segmentRms && segmentRms > 0) {
-      envelopes.push({ t: (index + segment.length / 2) / samplingRateHz, value: segmentRms });
+  for (let index = 1; index < detrendedValues.length - 1; index += 1) {
+    const previous = Math.abs(detrendedValues[index - 1]);
+    const current = Math.abs(detrendedValues[index]);
+    const next = Math.abs(detrendedValues[index + 1]);
+    if (current >= previous && current > next && current > 0) {
+      const lastPeak = peaks[peaks.length - 1];
+      if (!lastPeak || index - lastPeak.index >= minPeakDistance) {
+        peaks.push({ index, value: current });
+      } else if (current > lastPeak.value) {
+        peaks[peaks.length - 1] = { index, value: current };
+      }
     }
   }
 
-  if (envelopes.length < 4) {
+  if (peaks.length < 2) {
     return { dampingRatioPercent: null, dampingSigma: null };
   }
 
-  const tMean = mean(envelopes.map(point => point.t));
-  const yMean = mean(envelopes.map(point => Math.log(point.value)));
-  let numerator = 0;
-  let denominator = 0;
-
-  envelopes.forEach(point => {
-    const tCentered = point.t - tMean;
-    numerator += tCentered * (Math.log(point.value) - yMean);
-    denominator += tCentered * tCentered;
-  });
-
-  if (denominator <= 0) {
+  const first = peaks[0].value;
+  const last = peaks[peaks.length - 1].value;
+  if (first <= 0 || last <= 0) {
     return { dampingRatioPercent: null, dampingSigma: null };
   }
 
-  const sigma = numerator / denominator;
-  const omegaD = TWO_PI * dominantFrequencyHz;
-  const zeta = -sigma / Math.sqrt(sigma * sigma + omegaD * omegaD);
+  const decrement = Math.log(first / last) / (peaks.length - 1);
+  const zetaPercent = (decrement / Math.sqrt(TWO_PI * TWO_PI + decrement * decrement)) * 100;
+  const elapsedSeconds = (peaks[peaks.length - 1].index - peaks[0].index) / samplingRateHz;
+  const sigma = elapsedSeconds > 0 ? Math.log(last / first) / elapsedSeconds : null;
   return {
-    dampingRatioPercent: Number.isFinite(zeta) ? zeta * 100 : null,
-    dampingSigma: Number.isFinite(sigma) ? sigma : null,
+    dampingRatioPercent: Number.isFinite(zetaPercent) ? zetaPercent : null,
+    dampingSigma: sigma !== null && Number.isFinite(sigma) ? sigma : null,
   };
 };
 

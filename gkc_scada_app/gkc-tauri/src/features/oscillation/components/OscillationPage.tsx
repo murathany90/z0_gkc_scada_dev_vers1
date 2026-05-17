@@ -1,9 +1,8 @@
 import { PMU_FIDERS, useOscillationStore } from '../store/oscillationStore.ts';
-import { MultiPmuAnalysisPanel } from './MultiPmuAnalysisPanel.tsx';
 import { OscillationDetailsTabs } from './OscillationDetailsTabs.tsx';
 import { OscillationFilterBar } from './OscillationFilterBar.tsx';
 import { RawDataCharts } from './RawDataCharts.tsx';
-import { SinglePmuAnalysisPanel } from './SinglePmuAnalysisPanel.tsx';
+import { EnergyAmplitudeCharts, ModeDampingChart } from './WindowMetricsCharts.tsx';
 import type { OscillationThemeMode } from './chartHelpers.ts';
 
 export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode }) {
@@ -25,9 +24,10 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
       </div>
       <RawDataCharts samplesByPmu={store.samplesByPmu} selectedPmuIds={store.selectedPmuIds} selectedSignals={store.selectedSignals} themeMode={themeMode} />
       <div style={{ marginTop: 12 }}>
-        {store.selectionMode === 'multi'
-          ? <MultiPmuAnalysisPanel result={store.analysisResult} themeMode={themeMode} />
-          : <SinglePmuAnalysisPanel result={store.analysisResult} themeMode={themeMode} />}
+        <ModeDampingChart metrics={store.analysisResult?.windowMetrics ?? []} themeMode={themeMode} />
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <EnergyAmplitudeCharts metrics={store.analysisResult?.windowMetrics ?? []} selectedSignals={store.selectedSignals} themeMode={themeMode} />
       </div>
       <div style={{ marginTop: 12 }}>
         <OscillationDetailsTabs

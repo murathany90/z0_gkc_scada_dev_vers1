@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { DEVICE_LIST, DEVICE_MAP, type GkcDevice } from '../../../data/deviceList.ts';
-import { SAMPLING_RATE_HZ } from '../utils/bands.ts';
+import { DEFAULT_AMPLITUDE_THRESHOLDS, SAMPLING_RATE_HZ } from '../utils/bands.ts';
 import { validatePmuSelection } from '../utils/oscillationMetrics.ts';
 import { rawYtbsRowsToPmuSamples } from '../utils/pmuSamples.ts';
 import { buildOscillationCsv, buildMarkdownReport } from '../utils/reportBuilder.ts';
@@ -9,6 +9,7 @@ import { fetchSequentialPmuRawData, type RangeRequest } from '../utils/sequentia
 import { runAnalysisInWorker } from '../utils/runAnalysisWorker.ts';
 import type {
   OscillationAnalysisResult,
+  OscillationAmplitudeThresholds,
   OscillationQueryProgress,
   PmuFider,
   PmuSample,
@@ -17,7 +18,6 @@ import type {
   SequentialPmuResult,
 } from '../types/oscillationTypes.ts';
 
-export type OscillationBandProfile = 'TR_INTERAREA' | 'GENERAL' | 'CUSTOM';
 export type OscillationDetailsTab = 'summary' | 'signals' | 'modal' | 'data' | 'report';
 
 interface OscillationStoreState {
@@ -27,8 +27,7 @@ interface OscillationStoreState {
   startTime: string;
   endTime: string;
   selectedSignals: PmuSignalKey[];
-  selectedBandProfile: OscillationBandProfile;
-  selectedBands: string[];
+  amplitudeThresholds: OscillationAmplitudeThresholds;
   windowSeconds: number;
   stepSeconds: number;
   rawSamples: PmuSample[];
@@ -48,8 +47,7 @@ interface OscillationStoreState {
   setReferencePmuId: (id?: string) => void;
   setDateRange: (start: string, end: string) => void;
   setSelectedSignals: (signals: PmuSignalKey[]) => void;
-  setBandProfile: (profile: OscillationBandProfile) => void;
-  setSelectedBands: (ids: string[]) => void;
+  setAmplitudeThreshold: (key: keyof OscillationAmplitudeThresholds, value: number) => void;
   setWindowSeconds: (seconds: number) => void;
   setStepSeconds: (seconds: number) => void;
   setActiveTab: (tab: OscillationDetailsTab) => void;
@@ -124,8 +122,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
   startTime: toInputValue(defaultStart),
   endTime: toInputValue(defaultEnd),
   selectedSignals: ['frequency', 'voltage', 'activePower', 'reactivePower'],
-  selectedBandProfile: 'TR_INTERAREA',
-  selectedBands: ['B2'],
+  amplitudeThresholds: DEFAULT_AMPLITUDE_THRESHOLDS,
   windowSeconds: 120,
   stepSeconds: 30,
   rawSamples: [],
@@ -167,15 +164,12 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
   setReferencePmuId: id => set({ referencePmuId: id }),
   setDateRange: (start, end) => set({ startTime: start, endTime: end, error: null }),
   setSelectedSignals: signals => set({ selectedSignals: signals.length ? signals : ['frequency'] }),
-  setBandProfile: profile => set({
-    selectedBandProfile: profile,
-    selectedBands: profile === 'TR_INTERAREA'
-      ? ['B2']
-      : profile === 'GENERAL'
-        ? ['B1', 'B2', 'B3', 'B4', 'B5']
-        : get().selectedBands,
-  }),
-  setSelectedBands: ids => set({ selectedBands: ids }),
+  setAmplitudeThreshold: (key, value) => set(state => ({
+    amplitudeThresholds: {
+      ...state.amplitudeThresholds,
+      [key]: Number.isFinite(value) ? Math.max(0, value) : state.amplitudeThresholds[key],
+    },
+  })),
   setWindowSeconds: seconds => set({ windowSeconds: seconds }),
   setStepSeconds: seconds => set({ stepSeconds: seconds }),
   setActiveTab: tab => set({ activeTab: tab }),
@@ -271,7 +265,7 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
         startTime: state.startTime,
         endTime: state.endTime,
         selectedSignals: state.selectedSignals,
-        selectedBandIds: state.selectedBands,
+        amplitudeThresholds: state.amplitudeThresholds,
         samplingRateHz: SAMPLING_RATE_HZ,
         windowSeconds: state.windowSeconds,
         stepSeconds: state.stepSeconds,

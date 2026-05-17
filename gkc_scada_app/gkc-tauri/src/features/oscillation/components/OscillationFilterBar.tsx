@@ -7,6 +7,15 @@ import { SIGNAL_LABELS } from './chartHelpers.ts';
 const SIGNAL_OPTIONS: PmuSignalKey[] = ['frequency', 'voltage', 'activePower', 'reactivePower'];
 
 const numericOptions = (values: number[]) => values.map(value => <option key={value} value={value}>{value} sn</option>);
+const thresholdInputStyle = {
+  width: '100%',
+  padding: 6,
+  borderRadius: 4,
+  border: '1px solid var(--border-color)',
+  background: 'var(--bg-primary)',
+  color: 'var(--text-primary)',
+  fontSize: 11,
+};
 
 export function OscillationFilterBar() {
   const store = useOscillationStore();
@@ -26,7 +35,7 @@ export function OscillationFilterBar() {
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Gerçek YTBS PMU verisi</span>
       </div>
       <div className="card-body" style={{ padding: '8px 12px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(280px, 1fr) 160px 150px 150px 140px 150px', gap: 8, alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(280px, 1.4fr) 160px 150px 150px 140px minmax(260px, 1fr) 150px', gap: 8, alignItems: 'end' }}>
           <div>
             <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>SEÇİM MODU</label>
             <select id="oscillation-selection-mode" name="oscillation-selection-mode" aria-label="Secim modu" value={store.selectionMode} disabled={store.loading} onChange={event => store.setSelectionMode(event.target.value === 'multi' ? 'multi' : 'single')}
@@ -67,6 +76,66 @@ export function OscillationFilterBar() {
               </select>
             </div>
           </div>
+          <div>
+            <label style={{ display: 'block', fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>SALINIM GENLİK EŞİKLERİ</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(58px, 1fr))', gap: 4 }}>
+              <input
+                id="oscillation-threshold-frequency"
+                name="oscillation-threshold-frequency"
+                aria-label="Frekans genlik esigi mHz"
+                title="Frekans eşiği (mHz)"
+                type="number"
+                min={0}
+                max={1000}
+                step={1}
+                value={store.amplitudeThresholds.frequencyMhz}
+                onChange={event => store.setAmplitudeThreshold('frequencyMhz', Number(event.target.value))}
+                style={thresholdInputStyle}
+              />
+              <input
+                id="oscillation-threshold-voltage"
+                name="oscillation-threshold-voltage"
+                aria-label="Gerilim genlik esigi yuzde"
+                title="Gerilim eşiği (%)"
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={store.amplitudeThresholds.voltagePercent}
+                onChange={event => store.setAmplitudeThreshold('voltagePercent', Number(event.target.value))}
+                style={thresholdInputStyle}
+              />
+              <input
+                id="oscillation-threshold-active-power"
+                name="oscillation-threshold-active-power"
+                aria-label="Aktif guc genlik esigi yuzde"
+                title="Aktif güç eşiği (%)"
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={store.amplitudeThresholds.activePowerPercent}
+                onChange={event => store.setAmplitudeThreshold('activePowerPercent', Number(event.target.value))}
+                style={thresholdInputStyle}
+              />
+              <input
+                id="oscillation-threshold-reactive-power"
+                name="oscillation-threshold-reactive-power"
+                aria-label="Reaktif guc genlik esigi yuzde"
+                title="Reaktif güç eşiği (%)"
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={store.amplitudeThresholds.reactivePowerPercent}
+                onChange={event => store.setAmplitudeThreshold('reactivePowerPercent', Number(event.target.value))}
+                style={thresholdInputStyle}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(58px, 1fr))', gap: 4, marginTop: 2, fontSize: 9, color: 'var(--text-muted)' }}>
+              <span>Frekans mHz</span><span>Gerilim %</span><span>MW %</span><span>MVAr %</span>
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 6 }}>
             <button className="btn btn-primary" disabled={store.loading || invalidDuration} onClick={handleFetch} style={{ fontSize: 11, fontWeight: 700 }}>
               {store.loading ? 'Sorgulanıyor...' : 'Veriyi Getir'}
@@ -98,22 +167,10 @@ export function OscillationFilterBar() {
           ))}
           <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 10 }}>Bantlar</span>
           {OSCILLATION_BANDS.map(band => (
-            <label key={band.id} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: band.enabled ? 1 : 0.55 }}>
-              <input
-                id={`oscillation-band-${band.id}`}
-                name={`oscillation-band-${band.id}`}
-                type="checkbox"
-                disabled={!band.enabled}
-                checked={store.selectedBands.includes(band.id)}
-                onChange={event => {
-                  const next = event.target.checked
-                    ? [...store.selectedBands, band.id]
-                    : store.selectedBands.filter(item => item !== band.id);
-                  store.setSelectedBands(next);
-                }}
-              />
-              {band.id} {band.primary ? 'TR 0.10-0.20' : `${band.fMin}-${band.fMax} Hz`}
-            </label>
+            <span key={band.id} style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: band.passive ? 0.65 : 1 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 999, background: band.passive ? 'var(--text-muted)' : 'var(--accent-blue)', display: 'inline-block' }} />
+              {band.modeValue}: {band.id} {band.fMin}-{band.fMax} Hz{band.passive ? ' pasif' : ''}
+            </span>
           ))}
           <button className="btn" onClick={store.generateReport} disabled={!store.analysisResult} style={{ fontSize: 11, marginLeft: 'auto' }}>Rapor Oluştur</button>
           <button className="btn" onClick={store.exportCsv} disabled={!store.rawSamples.length} style={{ fontSize: 11 }}>CSV Dışa Aktar</button>

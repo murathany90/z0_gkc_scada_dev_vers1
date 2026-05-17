@@ -6,13 +6,13 @@ import {
 } from '../src/features/oscillation/utils/oscillationMetrics.ts';
 import { rawYtbsRowsToPmuSamples } from '../src/features/oscillation/utils/pmuSamples.ts';
 import { fetchSequentialPmuRawData } from '../src/features/oscillation/utils/sequentialQuery.ts';
-import { OSCILLATION_BANDS, validateCustomBand } from '../src/features/oscillation/utils/bands.ts';
+import { DEFAULT_AMPLITUDE_THRESHOLDS, OSCILLATION_BANDS } from '../src/features/oscillation/utils/bands.ts';
 import {
   calculatePmuDataZoomStart,
   formatPmuAxisTime,
   formatPmuTooltipTime,
 } from '../src/features/oscillation/components/chartHelpers.ts';
-import type { PmuFider } from '../src/features/oscillation/types/oscillationTypes.ts';
+import type { PmuFider, PmuSample, PmuSignalKey } from '../src/features/oscillation/types/oscillationTypes.ts';
 
 const fixtureText = readFileSync('../../ytbs_gkc/gkcpmu/gkc1.txt', 'utf8');
 const fixtureMatch = fixtureText.match(/var grafik_verisi_json = (\[[\s\S]*?\]);/);
@@ -37,11 +37,17 @@ assert.equal(validatePmuSelection('multi', ['285']).valid, false);
 assert.equal(validatePmuSelection('multi', ['1', '2', '3', '4', '5', '6']).valid, true);
 assert.equal(validatePmuSelection('multi', ['1', '2', '3', '4', '5', '6', '7']).valid, false);
 
-assert.equal(validateCustomBand(0.1, 4.5).valid, true);
-assert.equal(validateCustomBand(0.1, 5).valid, false);
-assert.equal(OSCILLATION_BANDS.find(band => band.id === 'B2')?.primary, true);
-assert.equal(OSCILLATION_BANDS.find(band => band.id === 'B6')?.enabled, false);
-assert.equal(OSCILLATION_BANDS.find(band => band.id === 'B7')?.enabled, false);
+assert.deepEqual(OSCILLATION_BANDS.map(band => band.id), ['INTERAREA', 'LOCAL', 'FORCED', 'TORSION_PASSIVE']);
+assert.deepEqual(OSCILLATION_BANDS.map(band => band.modeValue), [2, 1, 3, 4]);
+assert.equal(OSCILLATION_BANDS.find(band => band.id === 'INTERAREA')?.fMin, 0.1);
+assert.equal(OSCILLATION_BANDS.find(band => band.id === 'INTERAREA')?.fMax, 0.4);
+assert.equal(OSCILLATION_BANDS.find(band => band.id === 'TORSION_PASSIVE')?.passive, true);
+assert.deepEqual(DEFAULT_AMPLITUDE_THRESHOLDS, {
+  frequencyMhz: 10,
+  voltagePercent: 2,
+  activePowerPercent: 2,
+  reactivePowerPercent: 2,
+});
 
 const samples = rawYtbsRowsToPmuSamples(realPowerRows.slice(0, 600), temelli);
 assert.equal(samples[0].pmuId, '285');
@@ -63,7 +69,7 @@ const analysis = calculateOscillationAnalysis({
   startTime: '2026-05-16T22:00',
   endTime: '2026-05-16T22:10',
   selectedSignals: ['activePower', 'reactivePower'],
-  selectedBandIds: ['B2', 'B3'],
+  amplitudeThresholds: DEFAULT_AMPLITUDE_THRESHOLDS,
   samplingRateHz: 10,
   windowSeconds: 120,
   stepSeconds: 30,
@@ -71,9 +77,105 @@ const analysis = calculateOscillationAnalysis({
 
 assert.equal(analysis.query.pmuIds[0], '285');
 assert.equal(analysis.dataQuality.totalSamples, samples.length);
-assert.ok(analysis.metrics.some(metric => metric.signal === 'activePower' && metric.bandId === 'B2'));
+assert.ok(analysis.metrics.some(metric => metric.signal === 'activePower' && metric.bandId === 'INTERAREA'));
 assert.ok(analysis.metrics.every(metric => metric.dominantFrequencyHz === null || metric.dominantFrequencyHz <= 4.5));
+assert.deepEqual(analysis.query.amplitudeThresholds, DEFAULT_AMPLITUDE_THRESHOLDS);
+assert.ok(Array.isArray(analysis.windowMetrics), 'analysis should include sliding window metrics');
 assert.equal(analysis.commonModes.length >= 0, true);
+
+const syntheticStartMs = new Date('2026-05-16T22:00:00.000Z').getTime();
+const makeSyntheticSamples = ({
+  pmuId,
+  signal,
+  base,
+  amplitude,
+  oscillationHz,
+  seconds = 180,
+  samplingRateHz = 10,
+}: {
+  pmuId: string;
+  signal: PmuSignalKey;
+  base: number;
+  amplitude: number;
+  oscillationHz: number;
+  seconds?: number;
+  samplingRateHz?: number;
+}): PmuSample[] => Array.from({ length: seconds * samplingRateHz }, (_unused, index) => {
+  const timestampMs = syntheticStartMs + index * 1000 / samplingRateHz;
+  const value = base + amplitude * Math.sin(2 * Math.PI * oscillationHz * index / samplingRateHz);
+  return {
+    timestamp: new Date(timestampMs).toISOString(),
+    timestampMs,
+    pmuId,
+    frequency: signal === 'frequency' ? value : 50,
+    voltage: signal === 'voltage' ? value : 400,
+    activePower: signal === 'activePower' ? value : 1000,
+    reactivePower: signal === 'reactivePower' ? value : 100,
+  };
+});
+
+const analyzeSynthetic = (syntheticSamples: PmuSample[], signal: PmuSignalKey) => calculateOscillationAnalysis({
+  selectionMode: 'single',
+  samplesByPmu: new Map([[syntheticSamples[0].pmuId, syntheticSamples]]),
+  pmuDevices: [{ ...temelli, id: syntheticSamples[0].pmuId }],
+  referencePmuId: syntheticSamples[0].pmuId,
+  startTime: new Date(syntheticStartMs).toISOString(),
+  endTime: new Date(syntheticStartMs + syntheticSamples.length * 100).toISOString(),
+  selectedSignals: [signal],
+  amplitudeThresholds: DEFAULT_AMPLITUDE_THRESHOLDS,
+  samplingRateHz: 10,
+  windowSeconds: 120,
+  stepSeconds: 30,
+});
+
+const frequencyInterarea = analyzeSynthetic(
+  makeSyntheticSamples({ pmuId: 'FREQ', signal: 'frequency', base: 50, amplitude: 0.012, oscillationHz: 0.2 }),
+  'frequency',
+);
+assert.ok(frequencyInterarea.windowMetrics.some(metric =>
+  metric.signal === 'frequency'
+  && metric.mode === 2
+  && metric.bandId === 'INTERAREA'
+  && metric.amplitude !== null
+  && metric.amplitude > metric.thresholdValue
+), '12 mHz frequency oscillation should exceed 10 mHz threshold as interarea mode');
+
+const activePowerLocal = analyzeSynthetic(
+  makeSyntheticSamples({ pmuId: 'MW', signal: 'activePower', base: 1000, amplitude: 25, oscillationHz: 1 }),
+  'activePower',
+);
+assert.ok(activePowerLocal.windowMetrics.some(metric =>
+  metric.signal === 'activePower'
+  && metric.mode === 1
+  && metric.bandId === 'LOCAL'
+  && metric.thresholdValue >= 19.5
+  && metric.thresholdValue <= 20.5
+  && metric.amplitude !== null
+  && metric.amplitude > metric.thresholdValue
+), '25 MW local oscillation should exceed 2% of 1000 MW window mean');
+
+const belowThreshold = analyzeSynthetic(
+  makeSyntheticSamples({ pmuId: 'QUIET', signal: 'frequency', base: 50, amplitude: 0.005, oscillationHz: 0.2 }),
+  'frequency',
+);
+assert.ok(belowThreshold.windowMetrics.some(metric =>
+  metric.signal === 'frequency'
+  && metric.mode === 0
+  && metric.bandId === null
+  && metric.amplitude !== null
+  && metric.amplitude < metric.thresholdValue
+), '5 mHz frequency oscillation should stay below 10 mHz threshold');
+
+const passiveTorsion = analyzeSynthetic(
+  makeSyntheticSamples({ pmuId: 'TORSION', signal: 'frequency', base: 50, amplitude: 0.02, oscillationHz: 4.7 }),
+  'frequency',
+);
+assert.ok(passiveTorsion.windowMetrics.some(metric =>
+  metric.signal === 'frequency'
+  && metric.mode === 4
+  && metric.bandId === 'TORSION_PASSIVE'
+  && metric.passiveTorsion
+), '4.5-5.0 Hz peak should be rendered as passive torsion diagnostic');
 
 const calls: string[] = [];
 const sequential = await fetchSequentialPmuRawData({

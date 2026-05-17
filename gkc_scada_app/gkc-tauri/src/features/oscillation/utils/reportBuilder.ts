@@ -11,16 +11,16 @@ export const buildSummaryText = (result: OscillationAnalysisResult | null, pmuDe
 
   const pmuNames = pmuDevices.map(device => device.name).join(', ');
   const strongestMode = result.commonModes[0];
-  const trMetricCount = result.metrics.filter(metric => metric.bandId === 'B2' && metric.classificationLabel !== 'MOD_YOK').length;
+  const interareaMetricCount = result.metrics.filter(metric => metric.bandId === 'INTERAREA' && metric.classificationLabel !== 'MOD_YOK').length;
 
   return [
     `Seçilen zaman aralığında ${result.query.pmuIds.length} adet PMU GKÇ fiderinden gerçek YTBS verisi alınmıştır.`,
     `Değerlendirilen PMU fiderleri: ${pmuNames || result.query.pmuIds.join(', ')}.`,
-    'Ana odak bandı Türkiye inter-area / SAS gözlem bandı olan 0.10-0.20 Hz aralığıdır.',
+    'Ana odak bandı interarea salınım aralığı olan 0.10-0.40 Hz aralığıdır.',
     strongestMode
       ? `En baskın mod ${formatNumber(strongestMode.frequencyHz)} Hz bandında ${strongestMode.classificationLabel} bulgusu üretmiştir.`
       : 'Ortak baskın mod bulunmamıştır.',
-    `TR inter-area bandında ${trMetricCount} sinyal/PMU bulgusu raporlanmıştır.`,
+    `Interarea bandında ${interareaMetricCount} sinyal/PMU bulgusu raporlanmıştır.`,
     'Bu sayfa kontrol çıkışı veya sesli/görsel ikaz üretmez; sonuçlar mühendislik analizi amacıyla raporlanır.',
   ].join(' ');
 };

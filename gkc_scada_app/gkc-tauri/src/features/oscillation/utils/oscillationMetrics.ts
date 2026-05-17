@@ -1,20 +1,22 @@
-import { getEnabledBands } from './bands.ts';
+import { DEFAULT_AMPLITUDE_THRESHOLDS, OSCILLATION_BANDS, TORSION_PASSIVE_BAND, allBandIds, getEnabledBands } from './bands.ts';
 import { buildCoherenceMatrix } from './coherence.ts';
 import { calculateModeShape, buildCoherenceAverageMap } from './modeShape.ts';
 import { getSignalValue } from './pmuSamples.ts';
 import {
-  buildSpectrum,
   estimateDampingRatio,
-  estimateDominantFrequency,
+  estimatePeakAmplitude,
   linearDetrend,
+  mean,
   peakToPeak,
   rms,
   spectralEnergy,
 } from './signalProcessing.ts';
 import type {
   OscillationAnalysisResult,
+  OscillationAmplitudeThresholds,
   OscillationBand,
   OscillationClassification,
+  OscillationWindowMetric,
   PmuFider,
   PmuQualitySummary,
   PmuSample,
@@ -52,21 +54,44 @@ const toTimestamp = (value: string): number => {
   return Number.isFinite(timestamp) ? timestamp : NaN;
 };
 
+const thresholdPercentForSignal = (
+  signal: Exclude<PmuSignalKey, 'frequency'>,
+  thresholds: OscillationAmplitudeThresholds,
+): number => {
+  if (signal === 'voltage') return thresholds.voltagePercent;
+  if (signal === 'activePower') return thresholds.activePowerPercent;
+  return thresholds.reactivePowerPercent;
+};
+
+const thresholdForSignal = (
+  signal: PmuSignalKey,
+  values: number[],
+  thresholds: OscillationAmplitudeThresholds,
+): number => {
+  if (signal === 'frequency') {
+    return Math.max(0, thresholds.frequencyMhz) / 1000;
+  }
+
+  const finiteValues = values.filter(Number.isFinite);
+  const windowMean = finiteValues.length ? mean(finiteValues) : 0;
+  return Math.abs(windowMean) * Math.max(0, thresholdPercentForSignal(signal, thresholds)) / 100;
+};
+
 const classifyMetric = (
   band: OscillationBand,
   dominantFrequencyHz: number | null,
-  spectralEnergyValue: number | null,
+  peakAmplitude: number | null,
+  thresholdValue: number,
   dampingRatioPercent: number | null,
   pmuCount: number,
   dataQualityScore: number,
 ): OscillationClassification => {
   if (dataQualityScore < 0.05) return 'VERI_KALITESI_YETERSIZ';
-  if (!dominantFrequencyHz || !spectralEnergyValue || spectralEnergyValue <= 0) return 'MOD_YOK';
+  if (!dominantFrequencyHz || peakAmplitude === null || peakAmplitude <= thresholdValue || band.passive) return 'MOD_YOK';
   if (dampingRatioPercent !== null && dampingRatioPercent > 0.5) return 'RINGDOWN_ADAY';
-  if (band.id === 'B2') return pmuCount > 1 ? 'TR_INTERAREA_ADAY_MOD' : 'TEK_PMU_LOKAL_BULGU';
-  if (band.id === 'B3') return 'GENIS_ALAN_ADAY_MOD';
-  if (band.id === 'B4') return 'LOKAL_ELEKTROMEKANIK_ADAY';
-  if (band.id === 'B5') return 'FORCED_ADAY';
+  if (band.id === 'INTERAREA') return pmuCount > 1 ? 'TR_INTERAREA_ADAY_MOD' : 'TEK_PMU_LOKAL_BULGU';
+  if (band.id === 'LOCAL') return 'LOKAL_ELEKTROMEKANIK_ADAY';
+  if (band.id === 'FORCED') return 'FORCED_ADAY';
   return pmuCount > 1 ? 'GENIS_ALAN_ADAY_MOD' : 'TEK_PMU_LOKAL_BULGU';
 };
 
@@ -114,6 +139,17 @@ const valuesForSignal = (samples: PmuSample[], signal: PmuSignalKey): number[] =
     .map(sample => getSignalValue(sample, signal))
     .filter((value): value is number => Number.isFinite(value));
 
+const seriesForSignal = (
+  samples: PmuSample[],
+  signal: PmuSignalKey,
+): Array<{ timestampMs: number; value: number }> =>
+  samples
+    .map(sample => {
+      const value = getSignalValue(sample, signal);
+      return Number.isFinite(value) ? { timestampMs: sample.timestampMs, value: value as number } : null;
+    })
+    .filter((point): point is { timestampMs: number; value: number } => point !== null);
+
 const calculateMetric = ({
   pmuId,
   signal,
@@ -122,6 +158,7 @@ const calculateMetric = ({
   samplingRateHz,
   dataQualityScore,
   pmuCount,
+  amplitudeThresholds,
 }: {
   pmuId: string;
   signal: PmuSignalKey;
@@ -130,38 +167,148 @@ const calculateMetric = ({
   samplingRateHz: number;
   dataQualityScore: number;
   pmuCount: number;
+  amplitudeThresholds: OscillationAmplitudeThresholds;
 }): SignalBandMetric => {
   const values = valuesForSignal(samples, signal);
   const detrended = linearDetrend(values);
-  const spectrum = buildSpectrum(values, samplingRateHz, band.fMin, band.fMax);
-  const dominantFrequencyHz = estimateDominantFrequency(spectrum, band.fMin, band.fMax);
-  const energy = spectralEnergy(spectrum, band.fMin, band.fMax);
+  const peak = estimatePeakAmplitude(values, samplingRateHz, band.fMin, band.fMax);
+  const energy = spectralEnergy(peak.spectrum, band.fMin, band.fMax);
   const bandRms = rms(detrended);
   const peakToPeakAmplitude = peakToPeak(detrended);
-  const damping = estimateDampingRatio(detrended, samplingRateHz, dominantFrequencyHz);
+  const damping = estimateDampingRatio(detrended, samplingRateHz, peak.dominantFrequencyHz);
+  const thresholdValue = thresholdForSignal(signal, values, amplitudeThresholds);
 
   return {
     pmuId,
     signal,
     bandId: band.id,
-    dominantFrequencyHz,
+    dominantFrequencyHz: peak.dominantFrequencyHz,
     bandRms,
-    peakAmplitude: bandRms === null ? null : Math.SQRT2 * bandRms,
+    peakAmplitude: peak.amplitude,
     peakToPeakAmplitude,
     spectralEnergy: energy,
     dampingRatioPercent: damping.dampingRatioPercent,
     dampingSigma: damping.dampingSigma,
     classificationLabel: classifyMetric(
       band,
-      dominantFrequencyHz,
-      energy,
+      peak.dominantFrequencyHz,
+      peak.amplitude,
+      thresholdValue,
       damping.dampingRatioPercent,
       pmuCount,
       dataQualityScore,
     ),
     dataQualityScore,
-    spectrum,
+    spectrum: peak.spectrum,
   };
+};
+
+const strongestActiveWindowCandidate = (
+  values: number[],
+  samplingRateHz: number,
+  thresholdValue: number,
+) => getEnabledBands()
+  .map(band => {
+    const peak = estimatePeakAmplitude(values, samplingRateHz, band.fMin, band.fMax);
+    return {
+      band,
+      peak,
+      ratio: peak.amplitude !== null && thresholdValue > 0 ? peak.amplitude / thresholdValue : 0,
+    };
+  })
+  .sort((left, right) => right.ratio - left.ratio);
+
+const calculateWindowMetricsForSeries = ({
+  pmuId,
+  signal,
+  samples,
+  samplingRateHz,
+  windowSeconds,
+  stepSeconds,
+  amplitudeThresholds,
+}: {
+  pmuId: string;
+  signal: PmuSignalKey;
+  samples: PmuSample[];
+  samplingRateHz: number;
+  windowSeconds: number;
+  stepSeconds: number;
+  amplitudeThresholds: OscillationAmplitudeThresholds;
+}): OscillationWindowMetric[] => {
+  const series = seriesForSignal(samples, signal);
+  if (series.length < 8) return [];
+
+  const windowSize = Math.max(8, Math.round(windowSeconds * samplingRateHz));
+  const stepSize = Math.max(1, Math.round(stepSeconds * samplingRateHz));
+  const starts = series.length <= windowSize
+    ? [0]
+    : Array.from(
+      { length: Math.floor((series.length - windowSize) / stepSize) + 1 },
+      (_unused, index) => index * stepSize,
+    );
+
+  return starts.map(start => {
+    const window = series.slice(start, Math.min(series.length, start + windowSize));
+    const values = window.map(point => point.value);
+    const detrended = linearDetrend(values);
+    const thresholdValue = thresholdForSignal(signal, values, amplitudeThresholds);
+    const activeCandidates = strongestActiveWindowCandidate(values, samplingRateHz, thresholdValue);
+    const selectedActive = activeCandidates.find(candidate =>
+      candidate.peak.amplitude !== null && candidate.peak.amplitude > thresholdValue
+    );
+    const torsionPeak = TORSION_PASSIVE_BAND
+      ? estimatePeakAmplitude(values, samplingRateHz, TORSION_PASSIVE_BAND.fMin, TORSION_PASSIVE_BAND.fMax)
+      : null;
+    const strongestCandidate = selectedActive ?? activeCandidates[0];
+    const center = window[Math.floor(window.length / 2)] ?? window[0];
+
+    if (selectedActive) {
+      const damping = estimateDampingRatio(detrended, samplingRateHz, selectedActive.peak.dominantFrequencyHz);
+      return {
+        timestampMs: center.timestampMs,
+        pmuId,
+        signal,
+        mode: selectedActive.band.modeValue,
+        bandId: selectedActive.band.id,
+        dominantFrequencyHz: selectedActive.peak.dominantFrequencyHz,
+        amplitude: selectedActive.peak.amplitude,
+        thresholdValue,
+        energyRms: rms(detrended),
+        dampingRatioPercent: damping.dampingRatioPercent,
+        passiveTorsion: false,
+      };
+    }
+
+    if (TORSION_PASSIVE_BAND && torsionPeak && torsionPeak.amplitude !== null && torsionPeak.amplitude > thresholdValue) {
+      return {
+        timestampMs: center.timestampMs,
+        pmuId,
+        signal,
+        mode: TORSION_PASSIVE_BAND.modeValue,
+        bandId: TORSION_PASSIVE_BAND.id,
+        dominantFrequencyHz: torsionPeak.dominantFrequencyHz,
+        amplitude: torsionPeak.amplitude,
+        thresholdValue,
+        energyRms: rms(detrended),
+        dampingRatioPercent: null,
+        passiveTorsion: true,
+      };
+    }
+
+    return {
+      timestampMs: center.timestampMs,
+      pmuId,
+      signal,
+      mode: 0,
+      bandId: null,
+      dominantFrequencyHz: strongestCandidate?.peak.dominantFrequencyHz ?? null,
+      amplitude: strongestCandidate?.peak.amplitude ?? null,
+      thresholdValue,
+      energyRms: rms(detrended),
+      dampingRatioPercent: null,
+      passiveTorsion: false,
+    };
+  });
 };
 
 const buildCommonModes = (
@@ -169,7 +316,12 @@ const buildCommonModes = (
   pmuIds: string[],
 ): OscillationAnalysisResult['commonModes'] => {
   const modeCandidates = metrics
-    .filter(metric => metric.dominantFrequencyHz !== null && metric.spectralEnergy !== null && metric.spectralEnergy > 0)
+    .filter(metric =>
+      metric.classificationLabel !== 'MOD_YOK'
+      && metric.dominantFrequencyHz !== null
+      && metric.spectralEnergy !== null
+      && metric.spectralEnergy > 0
+    )
     .sort((left, right) => (right.spectralEnergy ?? 0) - (left.spectralEnergy ?? 0));
 
   const modes: OscillationAnalysisResult['commonModes'] = [];
@@ -202,7 +354,7 @@ const buildCommonModes = (
         ? dampingValues.reduce((sum, value) => sum + value, 0) / dampingValues.length
         : undefined,
       dominantSignal: candidate.signal,
-      classificationLabel: candidate.bandId === 'B2' && pmuIds.length > 1 && new Set(matching.map(metric => metric.pmuId)).size >= 2
+      classificationLabel: candidate.bandId === 'INTERAREA' && pmuIds.length > 1 && new Set(matching.map(metric => metric.pmuId)).size >= 2
         ? 'TR_INTERAREA_GUCLU_MOD'
         : candidate.classificationLabel,
     });
@@ -219,7 +371,7 @@ export const calculateOscillationAnalysis = ({
   startTime,
   endTime,
   selectedSignals,
-  selectedBandIds,
+  amplitudeThresholds = DEFAULT_AMPLITUDE_THRESHOLDS,
   samplingRateHz,
   windowSeconds,
   stepSeconds,
@@ -231,7 +383,7 @@ export const calculateOscillationAnalysis = ({
   startTime: string;
   endTime: string;
   selectedSignals: PmuSignalKey[];
-  selectedBandIds: string[];
+  amplitudeThresholds?: OscillationAmplitudeThresholds;
   samplingRateHz: number;
   windowSeconds: number;
   stepSeconds: number;
@@ -245,7 +397,7 @@ export const calculateOscillationAnalysis = ({
   const expectedSamples = Math.max(0, Math.round(durationSeconds * samplingRateHz));
   const qualities = pmuIds.map(pmuId => calculatePmuQuality(pmuId, samplesByPmu.get(pmuId) ?? [], expectedSamples));
   const qualityByPmu = new Map(qualities.map(quality => [quality.pmuId, quality]));
-  const bands = getEnabledBands(selectedBandIds);
+  const bands = getEnabledBands();
   const metrics = pmuIds.flatMap(pmuId =>
     selectedSignals.flatMap(signal =>
       bands.map(band => {
@@ -258,7 +410,21 @@ export const calculateOscillationAnalysis = ({
           samplingRateHz,
           dataQualityScore: Math.max(0, 1 - (quality?.missingRatio ?? 1)),
           pmuCount: pmuIds.length,
+          amplitudeThresholds,
         });
+      })
+    )
+  );
+  const windowMetrics = pmuIds.flatMap(pmuId =>
+    selectedSignals.flatMap(signal =>
+      calculateWindowMetricsForSeries({
+        pmuId,
+        signal,
+        samples: samplesByPmu.get(pmuId) ?? [],
+        samplingRateHz,
+        windowSeconds,
+        stepSeconds,
+        amplitudeThresholds,
       })
     )
   );
@@ -296,7 +462,8 @@ export const calculateOscillationAnalysis = ({
       windowSeconds,
       stepSeconds,
       selectedSignals,
-      selectedBands: bands.map(band => band.id),
+      selectedBands: allBandIds(),
+      amplitudeThresholds,
     },
     dataQuality: {
       expectedSamplesPerSignal: expectedSamples,
@@ -305,8 +472,11 @@ export const calculateOscillationAnalysis = ({
       pmuQuality: qualities,
     },
     metrics,
+    windowMetrics,
     commonModes,
     modeShape,
     coherenceMatrix,
   };
 };
+
+export const oscillationBandCount = (): number => OSCILLATION_BANDS.length;

@@ -1,100 +1,75 @@
-import type { OscillationBand } from '../types/oscillationTypes.ts';
+import type { OscillationAmplitudeThresholds, OscillationBand, OscillationBandId } from '../types/oscillationTypes.ts';
 
 export const MAX_RELIABLE_ANALYSIS_HZ = 4.5;
+export const NYQUIST_HZ = 5;
 export const SAMPLING_RATE_HZ = 10;
+
+export const DEFAULT_AMPLITUDE_THRESHOLDS: OscillationAmplitudeThresholds = {
+  frequencyMhz: 10,
+  voltagePercent: 2,
+  activePowerPercent: 2,
+  reactivePowerPercent: 2,
+};
 
 export const OSCILLATION_BANDS: OscillationBand[] = [
   {
-    id: 'B0',
-    name: 'Çok Yavaş Trend / Salınım',
-    fMin: 0.02,
-    fMax: 0.05,
-    enabled: true,
-    confidence: 'low',
-    description: 'Çok uzun periyotlu davranış ve trend ayrımı için kullanılır.',
-  },
-  {
-    id: 'B1',
-    name: 'Düşük Frekans Geniş Alan',
-    fMin: 0.05,
-    fMax: 0.1,
-    enabled: true,
-    confidence: 'medium',
-    description: 'TR inter-area bandı altındaki yavaş geniş alan davranışları.',
-  },
-  {
-    id: 'B2',
-    name: 'TR Inter-area / SAS Gözlem Bandı',
+    id: 'INTERAREA',
+    name: 'Interarea - Bölgeler Arası',
     fMin: 0.1,
-    fMax: 0.2,
+    fMax: 0.4,
     enabled: true,
     primary: true,
+    modeValue: 2,
     confidence: 'high',
-    description: 'Türkiye için SAS bağlamında kritik bölgeler arası salınım gözlem bandı; yalnızca modal raporlama için kullanılır.',
+    description: 'Bölgeler arası düşük frekanslı güç sistemi salınım bandı.',
   },
   {
-    id: 'B3',
-    name: 'Genel Inter-area Elektromekanik',
-    fMin: 0.2,
-    fMax: 0.7,
-    enabled: true,
-    confidence: 'high',
-    description: 'Dünya uygulamalarında inter-area elektromekanik modların geniş alt bandı.',
-  },
-  {
-    id: 'B4',
-    name: 'Lokal Elektromekanik',
-    fMin: 0.7,
+    id: 'LOCAL',
+    name: 'Local - Yerel',
+    fMin: 0.4,
     fMax: 2,
     enabled: true,
-    confidence: 'medium',
-    description: 'Lokal jeneratör, santral veya bölgesel elektromekanik modlar.',
+    modeValue: 1,
+    confidence: 'high',
+    description: 'Yerel jeneratör, santral veya bölgesel elektromekanik salınım bandı.',
   },
   {
-    id: 'B5',
-    name: 'Kontrol / Forced Aday Bandı',
+    id: 'FORCED',
+    name: 'Forced - Zorlanmış',
     fMin: 2,
     fMax: 4.5,
     enabled: true,
+    modeValue: 3,
     confidence: 'limited',
-    description: 'Kontrol kaynaklı veya forced aday yüksek frekanslı bileşenler; 10 Hz veri nedeniyle sınırlı güvenle yorumlanır.',
+    description: 'Kontrol kaynaklı veya zorlanmış salınım aday bandı.',
   },
   {
-    id: 'B6',
-    name: 'Nyquist Tampon Bölgesi',
+    id: 'TORSION_PASSIVE',
+    name: 'Torsiyon - Pasif',
     fMin: 4.5,
-    fMax: 5,
-    enabled: false,
+    fMax: NYQUIST_HZ,
+    enabled: true,
+    modeValue: 4,
+    passive: true,
     confidence: 'not-supported',
-    description: '10 Hz veri için Nyquist sınırına yakın güvenilmez bölge. Analiz dışı.',
-  },
-  {
-    id: 'B7',
-    name: 'Torsiyonel Dinamik',
-    fMin: 5,
-    fMax: 14,
-    enabled: false,
-    confidence: 'not-supported',
-    description: '10 örnek/saniye veriyle desteklenmez.',
+    description: '10 Hz PMU verisinde Nyquist sınırına yakın pasif diagnostik bölge.',
   },
 ];
 
+export const ACTIVE_OSCILLATION_BANDS = OSCILLATION_BANDS.filter(band => !band.passive);
+export const TORSION_PASSIVE_BAND = OSCILLATION_BANDS.find(band => band.id === 'TORSION_PASSIVE');
+
 export const getEnabledBands = (selectedBandIds: string[] = []): OscillationBand[] => {
-  const selected = selectedBandIds.length
-    ? OSCILLATION_BANDS.filter(band => selectedBandIds.includes(band.id))
-    : OSCILLATION_BANDS.filter(band => band.enabled);
+  const selectedIds = new Set<OscillationBandId>(
+    selectedBandIds.filter((id): id is OscillationBandId =>
+      OSCILLATION_BANDS.some(band => band.id === id)
+    )
+  );
+  const candidates = selectedIds.size
+    ? OSCILLATION_BANDS.filter(band => selectedIds.has(band.id))
+    : ACTIVE_OSCILLATION_BANDS;
 
-  return selected.filter(band => band.enabled && band.fMax <= MAX_RELIABLE_ANALYSIS_HZ);
+  return candidates.filter(band => band.enabled && !band.passive && band.fMax <= MAX_RELIABLE_ANALYSIS_HZ);
 };
 
-export const validateCustomBand = (fMin: number, fMax: number): { valid: boolean; message: string | null } => {
-  if (!Number.isFinite(fMin) || !Number.isFinite(fMax) || fMin <= 0 || fMax <= fMin) {
-    return { valid: false, message: 'Geçerli bir özel bant aralığı girin.' };
-  }
-
-  if (fMax > MAX_RELIABLE_ANALYSIS_HZ) {
-    return { valid: false, message: '10 örnek/s veri ile 4.5 Hz üzeri güvenilir analiz desteklenmez.' };
-  }
-
-  return { valid: true, message: null };
-};
+export const allBandIds = (): OscillationBandId[] => OSCILLATION_BANDS.map(band => band.id);
