@@ -3,10 +3,9 @@ import {
   TRAINING_MODE_DEFS,
   assessDampingRatio,
   buildDampedOscillation,
-  buildModeShapeDefData,
+  buildPqvfDetectionSpectrum,
   buildSlidingWindowSimulation,
   buildTrainingPqvfSimulation,
-  decideFbmswaCommand,
   type TrainingModeId,
   type TrainingPqvfScenario,
 } from '../utils/simulationModels.ts';
@@ -15,6 +14,10 @@ import {
   trainingChartPalette,
   type TrainingThemeMode,
 } from './OscillationTrainingChart.tsx';
+import { CasesPanel } from './CasesPanel.tsx';
+import { GlossaryPanel } from './GlossaryPanel.tsx';
+import { SasStudyPanel } from './SasStudyPanel.tsx';
+import { TrainingTerm } from './TrainingTerm.tsx';
 
 import dynamicsInertia from '../assets/dynamics_p02_synchronization_inertia.jpg';
 import dynamicsDamping from '../assets/dynamics_p03_anatomy_damping_energy.jpg';
@@ -36,12 +39,13 @@ import pqvfResponse from '../assets/stability_p09_pqvf_response.jpg';
 import powerFrequency from '../assets/stability_p10_power_frequency.jpg';
 
 type TrainingTabId =
+  | 'glossary'
   | 'context'
   | 'modes'
   | 'pqvf'
   | 'damping'
   | 'detection'
-  | 'fbmswa'
+  | 'sas'
   | 'cases'
   | 'decision';
 
@@ -52,17 +56,19 @@ interface TrainingFigure {
 }
 
 const TRAINING_TABS: Array<{ id: TrainingTabId; label: string }> = [
-  { id: 'context', label: '1. Uygulama Bağlamı' },
-  { id: 'modes', label: '2. Salınım Modları' },
-  { id: 'pqvf', label: '3. P-Q-V-f Simülasyonu' },
-  { id: 'damping', label: '4. Sönümleme ve Enerji' },
-  { id: 'detection', label: '5. PMU Algılama' },
-  { id: 'fbmswa', label: '6. BASTS / FBMSWA' },
-  { id: 'cases', label: '7. Vaka ve Teşhis' },
-  { id: 'decision', label: '8. Karar Destek' },
+  { id: 'glossary', label: '1. Terimler Sözlüğü' },
+  { id: 'context', label: '2. Uygulama Bağlamı' },
+  { id: 'modes', label: '3. Salınım Modları' },
+  { id: 'pqvf', label: '4. P-Q-V-f Simülasyonu' },
+  { id: 'damping', label: '5. Sönümleme ve Enerji' },
+  { id: 'detection', label: '6. PMU Algılama' },
+  { id: 'sas', label: '7. SAS Çalışması' },
+  { id: 'cases', label: '8. Vaka ve Teşhis' },
+  { id: 'decision', label: '9. Karar Destek' },
 ];
 
 const FIGURES: Record<TrainingTabId, TrainingFigure[]> = {
+  glossary: [],
   context: [
     { src: bastsBrain, title: 'Algı-karar-aksiyon zinciri', caption: 'PMU ölçümü, modal bulgu, karar destek ve operatör aksiyonu aynı okuma akışında değerlendirilir.' },
     { src: dynamicsInertia, title: 'Senkronizasyon ve atalet', caption: 'Jeneratör grupları elektromekanik bağ üzerinden birlikte hareket eder; zayıf bağlar düşük frekanslı moda zemin hazırlar.' },
@@ -83,7 +89,7 @@ const FIGURES: Record<TrainingTabId, TrainingFigure[]> = {
     { src: fbmswaTools, title: 'Kayan pencere araçları', caption: 'Akan PMU verisi kısa analiz kesitlerine ayrılarak frekans alanında incelenir.' },
     { src: pipeline, title: 'İşleme hattı', caption: 'Örnekleme, filtreleme, pencereleme ve spektrum adımları operatör bulgusuna dönüşür.' },
   ],
-  fbmswa: [
+  sas: [
     { src: dualWindow, title: 'Çift pencere yaklaşımı', caption: 'Kısa pencere genliği hızlı yakalar; uzun pencere faz/yön doğruluğunu güçlendirir.' },
     { src: thresholds, title: 'Eşik ve histerezis', caption: 'Tetikleme ve kapanma eşikleri yalancı kararları azaltmak için ayrı tutulur.' },
     { src: fbmswaArchitecture, title: 'FBMSWA mimarisi', caption: 'Giriş, wash-out, kısa/uzun pencere ve karar sinyali kavramsal akış olarak gösterilir.' },
@@ -148,7 +154,7 @@ function SectionHeader({ title, description }: { title: string; description: str
 }
 
 export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThemeMode }) {
-  const [activeTab, setActiveTab] = useState<TrainingTabId>('context');
+  const [activeTab, setActiveTab] = useState<TrainingTabId>('glossary');
   const [selectedMode, setSelectedMode] = useState<TrainingModeId>('interarea');
   const [pqvfScenario, setPqvfScenario] = useState<TrainingPqvfScenario>('interarea');
   const [pqvfSeverity, setPqvfSeverity] = useState(1.1);
@@ -158,10 +164,6 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
   const [detectionStart, setDetectionStart] = useState(8);
   const [detectionNoise, setDetectionNoise] = useState(0.03);
   const [detectionFrequency, setDetectionFrequency] = useState(0.35);
-  const [fbAmplitude, setFbAmplitude] = useState(18);
-  const [fbPhase, setFbPhase] = useState(25);
-  const [fbTrigger, setFbTrigger] = useState(20);
-  const [fbRelease, setFbRelease] = useState(12);
   const [openFigure, setOpenFigure] = useState<TrainingFigure | null>(null);
   const palette = trainingChartPalette(themeMode);
 
@@ -193,6 +195,10 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
     durationSeconds: 40,
     samplingRateHz: 20,
   }), [pqvfScenario, pqvfSeverity]);
+  const pqvfSpectrum = useMemo(() => buildPqvfDetectionSpectrum({
+    scenario: pqvfScenario,
+    severity: pqvfSeverity,
+  }), [pqvfScenario, pqvfSeverity]);
 
   const damping = useMemo(() => buildDampedOscillation({
     frequencyHz: dampingFrequency,
@@ -211,29 +217,6 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
     noiseLevel: detectionNoise,
     seed: 2026,
   }), [detectionFrequency, detectionNoise, detectionStart, detectionWindow]);
-
-  const fbDecision = decideFbmswaCommand({
-    amplitudeMhz: fbAmplitude,
-    phaseDegrees: fbPhase,
-    triggerThresholdMhz: fbTrigger,
-    releaseThresholdMhz: fbRelease,
-  });
-
-  const fbSignal = useMemo(() => {
-    const time: number[] = [];
-    const frequency: number[] = [];
-    const command: number[] = [];
-    for (let index = 0; index <= 900; index += 1) {
-      const t = index / 3;
-      const envelope = t < 80 ? 0.25 : t < 230 ? 1 : 0.42;
-      time.push(t);
-      frequency.push(50 + fbAmplitude / 1000 * envelope * Math.sin(2 * Math.PI * 0.15 * t));
-      command.push(fbAmplitude >= fbTrigger && t > 95 && t < 230 ? 50 + fbDecision.command * 0.03 : 50);
-    }
-    return { time, frequency, command };
-  }, [fbAmplitude, fbDecision.command, fbTrigger]);
-
-  const modeShape = useMemo(() => buildModeShapeDefData(), []);
 
   const modeLineOption = {
     tooltip: { trigger: 'axis' },
@@ -282,6 +265,46 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
     }],
   });
 
+  const pqvfDetectionOption = {
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: Array<{ value: [number, number]; seriesName: string }>) => {
+        const rows = params.map(item => `${item.seriesName}: ${Number(item.value[1]).toFixed(3)}`).join('<br/>');
+        return `${rows}<br/><span style="color:#64748b">P-Q-V-f simülasyonunda seçili olayın baskın frekansı mod bandı ile karşılaştırılır.</span>`;
+      },
+    },
+    xAxis: { name: 'Tespit frekansı (Hz)', min: 0, max: 5 },
+    yAxis: { name: 'Normalize genlik', min: 0 },
+    series: [{
+      name: 'Spektrum',
+      type: 'line',
+      showSymbol: false,
+      data: pqvfSpectrum.spectrum.map(point => [point.frequencyHz, point.amplitude]),
+      areaStyle: { opacity: 0.12 },
+      lineStyle: { width: 2, color: '#2563eb' },
+      itemStyle: { color: '#2563eb' },
+      markPoint: {
+        symbolSize: 54,
+        data: pqvfSpectrum.modeMarkers.map(marker => ({
+          name: marker.label,
+          coord: [marker.frequencyHz, marker.mode === pqvfScenario ? pqvfSpectrum.selectedPeak.amplitude : 0.08],
+          value: marker.label,
+          itemStyle: { color: marker.color },
+          label: { color: '#ffffff', fontSize: 9 },
+        })),
+      },
+      markArea: {
+        silent: true,
+        itemStyle: { color: 'rgba(59, 130, 246, 0.08)' },
+        data: [
+          [{ xAxis: 0.1, name: 'Interarea' }, { xAxis: 0.8 }],
+          [{ xAxis: 0.8, name: 'Local' }, { xAxis: 2 }],
+          [{ xAxis: 2, name: 'IBR/SSO eğitim bandı' }, { xAxis: 5 }],
+        ],
+      },
+    }],
+  };
+
   const dampingOption = {
     tooltip: { trigger: 'axis' },
     xAxis: { name: 'Zaman (s)', min: 0 },
@@ -321,7 +344,7 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
 
   const spectrumOption = {
     tooltip: { trigger: 'axis' },
-    xAxis: { name: 'Frekans (Hz)', min: 0, max: 2 },
+    xAxis: { name: 'Frekans (Hz)', min: 0.2, max: 5 },
     yAxis: { name: 'Genlik', min: 0 },
     series: [{
       name: 'DFT genliği',
@@ -338,56 +361,13 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
   const spectrogramOption = {
     tooltip: { trigger: 'item' },
     grid: { top: 18, left: 48, right: 18, bottom: 34 },
-    xAxis: { type: 'category', name: 'Pencere', data: detection.spectrogram.map((_column, index) => String(index + 1)) },
-    yAxis: { type: 'category', name: 'Frekans', data: Array.from({ length: 24 }, (_unused, index) => `${(0.05 + (2 - 0.05) * (1 - index / 23)).toFixed(2)} Hz`) },
+    xAxis: { type: 'category', name: 'Pencere', data: detection.spectrogram.columns.map((_column, index) => String(index + 1)) },
+    yAxis: { type: 'category', name: 'Frekans', data: detection.spectrogram.frequencyLabels },
     visualMap: { show: false, min: 0, max: 1, inRange: { color: ['#0f172a', '#2563eb', '#22c55e', '#f59e0b'] } },
     series: [{
       name: 'Zaman-frekans yoğunluğu',
       type: 'heatmap',
-      data: detection.spectrogram.flatMap((column, columnIndex) => column.map((value, rowIndex) => [columnIndex, rowIndex, value])),
-    }],
-  };
-
-  const fbOption = {
-    tooltip: { trigger: 'axis' },
-    xAxis: { name: 'Zaman (s)', min: 0 },
-    yAxis: { name: 'Hz / karar', scale: true },
-    series: [
-      { name: 'Frekans', type: 'line', showSymbol: false, data: linePairs(fbSignal.time, fbSignal.frequency), lineStyle: { width: 1.8, color: '#3b82f6' }, itemStyle: { color: '#3b82f6' } },
-      { name: 'Karar sinyali', type: 'line', showSymbol: false, data: linePairs(fbSignal.time, fbSignal.command), lineStyle: { width: 2, color: '#ef4444' }, itemStyle: { color: '#ef4444' } },
-    ],
-  };
-
-  const modeShapeOption = {
-    tooltip: { trigger: 'item' },
-    xAxis: { show: false, min: 0, max: 100 },
-    yAxis: { show: false, min: 0, max: 100 },
-    series: [{
-      name: 'Mode shape',
-      type: 'graph',
-      layout: 'none',
-      coordinateSystem: 'cartesian2d',
-      data: modeShape.nodes.map(node => ({
-        name: node.pmu,
-        value: [node.x * 100, (1 - node.y) * 100, node.amplitude, node.phaseDegrees],
-        symbolSize: 18 + node.amplitude * 24,
-        itemStyle: { color: node.phaseDegrees < 100 ? '#3b82f6' : '#f59e0b' },
-        label: { show: true, formatter: node.pmu, color: palette.text, fontSize: 11 },
-      })),
-      links: modeShape.nodes.slice(0, -1).map((node, index) => ({ source: node.pmu, target: modeShape.nodes[index + 1].pmu })),
-      lineStyle: { color: palette.axisLine, width: 1.5 },
-    }],
-  };
-
-  const defOption = {
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: modeShape.defBars.map(bar => bar.pmu), name: 'PMU' },
-    yAxis: { name: 'DEF benzeri değer' },
-    series: [{
-      name: 'Kaynak / soğurucu',
-      type: 'bar',
-      data: modeShape.defBars.map(bar => ({ value: bar.value, itemStyle: { color: bar.role === 'source' ? '#ef4444' : '#10b981' } })),
-      barMaxWidth: 34,
+      data: detection.spectrogram.columns.flatMap((column, columnIndex) => column.map((value, rowIndex) => [columnIndex, rowIndex, value])),
     }],
   };
 
@@ -417,6 +397,8 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
         </div>
 
         <div className="training-body">
+          {activeTab === 'glossary' && <GlossaryPanel />}
+
           {activeTab === 'context' && (
             <section className="training-panel">
               <SectionHeader title="Operatör okuma rehberi" description="Bu sayfa canlı veri üretmez; gerçek Salınım Algılayıcı ekranındaki grafikleri, olay tablolarını ve karar cümlelerini yorumlamayı öğretir." />
@@ -424,10 +406,10 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
                 <div className="training-info-card">
                   <h3>Analiz akışı</h3>
                   <ol className="training-flow-list">
-                    <li>PMU verisi ortak zaman ekseninde izlenir.</li>
-                    <li>P-Q-V-f metrikleri aynı olay penceresinde karşılaştırılır.</li>
-                    <li>Kayan pencere baskın frekans ve genliği çıkarır.</li>
-                    <li>Sönümleme oranı olayın izleme mi kritik mi olduğunu belirler.</li>
+                    <li><TrainingTerm term="pmu">PMU</TrainingTerm> verisi ortak zaman ekseninde izlenir.</li>
+                    <li><TrainingTerm term="pqvf">P-Q-V-f</TrainingTerm> metrikleri aynı olay penceresinde karşılaştırılır.</li>
+                    <li><TrainingTerm term="sliding-window">Kayan pencere</TrainingTerm> baskın frekans ve <TrainingTerm term="amplitude">genliği</TrainingTerm> çıkarır.</li>
+                    <li><TrainingTerm term="damping-ratio">Sönümleme oranı</TrainingTerm> olayın izleme mi kritik mi olduğunu belirler.</li>
                     <li>Karar destek dili operatöre sahadaki anlamı açıklar.</li>
                   </ol>
                 </div>
@@ -468,6 +450,11 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
                     ['Örnek frekans', `${modeData.mode.frequencyHz.toFixed(2)} Hz`],
                     ['Tipik yorum', selectedMode === 'forced' ? 'Kaynak aranır; doğal modla karıştırılmamalıdır.' : 'Faz, genlik ve damping bilgisiyle teyit edilir.'],
                   ]} />
+                  <p className="training-small-note">
+                    <TrainingTerm term={selectedMode}>{modeData.mode.label}</TrainingTerm> yorumu,
+                    <TrainingTerm term="phase"> faz</TrainingTerm>, <TrainingTerm term="amplitude">genlik</TrainingTerm> ve
+                    <TrainingTerm term="damping-ratio"> DR</TrainingTerm> birlikte okunduğunda güvenilir hale gelir.
+                  </p>
                 </div>
               </div>
               <div className="training-chart-card">
@@ -481,16 +468,21 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
           {activeTab === 'pqvf' && (
             <section className="training-panel">
               <SectionHeader title="P-Q-V-f ortak zaman ekseni" description="Frekans, aktif güç, gerilim ve reaktif güç aynı olay penceresinde birlikte incelenir." />
+              <p className="training-small-note">
+                <TrainingTerm term="pqvf">P-Q-V-f</TrainingTerm> simülasyonu, <TrainingTerm term="p">aktif güç</TrainingTerm>,
+                <TrainingTerm term="q"> reaktif güç</TrainingTerm>, <TrainingTerm term="v">gerilim</TrainingTerm> ve
+                <TrainingTerm term="f"> frekans</TrainingTerm> tepkilerini aynı baskın mod frekansı etrafında karşılaştırır.
+              </p>
               <div className="training-controls">
                 <label>Senaryo
-                  <select value={pqvfScenario} onChange={event => setPqvfScenario(event.target.value as TrainingPqvfScenario)}>
+                  <select name="training-pqvf-scenario" aria-label="P-Q-V-f senaryosu" value={pqvfScenario} onChange={event => setPqvfScenario(event.target.value as TrainingPqvfScenario)}>
                     <option value="interarea">Bölgeler arası</option>
                     <option value="local">Yerel</option>
                     <option value="forced">Zorlanmış</option>
                   </select>
                 </label>
                 <label>Şiddet: {pqvfSeverity.toFixed(2)}x
-                  <input type="range" min="0.4" max="1.8" step="0.05" value={pqvfSeverity} onChange={event => setPqvfSeverity(Number(event.target.value))} />
+                  <input name="training-pqvf-severity" aria-label="P-Q-V-f şiddeti" type="range" min="0.4" max="1.8" step="0.05" value={pqvfSeverity} onChange={event => setPqvfSeverity(Number(event.target.value))} />
                 </label>
                 <button type="button" className="btn btn-outline btn-compact" onClick={() => { setPqvfScenario('interarea'); setPqvfSeverity(1.1); }}>Sıfırla</button>
               </div>
@@ -506,6 +498,10 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
                 ['Genlik etkisi', pqvf.summary.severityLabel],
                 ['Operatör yorumu', pqvf.summary.operatorComment],
               ]} />
+              <div className="training-chart-card">
+                <div className="training-chart-title">Tespit frekansı / mod bandı<span>{pqvfSpectrum.operatorComment}</span></div>
+                <OscillationTrainingChart option={pqvfDetectionOption} themeMode={themeMode} height={280} />
+              </div>
               <FigureGrid figures={FIGURES.pqvf} onOpen={setOpenFigure} />
             </section>
           )}
@@ -513,12 +509,16 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
           {activeTab === 'damping' && (
             <section className="training-panel">
               <SectionHeader title="Sönümleme ve enerji" description="Damping oranı genlik zarfının azalacağını mı, korunacağını mı, büyüyeceğini mi gösterir." />
+              <p className="training-small-note">
+                <TrainingTerm term="damping-ratio">DR</TrainingTerm>, <TrainingTerm term="amplitude">genlik</TrainingTerm> zarfının sönme hızını;
+                enerji göstergesi ise salınımın sistem içinde büyüyüp büyümediğini okumaya yardım eder.
+              </p>
               <div className="training-controls">
                 <label>DR: %{dampingRatio.toFixed(1)}
-                  <input type="range" min="-2" max="8" step="0.25" value={dampingRatio} onChange={event => setDampingRatio(Number(event.target.value))} />
+                  <input name="training-damping-ratio" aria-label="Damping oranı" type="range" min="-2" max="8" step="0.25" value={dampingRatio} onChange={event => setDampingRatio(Number(event.target.value))} />
                 </label>
                 <label>Frekans: {dampingFrequency.toFixed(2)} Hz
-                  <input type="range" min="0.1" max="2" step="0.05" value={dampingFrequency} onChange={event => setDampingFrequency(Number(event.target.value))} />
+                  <input name="training-damping-frequency" aria-label="Damping frekansı" type="range" min="0.1" max="2" step="0.05" value={dampingFrequency} onChange={event => setDampingFrequency(Number(event.target.value))} />
                 </label>
                 <button type="button" className="btn btn-outline btn-compact" onClick={() => { setDampingRatio(4); setDampingFrequency(0.5); }}>Sıfırla</button>
               </div>
@@ -537,20 +537,31 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
           {activeTab === 'detection' && (
             <section className="training-panel">
               <SectionHeader title="PMU algılama ve kayan pencere" description="Akan PMU sinyali pencerelere bölünür; aktif pencere frekans alanında baskın bileşeni ortaya çıkarır." />
+              <p className="training-small-note">
+                <TrainingTerm term="pmu">PMU</TrainingTerm> sinyali <TrainingTerm term="sliding-window">kayan pencere</TrainingTerm> ile seçilir;
+                aktif kesit <TrainingTerm term="dft">DFT</TrainingTerm>/<TrainingTerm term="fft">FFT</TrainingTerm> spektrumunda 0.2-5 Hz aralığında değerlendirilir.
+              </p>
               <div className="training-controls">
                 <label>Pencere: {detectionWindow} sn
-                  <input type="range" min="6" max="18" step="1" value={detectionWindow} onChange={event => setDetectionWindow(Number(event.target.value))} />
+                  <input name="training-detection-window" aria-label="PMU algılama pencere uzunluğu" type="range" min="6" max="18" step="1" value={detectionWindow} onChange={event => setDetectionWindow(Number(event.target.value))} />
                 </label>
                 <label>Konum: {detectionStart} sn
-                  <input type="range" min="0" max="34" step="1" value={detectionStart} onChange={event => setDetectionStart(Number(event.target.value))} />
+                  <input name="training-detection-start" aria-label="PMU algılama pencere konumu" type="range" min="0" max="34" step="1" value={detectionStart} onChange={event => setDetectionStart(Number(event.target.value))} />
                 </label>
                 <label>Gürültü: {detectionNoise.toFixed(2)}
-                  <input type="range" min="0" max="0.12" step="0.01" value={detectionNoise} onChange={event => setDetectionNoise(Number(event.target.value))} />
+                  <input name="training-detection-noise" aria-label="PMU algılama gürültü seviyesi" type="range" min="0" max="0.12" step="0.01" value={detectionNoise} onChange={event => setDetectionNoise(Number(event.target.value))} />
                 </label>
                 <label>Hedef: {detectionFrequency.toFixed(2)} Hz
-                  <input type="range" min="0.15" max="1.4" step="0.05" value={detectionFrequency} onChange={event => setDetectionFrequency(Number(event.target.value))} />
+                  <input name="training-detection-frequency" aria-label="PMU algılama hedef frekansı" type="range" min="0.2" max="5" step="0.05" value={detectionFrequency} onChange={event => setDetectionFrequency(Number(event.target.value))} />
                 </label>
                 <button type="button" className="btn btn-outline btn-compact" onClick={() => { setDetectionWindow(10); setDetectionStart(8); setDetectionNoise(0.03); setDetectionFrequency(0.35); }}>Sıfırla</button>
+              </div>
+              <div className="training-quick-frequency" aria-label="Hızlı hedef frekans seçimleri">
+                {[0.2, 0.35, 1.25, 2.2, 4.7, 5].map(value => (
+                  <button key={value} type="button" className={Math.abs(detectionFrequency - value) < 0.001 ? 'active' : ''} onClick={() => setDetectionFrequency(value)}>
+                    {value.toFixed(2)} Hz
+                  </button>
+                ))}
               </div>
               <div className="training-grid two">
                 <div className="training-chart-card"><div className="training-chart-title">Ham sinyal ve aktif pencere<span>{detection.window.startSeconds.toFixed(0)}-{detection.window.endSeconds.toFixed(0)} sn</span></div><OscillationTrainingChart option={detectionTimeOption} themeMode={themeMode} height={300} /></div>
@@ -562,53 +573,15 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
             </section>
           )}
 
-          {activeTab === 'fbmswa' && (
-            <section className="training-panel">
-              <SectionHeader title="BASTS / FBMSWA karar mantığı" description="Çift pencere yaklaşımı hızlı genlik tespiti ile faz/yön doğrulamasını ayrı değerlendirir." />
-              <div className="training-controls">
-                <label>Genlik: {fbAmplitude} mHz
-                  <input type="range" min="0" max="40" step="1" value={fbAmplitude} onChange={event => setFbAmplitude(Number(event.target.value))} />
-                </label>
-                <label>Faz: {fbPhase}°
-                  <input type="range" min="-180" max="180" step="5" value={fbPhase} onChange={event => setFbPhase(Number(event.target.value))} />
-                </label>
-                <label>Tetik: {fbTrigger} mHz
-                  <input type="range" min="12" max="32" step="1" value={fbTrigger} onChange={event => setFbTrigger(Number(event.target.value))} />
-                </label>
-                <label>Kapanma: {fbRelease} mHz
-                  <input type="range" min="6" max="20" step="1" value={fbRelease} onChange={event => setFbRelease(Number(event.target.value))} />
-                </label>
-                <button type="button" className="btn btn-outline btn-compact" onClick={() => { setFbAmplitude(18); setFbPhase(25); setFbTrigger(20); setFbRelease(12); }}>Sıfırla</button>
-              </div>
-              <div className={`training-alert ${fbDecision.status === 'normal' ? 'safe' : fbDecision.status === 'hold' ? 'watch' : 'critical'}`}>
-                <strong>{fbDecision.label}</strong>
-                <span>{fbDecision.comment}</span>
-              </div>
-              <div className="training-grid two">
-                <div className="training-info-card">
-                  <h3>Çift pencere okuması</h3>
-                  <InfoTable rows={[
-                    ['Kısa pencere', 'Genlik eşiğini hızlı yakalar.'],
-                    ['Uzun pencere', 'Faz/yön kararını kararlı hale getirir.'],
-                    ['Karar', `${fbDecision.label} (${fbDecision.command})`],
-                  ]} />
-                </div>
-                <div className="training-chart-card"><div className="training-chart-title">Sentetik karar sinyali<span>eğitim çıktısı</span></div><OscillationTrainingChart option={fbOption} themeMode={themeMode} height={300} /></div>
-              </div>
-              <FigureGrid figures={FIGURES.fbmswa} onOpen={setOpenFigure} />
-            </section>
+          {activeTab === 'sas' && (
+            <>
+              <SasStudyPanel themeMode={themeMode} />
+              <FigureGrid figures={FIGURES.sas} onOpen={setOpenFigure} />
+            </>
           )}
 
           {activeTab === 'cases' && (
-            <section className="training-panel">
-              <SectionHeader title="Vaka ve teşhis" description="Çoklu PMU faz/genlik deseni ve DEF benzeri enerji yönü, kaynağın hangi bölgede aranacağını gösterir." />
-              <div className="training-grid two">
-                <div className="training-chart-card"><div className="training-chart-title">Mode shape<span>6 PMU faz/genlik deseni</span></div><OscillationTrainingChart option={modeShapeOption} themeMode={themeMode} height={330} /></div>
-                <div className="training-chart-card"><div className="training-chart-title">Kaynak lokalizasyonu<span>kaynak / soğurucu</span></div><OscillationTrainingChart option={defOption} themeMode={themeMode} height={330} /></div>
-              </div>
-              <div className="training-alert watch"><strong>Örnek olay yorumu</strong><span>{modeShape.operatorComment}</span></div>
-              <FigureGrid figures={FIGURES.cases} onOpen={setOpenFigure} />
-            </section>
+            <CasesPanel themeMode={themeMode} onOpenFigure={setOpenFigure} />
           )}
 
           {activeTab === 'decision' && (
@@ -633,10 +606,10 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
                 <div className="training-info-card">
                   <h3>Simülasyon sonuçlarının yorumu</h3>
                   <div className="training-decision-list">
-                    <p>0.35 Hz bandındaki bileşen bölgeler arası mod adayıdır.</p>
-                    <p>Damping oranı düşükse olay izleme seviyesinde tutulmalıdır.</p>
-                    <p>Negatif damping görülürse büyüyen salınım riski vurgulanmalıdır.</p>
-                    <p>P-Q-V-f metrikleri aynı zaman aralığında birlikte değişiyorsa bulgu güveni artar.</p>
+                    <p>0.35 Hz bandındaki bileşen <TrainingTerm term="interarea">bölgeler arası</TrainingTerm> mod adayıdır.</p>
+                    <p><TrainingTerm term="damping-ratio">Damping oranı</TrainingTerm> düşükse olay izleme seviyesinde tutulmalıdır.</p>
+                    <p>Negatif <TrainingTerm term="damping-ratio">damping</TrainingTerm> görülürse büyüyen salınım riski vurgulanmalıdır.</p>
+                    <p><TrainingTerm term="pqvf">P-Q-V-f</TrainingTerm> metrikleri aynı zaman aralığında birlikte değişiyorsa bulgu güveni artar.</p>
                   </div>
                 </div>
               </div>

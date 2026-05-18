@@ -1200,6 +1200,104 @@ body {
   line-height: 1.5;
 }
 
+.training-small-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.training-term {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  min-width: 0;
+  outline: none;
+}
+
+.training-term-label {
+  border-bottom: 1px dotted rgba(59, 130, 246, 0.72);
+  color: var(--accent-blue);
+  cursor: help;
+}
+
+.training-term-tooltip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  width: min(360px, 78vw);
+  display: none;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.22);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.training-term-tooltip strong {
+  color: var(--text-primary);
+}
+
+.training-term:hover .training-term-tooltip,
+.training-term:focus .training-term-tooltip,
+.training-term:focus-within .training-term-tooltip {
+  display: grid;
+}
+
+.training-glossary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.training-glossary-section {
+  align-content: start;
+}
+
+.training-glossary-list {
+  display: grid;
+  gap: 8px;
+}
+
+.training-glossary-item {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 7px;
+  background: var(--table-header-bg);
+}
+
+.training-glossary-item > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.training-glossary-item strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.training-glossary-item span,
+.training-glossary-item p,
+.training-glossary-item small {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.training-glossary-item small {
+  color: var(--text-muted);
+}
+
 .training-grid {
   display: grid;
   gap: 12px;
@@ -1307,6 +1405,50 @@ body {
   accent-color: var(--accent-blue);
 }
 
+.training-quick-frequency,
+.training-case-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.training-quick-frequency button,
+.training-case-selector button {
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.training-quick-frequency button.active,
+.training-case-selector button.active {
+  border-color: rgba(59, 130, 246, 0.64);
+  background: rgba(59, 130, 246, 0.13);
+  color: var(--accent-blue);
+}
+
+.training-case-selector button {
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  text-align: left;
+}
+
+.training-case-selector strong {
+  color: inherit;
+  font-size: 12px;
+}
+
+.training-case-selector span {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
 .training-segmented {
   display: flex;
   flex-wrap: wrap;
@@ -1363,6 +1505,16 @@ body {
 
 .training-table td {
   color: var(--text-secondary);
+}
+
+.training-case-metric.watch td {
+  color: #b45309;
+}
+
+.training-case-metric.critical th,
+.training-case-metric.critical td {
+  color: #dc2626;
+  font-weight: 760;
 }
 
 .training-alert {
@@ -1575,6 +1727,10 @@ body {
   .training-grid.four {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .training-glossary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 760px) {
@@ -1662,7 +1818,8 @@ body {
 
   .training-grid.two,
   .training-grid.four,
-  .training-figure-grid {
+  .training-figure-grid,
+  .training-glossary-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1673,6 +1830,10 @@ body {
 
   .training-lightbox {
     padding: 10px;
+  }
+
+  .training-case-selector button {
+    flex: 1 1 180px;
   }
 }
 

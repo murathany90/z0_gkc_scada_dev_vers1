@@ -3,12 +3,16 @@ import {
   assessDampingRatio,
   buildDampedOscillation,
   buildModeShapeDefData,
+  buildPqvfDetectionSpectrum,
+  buildSasPulseSimulation,
   buildSlidingWindowSimulation,
   buildTrainingPqvfSimulation,
   decideFbmswaCommand,
   estimateDftSpectrum,
   pickSlidingWindowIndices,
 } from '../src/features/oscillationTraining/utils/simulationModels.ts';
+import { buildGlossaryLookup, GLOSSARY_SECTIONS } from '../src/features/oscillationTraining/data/glossary.ts';
+import { buildCaseSimulation, TRAINING_CASES } from '../src/features/oscillationTraining/data/trainingCases.ts';
 
 const firstRun = buildSlidingWindowSimulation({
   durationSeconds: 40,
@@ -66,3 +70,67 @@ const modeShape = buildModeShapeDefData();
 assert.equal(modeShape.nodes.length, 6);
 assert.ok(modeShape.defBars.some(bar => bar.role === 'source'));
 assert.ok(modeShape.defBars.some(bar => bar.role === 'absorber'));
+
+const glossaryLookup = buildGlossaryLookup(GLOSSARY_SECTIONS);
+for (const requiredTerm of ['pmu', 'sas', 'basts', 'fbmswa', 'pqvf', 'damping-ratio', 'def', 'statcom', 'svc']) {
+  const term = glossaryLookup.get(requiredTerm);
+  assert.ok(term, `glossary should include ${requiredTerm}`);
+  assert.ok(term!.definition.length > 60, `${requiredTerm} should have an operator-ready explanation`);
+  assert.ok(term!.sections.length >= 1, `${requiredTerm} should be mapped to at least one training section`);
+}
+assert.equal(glossaryLookup.get('unknown-term'), undefined, 'unknown glossary keys should fall back safely to plain text in the UI');
+
+const pqvfSpectrum = buildPqvfDetectionSpectrum({ scenario: 'interarea', severity: 1.1 });
+assert.deepEqual(
+  pqvfSpectrum.modeMarkers.map(marker => marker.mode),
+  ['interarea', 'local', 'forced', 'torsional', 'ibr'],
+  'P-Q-V-f detection spectrum should expose all training mode markers',
+);
+assert.ok(pqvfSpectrum.spectrum.some(point => point.frequencyHz >= 4.7 && point.frequencyHz <= 5), 'P-Q-V-f spectrum should cover high-frequency training bands');
+assert.ok(pqvfSpectrum.selectedPeak.frequencyHz >= 0.1 && pqvfSpectrum.selectedPeak.frequencyHz <= 0.8, 'interarea scenario should peak in the interarea band');
+
+const cleanWideDetection = buildSlidingWindowSimulation({
+  durationSeconds: 40,
+  samplingRateHz: 20,
+  windowSeconds: 10,
+  windowStartSeconds: 8,
+  targetFrequencyHz: 4.7,
+  noiseLevel: 0,
+  seed: 7,
+});
+const noisyWideDetection = buildSlidingWindowSimulation({
+  durationSeconds: 40,
+  samplingRateHz: 20,
+  windowSeconds: 10,
+  windowStartSeconds: 8,
+  targetFrequencyHz: 4.7,
+  noiseLevel: 0.1,
+  seed: 7,
+});
+assert.ok(Math.abs(cleanWideDetection.dominantFrequencyHz! - 4.7) <= 0.05, 'wide DFT helper should detect targets up to 5 Hz');
+assert.notDeepEqual(
+  cleanWideDetection.rawSeries.slice(0, 24).map(point => point.value),
+  noisyWideDetection.rawSeries.slice(0, 24).map(point => point.value),
+  'noiseLevel=0 should remove the seeded random noise contribution',
+);
+assert.equal(cleanWideDetection.spectrogram.frequencyMinHz, 0.2);
+assert.equal(cleanWideDetection.spectrogram.frequencyMaxHz, 5);
+
+assert.equal(buildSasPulseSimulation({ amplitudeMhz: 6, phaseDegrees: 0, triggerThresholdMhz: 10, releaseThresholdMhz: 8 }).decision.status, 'normal');
+assert.equal(buildSasPulseSimulation({ amplitudeMhz: 9, phaseDegrees: 0, triggerThresholdMhz: 10, releaseThresholdMhz: 8 }).decision.status, 'hold');
+assert.equal(buildSasPulseSimulation({ amplitudeMhz: 16, phaseDegrees: 25, triggerThresholdMhz: 10, releaseThresholdMhz: 8 }).decision.status, 'capacitive');
+assert.equal(buildSasPulseSimulation({ amplitudeMhz: 16, phaseDegrees: -25, triggerThresholdMhz: 10, releaseThresholdMhz: 8 }).decision.status, 'inductive');
+const sasPulse = buildSasPulseSimulation({ amplitudeMhz: 16, phaseDegrees: 25, triggerThresholdMhz: 10, releaseThresholdMhz: 8 });
+assert.ok(sasPulse.commandSeries.some(point => point.value > 0), 'capacitive SAS pulse simulation should include a positive command pulse');
+assert.equal(sasPulse.systemFacts.shortWindowSeconds, 20);
+assert.equal(sasPulse.systemFacts.longWindowSeconds, 100);
+
+assert.equal(TRAINING_CASES.length, 4, 'case training should include four operator cases');
+for (const trainingCase of TRAINING_CASES) {
+  assert.ok(trainingCase.metrics.length >= 4, `${trainingCase.title} should include a detailed metrics table`);
+  assert.ok(trainingCase.assetNames.length >= 1, `${trainingCase.title} should reference at least one asset2 visual`);
+  const simulation = buildCaseSimulation(trainingCase.id);
+  assert.equal(simulation.frequencySeries.length, simulation.dampingSeries.length, `${trainingCase.id} should produce aligned case series`);
+  assert.ok(simulation.modeShape.nodes.length >= 6, `${trainingCase.id} should include a visual mode-shape simulation`);
+  assert.ok(simulation.operatorSummary.includes(trainingCase.shortLabel), `${trainingCase.id} should generate an operator summary`);
+}

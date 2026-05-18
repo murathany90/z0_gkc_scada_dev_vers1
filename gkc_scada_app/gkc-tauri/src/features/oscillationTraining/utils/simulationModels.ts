@@ -2,6 +2,7 @@ export type TrainingModeId = 'interarea' | 'local' | 'forced' | 'torsional' | 'i
 export type TrainingPqvfScenario = 'interarea' | 'local' | 'forced';
 export type TrainingDampingLevel = 'critical' | 'weak' | 'watch' | 'safe';
 export type FbmswaDecisionStatus = 'normal' | 'hold' | 'capacitive' | 'inductive';
+export type SasPulseDecisionStatus = FbmswaDecisionStatus;
 
 export interface TrainingPoint {
   timeSeconds: number;
@@ -18,6 +19,20 @@ export interface TrainingWindowRange {
   endIndex: number;
   startSeconds: number;
   endSeconds: number;
+}
+
+export interface TrainingSpectrogram {
+  columns: number[][];
+  frequencyMinHz: number;
+  frequencyMaxHz: number;
+  frequencyLabels: string[];
+}
+
+export interface SasPulseDecision {
+  status: SasPulseDecisionStatus;
+  command: -1 | 0 | 1;
+  label: string;
+  comment: string;
 }
 
 export const TRAINING_MODE_DEFS: Record<TrainingModeId, {
@@ -75,6 +90,12 @@ export const TRAINING_MODE_DEFS: Record<TrainingModeId, {
     operatorText: 'Evirici kontrol döngüleri, PLL ve şebeke empedansı arasındaki etkileşime odaklanır.',
   },
 };
+
+const PQVF_SCENARIO_DEFS = {
+  interarea: { frequencyHz: 0.35, damping: 0.055, expectedMode: 'Bölgeler arası', comment: 'düşük frekanslı bölgeler arası salınım adayıdır' },
+  local: { frequencyHz: 1.25, damping: 0.09, expectedMode: 'Yerel', comment: 'yerel santral modu adayıdır' },
+  forced: { frequencyHz: 0.74, damping: 0.005, expectedMode: 'Zorlanmış', comment: 'sürekli kaynaklı zorlanmış salınım adayıdır' },
+} satisfies Record<TrainingPqvfScenario, { frequencyHz: number; damping: number; expectedMode: string; comment: string }>;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -195,27 +216,36 @@ export function buildSlidingWindowSimulation({
     const target = 0.65 * eventEnvelope * Math.sin(2 * Math.PI * targetFrequencyHz * timeSeconds);
     const local = 0.22 * Math.sin(2 * Math.PI * 1.2 * timeSeconds + 0.35);
     const slow = 0.04 * Math.sin(2 * Math.PI * 0.035 * timeSeconds);
-    const noise = noiseLevel * (random() - 0.5);
+    const noise = noiseLevel === 0 ? 0 : noiseLevel * (random() - 0.5);
     const value = target + local + slow + noise;
     rawValues.push(value);
     rawSeries.push({ timeSeconds, value });
   }
   const window = pickSlidingWindowIndices({ sampleCount, samplingRateHz, windowSeconds, windowStartSeconds });
   const segment = rawValues.slice(window.startIndex, window.endIndex);
-  const spectrum = estimateDftSpectrum(segment, samplingRateHz, 0.05, 2, 0.025);
+  const spectrum = estimateDftSpectrum(segment, samplingRateHz, 0.2, 5, 0.025);
   const peak = spectrum.reduce((max, point) => point.amplitude > max.amplitude ? point : max, spectrum[0]);
   const windowedSeries = rawSeries.map((point, index) => ({
     ...point,
     value: index >= window.startIndex && index < window.endIndex ? point.value : Number.NaN,
   }));
-  const spectrogram = Array.from({ length: 42 }, (_unused, column) => {
+  const frequencyMinHz = 0.2;
+  const frequencyMaxHz = 5;
+  const frequencyRows = 36;
+  const spectrogramColumns = Array.from({ length: 42 }, (_unused, column) => {
     const timeRatio = column / 41;
-    return Array.from({ length: 24 }, (_unusedRow, row) => {
-      const frequencyHz = 0.05 + (2 - 0.05) * (1 - row / 23);
-      const ridge = Math.exp(-Math.pow((frequencyHz - targetFrequencyHz) / 0.08, 2));
+    return Array.from({ length: frequencyRows }, (_unusedRow, row) => {
+      const frequencyHz = frequencyMinHz + (frequencyMaxHz - frequencyMinHz) * (1 - row / (frequencyRows - 1));
+      const ridge = Math.exp(-Math.pow((frequencyHz - targetFrequencyHz) / Math.max(0.08, targetFrequencyHz * 0.04), 2));
       return Number((ridge * (timeRatio < 0.2 ? 0.35 : 1) + 0.08 * Math.sin(column * 0.7 + row * 0.3)).toFixed(3));
     });
   });
+  const spectrogram: TrainingSpectrogram = {
+    columns: spectrogramColumns,
+    frequencyMinHz,
+    frequencyMaxHz,
+    frequencyLabels: Array.from({ length: frequencyRows }, (_unused, index) => `${(frequencyMinHz + (frequencyMaxHz - frequencyMinHz) * (1 - index / (frequencyRows - 1))).toFixed(2)} Hz`),
+  };
   return {
     rawSeries,
     windowedSeries,
@@ -223,8 +253,15 @@ export function buildSlidingWindowSimulation({
     spectrum,
     spectrogram,
     dominantFrequencyHz: peak?.frequencyHz ?? null,
-    operatorComment: `Aktif pencere ${targetFrequencyHz.toFixed(2)} Hz civarında baskın bir bileşen gösteriyor; bu bant bölgeler arası salınım adayıdır.`,
+    operatorComment: `Aktif pencere ${targetFrequencyHz.toFixed(2)} Hz civarında baskın bir bileşen gösteriyor; bu bant ${classifyTrainingFrequency(targetFrequencyHz)} olarak yorumlanmalıdır.`,
   };
+}
+
+function classifyTrainingFrequency(frequencyHz: number) {
+  if (frequencyHz < 0.8) return 'bölgeler arası salınım adayı';
+  if (frequencyHz < 2) return 'yerel salınım adayı';
+  if (frequencyHz < 3) return 'IBR kontrol etkileşimi adayı';
+  return 'torsiyonel/SSO veya yüksek frekanslı diagnostik eğitim bandı';
 }
 
 export function buildTrainingPqvfSimulation({
@@ -238,12 +275,7 @@ export function buildTrainingPqvfSimulation({
   durationSeconds: number;
   samplingRateHz: number;
 }) {
-  const defs = {
-    interarea: { frequencyHz: 0.35, damping: 0.055, expectedMode: 'Bölgeler arası', comment: 'düşük frekanslı bölgeler arası salınım adayıdır' },
-    local: { frequencyHz: 1.25, damping: 0.09, expectedMode: 'Yerel', comment: 'yerel santral modu adayıdır' },
-    forced: { frequencyHz: 0.74, damping: 0.005, expectedMode: 'Zorlanmış', comment: 'sürekli kaynaklı zorlanmış salınım adayıdır' },
-  } satisfies Record<TrainingPqvfScenario, { frequencyHz: number; damping: number; expectedMode: string; comment: string }>;
-  const def = defs[scenario];
+  const def = PQVF_SCENARIO_DEFS[scenario];
   const time: number[] = [];
   const series = {
     frequency: [] as number[],
@@ -273,6 +305,103 @@ export function buildTrainingPqvfSimulation({
       expectedMode: def.expectedMode,
       severityLabel: `${severity.toFixed(2)}x`,
       operatorComment: `${def.frequencyHz.toFixed(2)} Hz bileşeni ${def.comment}; P-Q-V-f metrikleri aynı zaman ekseninde birlikte okunmalıdır.`,
+    },
+  };
+}
+
+export function buildPqvfDetectionSpectrum({
+  scenario,
+  severity,
+}: {
+  scenario: TrainingPqvfScenario;
+  severity: number;
+}) {
+  const selected = PQVF_SCENARIO_DEFS[scenario];
+  const modeMarkers = (Object.keys(TRAINING_MODE_DEFS) as TrainingModeId[]).map(mode => ({
+    mode,
+    label: TRAINING_MODE_DEFS[mode].shortLabel,
+    frequencyHz: TRAINING_MODE_DEFS[mode].frequencyHz,
+    bandLabel: TRAINING_MODE_DEFS[mode].bandLabel,
+    color: TRAINING_MODE_DEFS[mode].color,
+  }));
+  const spectrum: TrainingSpectrumPoint[] = [];
+  for (let frequencyHz = 0.1; frequencyHz <= 5.0001; frequencyHz += 0.025) {
+    const selectedRidge = Math.exp(-Math.pow((frequencyHz - selected.frequencyHz) / 0.055, 2)) * severity;
+    const localRidge = Math.exp(-Math.pow((frequencyHz - TRAINING_MODE_DEFS.local.frequencyHz) / 0.09, 2)) * 0.22;
+    const forcedRidge = Math.exp(-Math.pow((frequencyHz - TRAINING_MODE_DEFS.forced.frequencyHz) / 0.05, 2)) * (scenario === 'forced' ? 0.65 : 0.18);
+    const torsionalRidge = Math.exp(-Math.pow((frequencyHz - TRAINING_MODE_DEFS.torsional.frequencyHz) / 0.16, 2)) * 0.16;
+    const ibrRidge = Math.exp(-Math.pow((frequencyHz - TRAINING_MODE_DEFS.ibr.frequencyHz) / 0.12, 2)) * 0.14;
+    spectrum.push({
+      frequencyHz: Number(frequencyHz.toFixed(3)),
+      amplitude: Number((0.01 + selectedRidge + localRidge + forcedRidge + torsionalRidge + ibrRidge).toFixed(5)),
+    });
+  }
+  const selectedPeak = spectrum.reduce((peak, point) => point.amplitude > peak.amplitude ? point : peak, spectrum[0]);
+  return {
+    spectrum,
+    modeMarkers,
+    selectedPeak,
+    operatorComment: `${selected.frequencyHz.toFixed(2)} Hz tepe noktası ${selected.expectedMode.toLocaleLowerCase('tr-TR')} mod frekansı ile uyumludur; P-Q-V-f sinyalleri aynı frekans bileşeni etrafında karşılaştırılmalıdır.`,
+  };
+}
+
+export function buildSasPulseSimulation({
+  amplitudeMhz,
+  phaseDegrees,
+  triggerThresholdMhz,
+  releaseThresholdMhz,
+}: {
+  amplitudeMhz: number;
+  phaseDegrees: number;
+  triggerThresholdMhz: number;
+  releaseThresholdMhz: number;
+}) {
+  const decision = decideFbmswaCommand({
+    amplitudeMhz,
+    phaseDegrees,
+    triggerThresholdMhz,
+    releaseThresholdMhz,
+  }) satisfies SasPulseDecision;
+  const timeSeconds: number[] = [];
+  const frequencySeries: TrainingPoint[] = [];
+  const shortWindowSeries: TrainingPoint[] = [];
+  const longWindowSeries: TrainingPoint[] = [];
+  const commandSeries: TrainingPoint[] = [];
+  for (let index = 0; index <= 600; index += 1) {
+    const t = index / 2;
+    const eventEnvelope = t < 50 ? 0.35 : t < 235 ? 1 : 0.42;
+    const angle = 2 * Math.PI * 0.15 * t + phaseDegrees * Math.PI / 180;
+    const frequencyDeviationHz = amplitudeMhz / 1000 * eventEnvelope * Math.sin(angle);
+    const shortWindowAmplitude = amplitudeMhz * eventEnvelope * (t < 70 ? 0.6 : 1);
+    const longWindowPhase = phaseDegrees * (t < 120 ? 0.45 : 1);
+    const isPulseWindow = decision.command !== 0 && t >= 95 && t <= 225;
+    timeSeconds.push(t);
+    frequencySeries.push({ timeSeconds: t, value: 50 + frequencyDeviationHz });
+    shortWindowSeries.push({ timeSeconds: t, value: shortWindowAmplitude });
+    longWindowSeries.push({ timeSeconds: t, value: longWindowPhase });
+    commandSeries.push({ timeSeconds: t, value: isPulseWindow ? decision.command * 50 : 0 });
+  }
+  return {
+    decision,
+    timeSeconds,
+    frequencySeries,
+    shortWindowSeries,
+    longWindowSeries,
+    commandSeries,
+    thresholdSeries: {
+      trigger: timeSeconds.map(timeSeconds => ({ timeSeconds, value: triggerThresholdMhz })),
+      release: timeSeconds.map(timeSeconds => ({ timeSeconds, value: releaseThresholdMhz })),
+    },
+    systemFacts: {
+      samplingKhz: 25.6,
+      halfCycleMs: 10,
+      shortWindowSamples: 2000,
+      shortWindowSeconds: 20,
+      longWindowSamples: 10000,
+      longWindowSeconds: 100,
+      targetBandHz: '0.12-0.16 Hz',
+      amplitudeThresholdMhz: 10,
+      phaseToleranceDegrees: 30,
     },
   };
 }
