@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elektrik Şebekesi Salınım Modları ve Dinamik Etkileri</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* CSS Düzenlemeleri ve Chart Container Zorunlulukları */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #F8FAFC; /* Light Slate */
+            color: #1E293B; /* Dark Slate */
+            overflow-x: hidden;
+        }
+
+        /* Chart Container Standartları (Kritik Gereksinim) */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px; /* Base height */
+            max-height: 400px;
+        }
+        
+        .small-chart-container {
+            position: relative;
+            width: 100%;
+            height: 200px;
+            max-height: 250px;
+        }
+
+        @media (min-width: 768px) {
+            .chart-container { height: 350px; }
+            .small-chart-container { height: 220px; }
+        }
+
+        /* Özel Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Etkileşimli Buton Animasyonları */
+        .tab-btn { transition: all 0.3s ease; }
+        .tab-btn.active {
+            background-color: #0F172A;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        /* Özelleştirilmiş Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px; width: 20px;
+            border-radius: 50%;
+            background: #0ea5e9;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 6px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+    </style>
+
+    <!-- Placeholder Comments -->
+    <!-- Chosen Palette: Warm Neutrals (Slate 50/800) with Sky Blue (#0ea5e9) and Teal (#14b8a6) accents. Minimalistic and professional. -->
+    <!-- Application Structure Plan: The SPA uses a dashboard-style vertical scroll layout divided into four main logical sections. 1. 'Temel Salınım Modları': Uses interactive tabs to switch context and update a primary chart. 2. 'Anlık Etkiler (P, Q, V, f)': Uses a 2x2 grid of synchronized small charts to demonstrate interrelated effects. 3. 'Kapanış & Analiz': An interactive section with a slider that lets users modify the 'Damping Ratio' to instantly see mathematical changes. 4. 'Salınım Algılama': A new section introducing signal processing concepts (Sliding Window, FFT) with a dual-chart dashboard simulating real-time PMU data parsing. -->
+    <!-- Visualization & Content Choices: 
+         - Mode Selection -> Single Line Chart (Chart.js) updated via JS tabs.
+         - Instantaneous Effects -> 4 small Line Charts in a CSS Grid representing a unified simulation event.
+         - Damping & Energy -> Dynamic Area Chart + Range Slider showing signal decay based on damping ratio.
+         - Oscillation Detection -> Goal: Show how frequency is extracted from raw data -> Viz: Top chart shows time-domain with a highlighted "sliding window", Bottom chart shows frequency-domain (mock FFT algorithm output via JS DTFT computation) -> Justification: Clearly visualizes the transformation from time to frequency domain inside a finite moving block.
+         - Icons/Graphics -> Unicode/CSS -> strictly adhering to NO SVG constraint. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="antialiased">
+
+    <!-- Navigation -->
+    <nav class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">⚡</span>
+                    <span class="font-bold text-xl tracking-tight text-slate-800">Şebeke Salınım Analizi</span>
+                </div>
+                <div class="hidden md:flex space-x-6">
+                    <a href="#modlar" class="text-slate-600 hover:text-sky-600 text-sm font-medium transition-colors">1. Salınım Bantları</a>
+                    <a href="#etkiler" class="text-slate-600 hover:text-sky-600 text-sm font-medium transition-colors">2. Anlık Etkiler</a>
+                    <a href="#analiz" class="text-slate-600 hover:text-sky-600 text-sm font-medium transition-colors">3. Sönümleme</a>
+                    <a href="#algilama" class="text-sky-600 font-bold hover:text-sky-800 text-sm transition-colors border-b-2 border-sky-600">4. Salınım Algılama</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header Section -->
+    <header class="bg-slate-900 text-white py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 class="text-3xl md:text-5xl font-extrabold mb-4">Elektrik Şebekelerinde Dinamik Kararlılık</h1>
+            <p class="text-lg md:text-xl text-slate-300 max-w-3xl mx-auto">
+                Modern elektrik şebekelerinde elektromekanik salınımlar, manyetik akıların ve rotor ataletlerinin etkileşiminin fiziksel bir sonucudur. Bu platform, temel salınım karakteristiklerini, sönümleme mekanizmalarını ve PMU algılama yöntemlerini incelemenizi sağlar.
+            </p>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-24">
+
+        <!-- SECTION 1: TEMEL SALINIM MODLARI -->
+        <section id="modlar" class="scroll-mt-20">
+            <div class="mb-8 border-b border-slate-200 pb-4">
+                <h2 class="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2">
+                    <span class="text-sky-500">1.</span> 4 Temel Salınım Bandı
+                </h2>
+                <p class="mt-2 text-slate-600">
+                    Aşağıdaki sekmeleri kullanarak şebekede gözlemlenen farklı salınım modlarının karakteristik frekanslarını ve sönümlenme davranışlarını inceleyebilirsiniz. Seçtiğiniz modun zaman domainindeki davranışı grafikte güncellenecektir.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="space-y-4">
+                    <div class="flex flex-col gap-2">
+                        <button onclick="updateMode('local')" id="btn-local" class="tab-btn active w-full text-left px-5 py-4 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 flex justify-between items-center">
+                            <span>Lokal Mod (Local)</span>
+                            <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">0.7 - 2.0 Hz</span>
+                        </button>
+                        <button onclick="updateMode('interarea')" id="btn-interarea" class="tab-btn w-full text-left px-5 py-4 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 flex justify-between items-center">
+                            <span>Bölgeler Arası (Interarea)</span>
+                            <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">0.1 - 1.0 Hz</span>
+                        </button>
+                        <button onclick="updateMode('forced')" id="btn-forced" class="tab-btn w-full text-left px-5 py-4 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 flex justify-between items-center">
+                            <span>Zorlanmış (Forced)</span>
+                            <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">Değişken</span>
+                        </button>
+                        <button onclick="updateMode('torsional')" id="btn-torsional" class="tab-btn w-full text-left px-5 py-4 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 flex justify-between items-center">
+                            <span>Burulma / SSO (Torsional)</span>
+                            <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">10 - 50 Hz</span>
+                        </button>
+                    </div>
+
+                    <div id="mode-description-box" class="bg-blue-50 border-l-4 border-blue-500 p-5 rounded-r-lg shadow-sm">
+                        <h4 id="mode-title" class="font-bold text-lg text-blue-900 mb-2">Lokal Mod (0.7 - 2.0 Hz)</h4>
+                        <p id="mode-text" class="text-sm text-blue-800 leading-relaxed">
+                            Güç sistemi ile tekil jeneratör (ya da santral) arasında bulunan salınımlardır. Genellikle uygun şekilde ayarlanmış Güç Sistemi Kararlılaştırıcıları (PSS) ile kolayca sönümlendirilirler.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 text-center">Salınım Karakteristiği Simülasyonu</h3>
+                    <div class="chart-container flex-grow">
+                        <canvas id="modeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: ANLIK ETKİLER -->
+        <section id="etkiler" class="scroll-mt-20">
+            <div class="mb-8 border-b border-slate-200 pb-4">
+                <h2 class="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2">
+                    <span class="text-sky-500">2.</span> Elektriksel Parametrelere Anlık Etkileri
+                </h2>
+                <p class="mt-2 text-slate-600">
+                    Büyük bir bozulum (örn. hat açılması) meydana geldiğinde, senkron makinelerin rotor açıları statik denge noktalarından sapar. Bu sapma; <strong>Aktif Güç (P)</strong>, <strong>Frekans (f)</strong>, <strong>Gerilim (V)</strong> ve <strong>Reaktif Güç (Q)</strong> üzerinde birbirine bağlı (kuple) anlık salınımlar yaratır.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <div class="text-3xl mb-2">⏱️</div>
+                    <h4 class="font-bold text-slate-700">Frekans (f)</h4>
+                    <p class="text-xs text-slate-500 mt-1">Üretim-tüketim dengesizliği sonucu nominal değer (50Hz) etrafında dalgalanır.</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <div class="text-3xl mb-2">⚙️</div>
+                    <h4 class="font-bold text-slate-700">Aktif Güç (P)</h4>
+                    <p class="text-xs text-slate-500 mt-1">Rotor açı sapmaları nedeniyle jeneratörler arası güç transferi salınım yapar.</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <div class="text-3xl mb-2">⚡</div>
+                    <h4 class="font-bold text-slate-700">Reaktif Güç (Q)</h4>
+                    <p class="text-xs text-slate-500 mt-1">Gerilim profili dalgalanmalarına ve hat akımlarına bağlı olarak değişir.</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm text-center">
+                    <div class="text-3xl mb-2">📉</div>
+                    <h4 class="font-bold text-slate-700">Gerilim (V)</h4>
+                    <p class="text-xs text-slate-500 mt-1">Aktif/Reaktif güç salınımları bara gerilimlerinde periyodik çökmelere neden olur.</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-lg font-bold text-slate-800">Senkronize Salınım Olayı (Simülasyon: t=1s'de Arıza)</h3>
+                    <button onclick="playDisturbance()" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+                        Olayı Tekrarla ▶
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                        <div class="text-sm font-bold text-slate-700 mb-2 pl-2 border-l-4 border-amber-500">Şebeke Frekansı (Hz)</div>
+                        <div class="small-chart-container">
+                            <canvas id="chart-freq"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                        <div class="text-sm font-bold text-slate-700 mb-2 pl-2 border-l-4 border-sky-500">Aktif Güç (MW)</div>
+                        <div class="small-chart-container">
+                            <canvas id="chart-p"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                        <div class="text-sm font-bold text-slate-700 mb-2 pl-2 border-l-4 border-rose-500">Bara Gerilimi (p.u.)</div>
+                        <div class="small-chart-container">
+                            <canvas id="chart-v"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                        <div class="text-sm font-bold text-slate-700 mb-2 pl-2 border-l-4 border-teal-500">Reaktif Güç (MVAr)</div>
+                        <div class="small-chart-container">
+                            <canvas id="chart-q"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: SÖNÜMLEME VE ANALİZ KAVRAMLARI -->
+        <section id="analiz" class="scroll-mt-20">
+            <div class="mb-8 border-b border-slate-200 pb-4">
+                <h2 class="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2">
+                    <span class="text-sky-500">3.</span> Salınım Sönümleme Oranı, Genlik ve Enerji
+                </h2>
+                <p class="mt-2 text-slate-600">
+                    Sistem kararlılığı, oluşan salınımların kendi kendine ne kadar hızlı yok olduğuyla (sönümlendiğiyle) ölçülür. Aşağıdaki kaydırıcıyı kullanarak <strong>Sönümleme Oranı (Damping Ratio - ζ)</strong> değerini değiştirin ve genlik ile sistem enerjisi üzerindeki matematiksel etkisini izleyin.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <div class="lg:col-span-5 space-y-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <h3 class="font-bold text-lg text-slate-800 mb-4">Parametre Kontrolü</h3>
+                        
+                        <div class="mb-6">
+                            <label class="flex justify-between text-sm font-semibold text-slate-700 mb-2">
+                                <span>Sönümleme Oranı (ζ) :</span>
+                                <span id="damping-val-display" class="text-sky-600 font-bold bg-sky-50 px-2 py-0.5 rounded">0.05 (5%)</span>
+                            </label>
+                            <input type="range" id="damping-slider" min="-0.03" max="0.15" step="0.01" value="0.05">
+                            <div class="flex justify-between text-xs text-slate-400 mt-1 px-1">
+                                <span>Kararsız (< 0)</span>
+                                <span>Kritik (0)</span>
+                                <span>Kararlı (> 0)</span>
+                            </div>
+                        </div>
+
+                        <div id="stability-alert" class="p-3 rounded bg-green-50 border border-green-200 text-green-800 text-sm font-medium flex items-center gap-2">
+                            <span>✅</span> Sistem Kararlı. Salınımlar zamanla yok oluyor.
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-slate-800 text-white p-4 rounded-xl shadow-inner">
+                            <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Maksimum Genlik</div>
+                            <div class="text-2xl font-light font-mono" id="val-amplitude">1.00 p.u.</div>
+                            <div class="text-xs text-slate-400 mt-2">Denge noktasından maksimum sapma.</div>
+                        </div>
+                        <div class="bg-slate-800 text-white p-4 rounded-xl shadow-inner">
+                            <div class="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Salınım Enerjisi (E)</div>
+                            <div class="text-2xl font-light font-mono" id="val-energy">24.5 J</div>
+                            <div class="text-xs text-slate-400 mt-2">Sinyal altı alanı (Pseudo-Energy).</div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 text-sm text-slate-600 shadow-sm space-y-3">
+                        <p><strong>Sönümleme Oranı (ζ):</strong> $ \xi = \frac{-\alpha}{\sqrt{\alpha^2 + \beta^2}} $ formülü ile özdeğerlerden (eigenvalues) hesaplanır. Pozitif olması sinyalin üstel olarak küçülmesini sağlar.</p>
+                        <p><strong>Salınım Genliği:</strong> Başlangıç koşulundaki $ |b_j| $ tepe noktasıdır. Sinyal zarfının genişliğini ifade eder.</p>
+                        <p><strong>Enerji ($E_j$):</strong> $ E_j = |b_j e^{\omega_j T}| $ yaklaşımı ile hesaplanan, salınımın sisteme yüklediği toplam bozucu enerjiyi temsil eder.</p>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
+                    <h3 class="text-lg font-bold text-slate-800 mb-2 text-center">Matematiksel Zarf ve Enerji Görselleştirmesi</h3>
+                    <p class="text-xs text-center text-slate-500 mb-4">$ y(t) = A \cdot e^{-\zeta \omega_n t} \cdot \sin(\omega_d t) $</p>
+                    <div class="chart-container" style="height: 400px; max-height: 450px;">
+                        <canvas id="dampingChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- SECTION 4: SALINIM ALGILAMA (YENİ EKLENEN BÖLÜM) -->
+        <section id="algilama" class="scroll-mt-20">
+            <div class="mb-8 border-b border-slate-200 pb-4">
+                <h2 class="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2">
+                    <span class="text-sky-500">4.</span> Salınım Algılama ve Sinyal İşleme Algoritmaları
+                </h2>
+                <p class="mt-2 text-slate-600">
+                    Fazör Ölçüm Birimlerinden (PMU) gelen sürekli veri akışında salınımların frekansını ve genliğini gerçek zamanlı olarak tespit etmek için <strong>Kayan Pencere</strong> ve <strong>Hızlı Fourier Dönüşümü (FFT)</strong> kullanılır. Aşağıdaki araç ile bu sürecin nasıl çalıştığını adım adım inceleyin.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                <!-- Sol Panel: Teknik Tanımlar -->
+                <div class="lg:col-span-4 space-y-4">
+                    <div class="bg-white p-5 rounded-xl border border-l-4 border-l-indigo-500 shadow-sm">
+                        <h3 class="font-bold text-indigo-900 text-lg flex items-center gap-2 mb-2">
+                            <span>🔍</span> Kayan Pencere (Sliding Window)
+                        </h3>
+                        <p class="text-sm text-slate-700 leading-relaxed">
+                            Sonsuz akan bir sinyali işlemek imkansızdır. Bu nedenle, sinyalin belirli bir <strong>uzunluktaki kısmı (örn. 10 saniye)</strong> alınır. Bu kısma "Pencere" denir. Sadece bu pencere içindeki veri matematiksel olarak analiz edilir. Pencere uzunluğu hesaplama hassasiyetini belirler.
+                        </p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-l-4 border-l-sky-500 shadow-sm">
+                        <h3 class="font-bold text-sky-900 text-lg flex items-center gap-2 mb-2">
+                            <span>⏱️</span> Adım (Stride / Step)
+                        </h3>
+                        <p class="text-sm text-slate-700 leading-relaxed">
+                            Kayan pencerenin zaman akışında her analiz döngüsünde <strong>ne kadar ileri kaydırılacağını</strong> belirler. Örneğin, pencere 10 saniye ise ve adım 1 saniye ise, peş peşe gelen pencereler birbirleriyle 9 saniye örtüşür (overlap). Bu, salınımı kaçırmamak için önemlidir.
+                        </p>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl border border-l-4 border-l-teal-500 shadow-sm">
+                        <h3 class="font-bold text-teal-900 text-lg flex items-center gap-2 mb-2">
+                            <span>📊</span> Hızlı Fourier Dönüşümü (FFT)
+                        </h3>
+                        <p class="text-sm text-slate-700 leading-relaxed">
+                            Pencere içindeki zaman eksenli sinyali (Zaman Uzayı), frekans bileşenlerine (Frekans Uzayı) ayıran matematiksel algoritmadır. O anki pencerede <strong>hangi salınım modlarının (kaç Hz)</strong> aktif olduğunu ve genliklerinin ne olduğunu tespit etmeyi sağlar.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Sağ Panel: Algılama Simülasyon Dashboard'u -->
+                <div class="lg:col-span-8 bg-slate-50 p-6 rounded-2xl shadow-sm border border-slate-200">
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="font-bold text-slate-700 text-sm">Zaman Akışı (Kayan Pencereyi İlerlet): <span id="time-display" class="text-indigo-600">0 sn</span></label>
+                            <span class="text-xs text-slate-500">Pencere Uzunluğu: 10 Saniye</span>
+                        </div>
+                        <input type="range" id="window-slider" min="0" max="30" step="1" value="0" class="w-full">
+                    </div>
+
+                    <!-- Kayan Pencere Zaman Grafiği -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-sm font-bold text-slate-800">PMU Ham Sinyali (Zaman Uzayı)</h4>
+                            <span class="text-[10px] uppercase font-bold text-indigo-500 bg-indigo-50 px-2 py-1 rounded">Aktif Pencere Mavi İle Vurgulanmıştır</span>
+                        </div>
+                        <div class="chart-container" style="height: 180px; max-height: 200px;">
+                            <canvas id="rawSignalChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- FFT Frekans Grafiği -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-sm font-bold text-slate-800">FFT Algoritma Çıktısı (Frekans Uzayı)</h4>
+                            <span class="text-[10px] uppercase font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded">Sadece Pencere İçindeki Veri İşlenir</span>
+                        </div>
+                        <div class="chart-container" style="height: 180px; max-height: 200px;">
+                            <canvas id="fftChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 py-8 text-center text-sm border-t border-slate-800 mt-10">
+        <p>© 2026 Elektrik Şebekesi Analiz Paneli. PMU verileri ve kaynak raporlar baz alınarak hazırlanmıştır.</p>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // --- ORTAK GRAFİK AYARLARI ---
+        Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+        Chart.defaults.color = '#64748b';
+        Chart.defaults.scale.grid.color = '#f1f5f9';
+        
+        function generateWaveData(freq, damping, length, sampleRate = 50) {
+            let data = [];
+            let labels = [];
+            for (let i = 0; i <= length * sampleRate; i++) {
+                let t = i / sampleRate;
+                let val = Math.sin(2 * Math.PI * freq * t) * Math.exp(-damping * t);
+                labels.push(t.toFixed(1) + 's');
+                data.push(val);
+            }
+            return { labels, data };
+        }
+
+        // --- BÖLÜM 1: SALINIM MODLARI ---
+        const modeContent = {
+            local: {
+                title: "Lokal Mod (0.7 - 2.0 Hz)",
+                text: "Güç sistemi ile tekil jeneratör (ya da santral) arasında bulunan salınımlardır. Genellikle uygun şekilde ayarlanmış Güç Sistemi Kararlılaştırıcıları (PSS) ile sönümlendirilirler. Frekansları görece yüksektir.",
+                freq: 1.2, damp: 0.4, color: '#0ea5e9'
+            },
+            interarea: {
+                title: "Bölgeler Arası Mod (0.1 - 1.0 Hz)",
+                text: "İki veya daha fazla büyük şebeke bölgesinin (örneğin iki ülke şebekesinin) zayıf iletim hatları üzerinden birbirine karşı salınım yapmasıdır. Geniş Alan İzleme (WAMS) ve T-STATCOM gibi sistemlerle bastırılması gerekir.",
+                freq: 0.35, damp: 0.05, color: '#f59e0b'
+            },
+            forced: {
+                title: "Zorlanmış Salınımlar (Forced)",
+                text: "Genellikle arızalı bir ekipmanın (kötü ayarlanmış valf, arızalı kontrolör) şebekeye periyodik bir bozucu etki basmasıdır. Sistem sönümlemesinden bağımsız olarak genlikleri sabittir, kendiliğinden sönümlenmezler.",
+                freq: 0.8, damp: 0.0, color: '#e11d48'
+            },
+            torsional: {
+                title: "Burulma / Senkron Altı (10 - 50 Hz)",
+                text: "Jeneratör şaftının mekanik rezonans frekansı ile elektriksel şebekenin (özellikle seri kapasitörlü hatların) etkileşime girmesiyle oluşan çok yüksek frekanslı, ekipmana zarar verebilen SSO (Subsynchronous Oscillations) türüdür.",
+                freq: 15.0, damp: 1.5, color: '#8b5cf6'
+            }
+        };
+
+        let modeChartInstance = null;
+
+        function updateMode(modeKey) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${modeKey}`).classList.add('active');
+            
+            const info = modeContent[modeKey];
+            document.getElementById('mode-title').innerText = info.title;
+            document.getElementById('mode-text').innerText = info.text;
+
+            const wave = generateWaveData(info.freq, info.damp, 10);
+            
+            if (modeChartInstance) modeChartInstance.destroy();
+
+            const ctx = document.getElementById('modeChart').getContext('2d');
+            modeChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: wave.labels,
+                    datasets: [{
+                        label: 'Sinyal Genliği (p.u.)',
+                        data: wave.data,
+                        borderColor: info.color,
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                        x: { title: { display: true, text: 'Zaman (s)' }, ticks: { maxTicksLimit: 10 } },
+                        y: { title: { display: true, text: 'Genlik' }, min: -1.2, max: 1.2 }
+                    }
+                }
+            });
+        }
+        updateMode('local');
+
+
+        // --- BÖLÜM 2: ANLIK ETKİLER (P, Q, V, F) ---
+        let effectCharts = {};
+
+        function createEffectChart(canvasId, label, color, format) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: label,
+                        data: [],
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 0 },
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { ticks: { callback: function(val) { return val.toFixed(format); } } }
+                    }
+                }
+            });
+        }
+
+        effectCharts['f'] = createEffectChart('chart-freq', 'Frekans', '#f59e0b', 3);
+        effectCharts['p'] = createEffectChart('chart-p', 'Aktif Güç', '#0ea5e9', 0);
+        effectCharts['v'] = createEffectChart('chart-v', 'Gerilim', '#e11d48', 3);
+        effectCharts['q'] = createEffectChart('chart-q', 'Reaktif Güç', '#14b8a6', 0);
+
+        let simulationTimer;
+        function playDisturbance() {
+            clearInterval(simulationTimer);
+            let t = -1; 
+            
+            for(let key in effectCharts) {
+                effectCharts[key].data.labels = [];
+                effectCharts[key].data.datasets[0].data = [];
+                effectCharts[key].update();
+            }
+
+            simulationTimer = setInterval(() => {
+                t += 0.05;
+                if(t > 8) { clearInterval(simulationTimer); return; }
+
+                let valF = 50.0, valP = 500, valV = 1.0, valQ = 150;
+
+                if (t > 0) {
+                    const damp = 0.4, freq = 0.6;
+                    const envelope = Math.exp(-damp * t);
+                    valP = 500 + 80 * Math.sin(2 * Math.PI * freq * t) * envelope;
+                    valF = 50.0 - 0.15 * Math.cos(2 * Math.PI * freq * t) * envelope;
+                    valQ = 150 + 40 * Math.sin(2 * Math.PI * freq * t + 0.5) * envelope;
+                    valV = 1.0 - 0.04 * Math.sin(2 * Math.PI * freq * t + 0.5) * envelope;
+                }
+
+                effectCharts['f'].data.labels.push(t.toFixed(1));
+                effectCharts['f'].data.datasets[0].data.push(valF);
+                effectCharts['p'].data.labels.push(t.toFixed(1));
+                effectCharts['p'].data.datasets[0].data.push(valP);
+                effectCharts['v'].data.labels.push(t.toFixed(1));
+                effectCharts['v'].data.datasets[0].data.push(valV);
+                effectCharts['q'].data.labels.push(t.toFixed(1));
+                effectCharts['q'].data.datasets[0].data.push(valQ);
+
+                if(Math.round(t*100) % 20 === 0) {
+                    for(let key in effectCharts) effectCharts[key].update();
+                }
+            }, 50); 
+        }
+        setTimeout(playDisturbance, 500);
+
+
+        // --- BÖLÜM 3: SÖNÜMLEME ---
+        const dampingSlider = document.getElementById('damping-slider');
+        const dampingDisplay = document.getElementById('damping-val-display');
+        const alertBox = document.getElementById('stability-alert');
+        let dampingChartInstance = null;
+
+        function updateDampingChart() {
+            const zeta = parseFloat(dampingSlider.value);
+            dampingDisplay.innerText = zeta.toFixed(2) + ` (${(zeta*100).toFixed(0)}%)`;
+            
+            if (zeta < 0) {
+                alertBox.className = "p-3 rounded bg-red-50 border border-red-200 text-red-800 text-sm font-medium flex items-center gap-2";
+                alertBox.innerHTML = "<span>⚠️</span> SİSTEM KARARSIZ! Negatif sönümleme salınımları büyütür.";
+                dampingDisplay.className = "text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded";
+            } else if (zeta === 0) {
+                alertBox.className = "p-3 rounded bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium flex items-center gap-2";
+                alertBox.innerHTML = "<span>⚡</span> KRİTİK. Salınımlar sabit kalır (Forced Oscillation).";
+                dampingDisplay.className = "text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded";
+            } else {
+                alertBox.className = "p-3 rounded bg-green-50 border border-green-200 text-green-800 text-sm font-medium flex items-center gap-2";
+                alertBox.innerHTML = "<span>✅</span> Sistem Kararlı. Salınımlar zamanla yok oluyor.";
+                dampingDisplay.className = "text-sky-600 font-bold bg-sky-50 px-2 py-0.5 rounded";
+            }
+
+            let labels = [], waveData = [], envelopeUpper = [], envelopeLower = [], energySum = 0, maxAmp = 0;
+            const wn = 2 * Math.PI * 0.5; 
+            
+            for (let i = 0; i <= 150; i++) {
+                let t = i / 10;
+                labels.push(t.toFixed(1));
+                let env = Math.exp(-zeta * wn * t);
+                let val = env * Math.sin(wn * t);
+                waveData.push(val);
+                envelopeUpper.push(env);
+                envelopeLower.push(-env);
+                energySum += (val * val) * 0.1;
+                if(Math.abs(val) > maxAmp) maxAmp = Math.abs(val);
+            }
+
+            document.getElementById('val-amplitude').innerText = maxAmp.toFixed(2) + " p.u.";
+            document.getElementById('val-energy').innerText = zeta < 0 ? "∞ (Sonsuz)" : (energySum * 100).toFixed(1) + " Birim";
+
+            if (dampingChartInstance) dampingChartInstance.destroy();
+            const ctx = document.getElementById('dampingChart').getContext('2d');
+            dampingChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Salınım (Sinyal)', data: waveData, borderColor: zeta < 0 ? '#e11d48' : '#0ea5e9', backgroundColor: zeta < 0 ? '#e11d4840' : '#0ea5e940', borderWidth: 2, fill: true, tension: 0.4, pointRadius: 0 },
+                        { label: 'Üst Zarf', data: envelopeUpper, borderColor: '#94a3b8', borderDash: [5, 5], borderWidth: 1, fill: false, pointRadius: 0 },
+                        { label: 'Alt Zarf', data: envelopeLower, borderColor: '#94a3b8', borderDash: [5, 5], borderWidth: 1, fill: false, pointRadius: 0 }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, animation: { duration: 400 }, plugins: { legend: { position: 'bottom' } }, scales: { x: { ticks: { maxTicksLimit: 15 } }, y: { suggestedMin: -2, suggestedMax: 2 } } }
+            });
+        }
+        dampingSlider.addEventListener('input', updateDampingChart);
+        updateDampingChart();
+
+
+        // --- BÖLÜM 4: SALINIM ALGILAMA (KAYAN PENCERE & FFT) ---
+        const sampleRate = 20; // 20 Hz örnekleme
+        const totalDuration = 40; // Toplam 40 saniye sinyal
+        const windowDuration = 10; // 10 saniyelik analiz penceresi
+        
+        let fullSignalLabels = [];
+        let fullSignalData = [];
+        
+        // Kompleks Sinyal Üretimi (Interarea Modu + Lokal Mod + Gürültü)
+        for (let i = 0; i <= totalDuration * sampleRate; i++) {
+            let t = i / sampleRate;
+            fullSignalLabels.push(t.toFixed(1) + "s");
+            
+            // t=5 ile t=25 arasında 0.4 Hz Interarea Salınımı
+            let interarea = (t > 5 && t < 25) ? 0.6 * Math.sin(2 * Math.PI * 0.4 * t) : 0;
+            // t=15 ile t=35 arasında 1.2 Hz Lokal Mod
+            let localMode = (t > 15 && t < 35) ? 0.4 * Math.sin(2 * Math.PI * 1.2 * t) : 0;
+            // Küçük beyaz gürültü
+            let noise = (Math.random() - 0.5) * 0.1; 
+            
+            fullSignalData.push(interarea + localMode + noise);
+        }
+
+        let rawSignalChartInst = null;
+        let fftChartInst = null;
+
+        // Basitleştirilmiş Ayrık Fourier Dönüşümü (DFT) Fonksiyonu
+        function calculateSpectrum(dataSlice, sampleRt, maxFreq, freqStep) {
+            let N = dataSlice.length;
+            let freqs = [];
+            let magnitudes = [];
+            
+            for (let f = 0.1; f <= maxFreq; f += freqStep) {
+                let re = 0, im = 0;
+                for (let n = 0; n < N; n++) {
+                    let angle = (2 * Math.PI * f * n) / sampleRt;
+                    re += dataSlice[n] * Math.cos(angle);
+                    im -= dataSlice[n] * Math.sin(angle);
+                }
+                let mag = (2 / N) * Math.sqrt(re*re + im*im); // Normalize edilmiş genlik
+                freqs.push(f.toFixed(1) + " Hz");
+                magnitudes.push(mag);
+            }
+            return { freqs, magnitudes };
+        }
+
+        function updateDetectionDashboard(startTime) {
+            document.getElementById('time-display').innerText = startTime + " sn";
+            
+            let startIndex = startTime * sampleRate;
+            let endIndex = (startTime + windowDuration) * sampleRate;
+            
+            // 1. RAW SIGNAL CHART GÜNCELLEMESİ (Vurgulu Pencere)
+            let highlightedData = [];
+            let windowSlice = [];
+            for (let i = 0; i < fullSignalData.length; i++) {
+                if (i >= startIndex && i < endIndex) {
+                    highlightedData.push(fullSignalData[i]);
+                    windowSlice.push(fullSignalData[i]);
+                } else {
+                    highlightedData.push(null); // Çizginin dışında kalan kısımlar çizilmez
+                }
+            }
+
+            if (!rawSignalChartInst) {
+                const ctxRaw = document.getElementById('rawSignalChart').getContext('2d');
+                rawSignalChartInst = new Chart(ctxRaw, {
+                    type: 'line',
+                    data: {
+                        labels: fullSignalLabels,
+                        datasets: [
+                            { label: 'Geçmiş/Gelecek Veri', data: fullSignalData, borderColor: '#cbd5e1', borderWidth: 1, tension: 0.1, pointRadius: 0 },
+                            { label: 'Aktif Pencere', data: highlightedData, borderColor: '#4f46e5', backgroundColor: '#4f46e520', borderWidth: 2, fill: true, tension: 0.1, pointRadius: 0 }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 10 } }, y: { min: -1.5, max: 1.5 } } }
+                });
+            } else {
+                rawSignalChartInst.data.datasets[1].data = highlightedData;
+                rawSignalChartInst.update('none'); // Animasyonsuz güncelleme
+            }
+
+            // 2. FFT CHART GÜNCELLEMESİ
+            // Pencere içindeki veri için 0.1 Hz'den 2.0 Hz'e kadar spektrum analizi (adım 0.1 Hz)
+            const spectrum = calculateSpectrum(windowSlice, sampleRate, 2.0, 0.05);
+
+            if (!fftChartInst) {
+                const ctxFft = document.getElementById('fftChart').getContext('2d');
+                fftChartInst = new Chart(ctxFft, {
+                    type: 'bar',
+                    data: {
+                        labels: spectrum.freqs,
+                        datasets: [{ label: 'Frekans Genliği', data: spectrum.magnitudes, backgroundColor: '#14b8a6', borderRadius: 4 }]
+                    },
+                    options: { 
+                        responsive: true, maintainAspectRatio: false, animation: { duration: 200 }, 
+                        plugins: { legend: { display: false } }, 
+                        scales: { x: { ticks: { maxTicksLimit: 15, autoSkip: true } }, y: { title: { display: true, text: 'Genlik' }, min: 0, max: 0.8 } } 
+                    }
+                });
+            } else {
+                fftChartInst.data.datasets[0].data = spectrum.magnitudes;
+                fftChartInst.update();
+            }
+        }
+
+        // Başlangıç Kurulumu ve Event Listener
+        const windowSlider = document.getElementById('window-slider');
+        windowSlider.addEventListener('input', (e) => { updateDetectionDashboard(parseInt(e.target.value)); });
+        updateDetectionDashboard(0); // İlk yüklemede çalıştır
+
+    </script>
+</body>
+</html>

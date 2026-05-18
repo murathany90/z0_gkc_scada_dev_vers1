@@ -4,6 +4,13 @@ import {
   parseYtbsTimestamp,
 } from '../src/utils/ytbsPmu.ts';
 import {
+  buildGkcHealthWindow,
+  buildGkcQueryMeta,
+  formatGkcHealthLabel,
+  getGkcHealthVisual,
+  isGkcQueryMetaCurrent,
+} from '../src/utils/gkcHealth.ts';
+import {
   buildYtbsQueryChunks,
   formatYtbsQueryDateTime,
   mergeYtbsRawSamples,
@@ -86,6 +93,49 @@ const pqGroups = buildYtbsChartGroups([{
 }], 'PQ');
 assert.deepEqual(pqGroups.map(group => group.key), ['guc', 'gerilim', 'akim', 'frekans']);
 assert.equal(pqGroups.every(group => group.timeResolution === 'second'), true);
+
+const healthWindow = buildGkcHealthWindow(new Date(2026, 4, 18, 12, 0, 0));
+assert.equal(healthWindow.startYtbs, '18.05.2026 11:40');
+assert.equal(healthWindow.endYtbs, '18.05.2026 11:45');
+assert.equal(healthWindow.end.getTime() - healthWindow.start.getTime(), 5 * 60 * 1000);
+assert.equal(getGkcHealthVisual('ok').emoji, '🟢');
+assert.equal(getGkcHealthVisual('fail').emoji, '🔴');
+assert.equal(getGkcHealthVisual('scanning').emoji, '🔵');
+assert.equal(getGkcHealthVisual('idle').emoji, '⚪');
+assert.equal(formatGkcHealthLabel('KARAMAN, 154 kV GEZENDE HES', 'ok'), '🟢 KARAMAN, 154 kV GEZENDE HES');
+
+const gkcQueryMeta = buildGkcQueryMeta({
+  deviceId: '435',
+  measurementType: 'PMU',
+  startTime: '2026-05-18T10:00',
+  endTime: '2026-05-18T10:30',
+  gerilim: '154',
+  fazId: '',
+});
+assert.equal(isGkcQueryMetaCurrent(gkcQueryMeta, {
+  cihaz: '435',
+  olcumTipi: 'PMU',
+  startTime: '2026-05-18T10:00',
+  endTime: '2026-05-18T10:30',
+  gerilim: '154',
+  faz: 'Üç Faz',
+}), true);
+assert.equal(isGkcQueryMetaCurrent(gkcQueryMeta, {
+  cihaz: '435',
+  olcumTipi: 'PQ',
+  startTime: '2026-05-18T10:00',
+  endTime: '2026-05-18T10:30',
+  gerilim: '154',
+  faz: 'Üç Faz',
+}), false);
+assert.equal(isGkcQueryMetaCurrent(gkcQueryMeta, {
+  cihaz: '394',
+  olcumTipi: 'PMU',
+  startTime: '2026-05-18T10:00',
+  endTime: '2026-05-18T10:30',
+  gerilim: '154',
+  faz: 'Üç Faz',
+}), false);
 
 const exactThirty = buildYtbsQueryChunks({
   measurementType: 'PMU',

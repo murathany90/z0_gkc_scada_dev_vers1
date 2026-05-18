@@ -24,6 +24,7 @@ import { useOscillationStore } from '../src/features/oscillation/store/oscillati
 import {
   calculatePmuDataZoomStart,
   buildDampingTooltipPayload,
+  buildDampingScatterData,
   buildFilteredLineSegments,
   convertRawSignalValue,
   formatPmuAxisTime,
@@ -33,6 +34,7 @@ import {
   getNominalVoltageKv,
   movingAverageTimeSeries,
 } from '../src/features/oscillation/components/chartHelpers.ts';
+import { formatGkcHealthLabel } from '../src/utils/gkcHealth.ts';
 import type { OscillationWindowMetric, PmuFider, PmuSample, PmuSignalKey } from '../src/features/oscillation/types/oscillationTypes.ts';
 
 const fixtureText = readFileSync('../../ytbs_gkc/gkcpmu/gkc1.txt', 'utf8');
@@ -324,6 +326,16 @@ assert.ok(filteredSegments.some(segment => segment.color === '#ffffff' && segmen
 assert.ok(filteredSegments
   .filter(segment => segment.kind !== 'base')
   .every(segment => segment.data.every(point => point[1] !== null)), 'colored overlay segments should be continuous so zoom does not drop sparse null-only series');
+const dampingScatterData = buildDampingScatterData(segmentMetrics, {
+  negative: '#ef4444',
+  nonNegative: '#22c55e',
+});
+assert.equal(dampingScatterData.length, 2, 'DR scatter should include only valid damping points');
+assert.equal(dampingScatterData[0].symbol, 'circle', 'DR should be drawn as circle points, not a line');
+assert.equal(dampingScatterData[0].value[1], -1.8);
+assert.equal(dampingScatterData[0].itemStyle.color, '#ef4444');
+assert.equal(dampingScatterData[1].itemStyle.color, '#22c55e');
+assert.equal(formatGkcHealthLabel(formatPmuDisplayName(temelli), 'fail').startsWith('🔴 '), true, 'PMU selection labels should reuse GKÇ health dots');
 const dampingTooltip = buildDampingTooltipPayload({
   metric: segmentMetrics[0],
   pmuName: 'TEMELLI, 400 kV YUNUS EMRE TES',

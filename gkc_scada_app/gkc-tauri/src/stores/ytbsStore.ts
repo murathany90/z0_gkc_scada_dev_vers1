@@ -10,6 +10,13 @@ import {
   mergeYtbsRawSamples,
   mergeYtbsTimestampedSamples,
 } from '../utils/ytbsQueryChunks';
+import { DEVICE_MAP } from '../data/deviceList';
+import {
+  buildGkcHealthWindow,
+  buildGkcQueryMeta,
+  isGkcQueryMetaCurrent,
+  type GkcQueryMeta,
+} from '../utils/gkcHealth';
 
 export type YtbsStatus = 'disconnected' | 'logging_in' | 'sms_required' | 'connected' | 'expired';
 export type DataSourceType = 'primary' | 'ytbs' | 'mock' | 'none';
@@ -43,6 +50,7 @@ interface YtbsStore {
   isLoading: boolean;
   ytbsData: any[];          // YTBS sorgu sonuçları (RmsData)
   ytbsRawData: any[];          // YTBS'den gelen ham telemetri verileri (Parsed objects)
+  ytbsQueryMeta: GkcQueryMeta | null;
   ytbsQueryLoading: boolean;
   ytbsQueryNotice: string | null;
   ytbsQueryProgress: { totalChunks: number; completedChunks: number; currentChunk: number | null } | null;
@@ -60,6 +68,7 @@ interface YtbsStore {
     faz: string;
   };
   setFilter: (key: string, value: string) => void;
+  clearGkcData: () => void;
 
   login: (username: string, password: string, kanal: string) => Promise<void>;
   verifySms: (code: string) => Promise<void>;
@@ -155,6 +164,23 @@ const toYtbsFazParam = (fazId: string): string => {
   return '3';
 };
 
+const clearGkcDataFields = () => ({
+  ytbsData: [],
+  ytbsRawData: [],
+  ytbsQueryMeta: null,
+  ytbsQueryNotice: null,
+  ytbsQueryProgress: null,
+  error: null,
+});
+
+const isQueryAffectingFilter = (key: string): boolean =>
+  key === 'cihaz'
+  || key === 'olcumTipi'
+  || key === 'startTime'
+  || key === 'endTime'
+  || key === 'gerilim'
+  || key === 'faz';
+
 export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   status: 'disconnected',
   dataSource: 'none',
@@ -163,6 +189,7 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   isLoading: false,
   ytbsData: [],
   ytbsRawData: [],
+  ytbsQueryMeta: null,
   ytbsQueryLoading: false,
   ytbsQueryNotice: null,
   ytbsQueryProgress: null,
@@ -189,7 +216,32 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
     gerilim: '',
     faz: 'Üç Faz',
   },
-  setFilter: (key, value) => set(state => ({ filters: { ...state.filters, [key]: value } })),
+  setFilter: (key, value) => set(state => {
+    const currentValue = state.filters[key as keyof typeof state.filters];
+    if (currentValue === value) return state;
+
+    const filters = { ...state.filters, [key]: value };
+    if (key === 'olcumTipi') {
+      filters.olcumTipi = value;
+      filters.cihaz = '';
+    }
+    if (key === 'gerilim') {
+      const selectedDevice = DEVICE_MAP.get(filters.cihaz);
+      if (selectedDevice && value && String(selectedDevice.gerilim) !== value) {
+        filters.cihaz = '';
+      }
+    }
+
+    return {
+      filters,
+      ...(isQueryAffectingFilter(key) ? clearGkcDataFields() : {}),
+    };
+  }),
+
+  clearGkcData: () => set({
+    ytbsQueryLoading: false,
+    ...clearGkcDataFields(),
+  }),
 
   login: async (username: string, password: string, kanal: string) => {
     set({ isLoading: true, error: null });
@@ -328,6 +380,7 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
   },
 
   queryRange: async (deviceId: string, measurementType: string, startTime: string, endTime: string, gerilim: string, fazId: string) => {
+    const queryMeta = buildGkcQueryMeta({ deviceId, measurementType, startTime, endTime, gerilim, fazId });
     const queryChunks = buildYtbsQueryChunks({ measurementType, startIso: startTime, endIso: endTime });
     if (queryChunks.status !== 'ok') {
       set({
@@ -335,6 +388,7 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
         ytbsQueryLoading: false,
         ytbsQueryNotice: null,
         ytbsQueryProgress: null,
+        ytbsQueryMeta: null,
         ytbsData: [],
         ytbsRawData: [],
       });
@@ -342,6 +396,7 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
     }
 
     set({
+      ...clearGkcDataFields(),
       ytbsQueryLoading: true,
       error: null,
       ytbsQueryNotice: queryChunks.message,
@@ -395,10 +450,24 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
 
       const data = mergeYtbsTimestampedSamples(allData);
       const rawData = mergeYtbsRawSamples(allRawData);
+
+      if (!isGkcQueryMetaCurrent(queryMeta, _get().filters)) {
+        set({
+          ytbsData: [],
+          ytbsRawData: [],
+          ytbsQueryMeta: null,
+          ytbsQueryLoading: false,
+          ytbsQueryNotice: 'Sorgu tamamlandı ancak filtreler değişti. Güncel filtrelerle yeniden sorgulayın.',
+          ytbsQueryProgress: null,
+          error: null,
+        });
+        return;
+      }
       
       set({
         ytbsData: data,
         ytbsRawData: rawData,
+        ytbsQueryMeta: queryMeta,
         ytbsQueryLoading: false,
         ytbsQueryNotice: queryChunks.message,
         ytbsQueryProgress: null,
@@ -414,6 +483,7 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
         ytbsQueryLoading: false,
         ytbsQueryNotice: null,
         ytbsQueryProgress: null,
+        ytbsQueryMeta: null,
         ytbsData: [],
         ytbsRawData: [],
       });
@@ -439,15 +509,7 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
       };
     });
     
-    const now = new Date();
-    const end = new Date(now.getTime() - 15 * 60 * 1000);
-    const start = new Date(now.getTime() - 16 * 60 * 1000);
-    
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const fmt = (d: Date) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-    
-    const startTimeStr = fmt(start);
-    const endTimeStr = fmt(end);
+    const healthWindow = buildGkcHealthWindow();
 
     for (let i = 0; i < devices.length; i++) {
       const dev = devices[i];
@@ -466,15 +528,14 @@ export const useYtbsStore = create<YtbsStore>((set, _get) => ({
           },
         },
         healthScanProgress: { ...state.healthScanProgress, current: i + 1 },
-        filters: { ...state.filters, cihaz: dev.id } // Taranan cihazı filtrede göster
       }));
       
       try {
         const result = await invoke<YtbsHealthCheckResponse>('ytbs_health_check', {
           deviceId: dev.id,
           measurementType: dev.olcumModu || measurementType,
-          startTime: startTimeStr,
-          endTime: endTimeStr,
+          startTime: healthWindow.startYtbs,
+          endTime: healthWindow.endYtbs,
           gerilim: toYtbsGerilimParam(dev.gerilim),
           fazId: toYtbsFazParam(fazId),
         });

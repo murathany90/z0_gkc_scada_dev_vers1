@@ -1,6 +1,7 @@
 import ReactECharts from 'echarts-for-react';
 import type { OscillationWindowMetric, PmuSignalKey } from '../types/oscillationTypes.ts';
 import {
+  buildDampingScatterData,
   buildDampingTooltipPayload,
   chartBase,
   connectOscillationTimeChart,
@@ -292,14 +293,15 @@ export function ModeDampingChart({
         {
           id: `damping-${group.pmuId}-${group.signal}`,
           name: `${seriesName(group)} DR (%)`,
-          type: 'line',
+          type: 'scatter',
           yAxisIndex: 1,
-          showSymbol: false,
-          sampling: 'lttb',
-          data: groupMetrics.map(metric => [metric.timestampMs, metric.dampingRatioPercent]),
-          lineStyle: { width: 1.25, color },
+          symbol: 'circle',
+          symbolSize: 7,
+          data: buildDampingScatterData(groupMetrics, {
+            negative: palette.danger,
+            nonNegative: palette.success,
+          }),
           itemStyle: { color },
-          connectNulls: false,
         },
       ];
     }),

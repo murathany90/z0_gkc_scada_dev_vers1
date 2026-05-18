@@ -39,6 +39,12 @@ import { buildScadaDataRateSeries, formatDataRatePerMinute } from './utils/scada
 import { buildScadaQueryChunks } from './utils/scadaQueryChunks';
 import { buildYtbsChartGroups, type YtbsChartGroup, type YtbsTimeResolution } from './utils/ytbsPmu';
 import { buildYtbsQueryChunks } from './utils/ytbsQueryChunks';
+import {
+  formatGkcHealthLabel,
+  getGkcHealthVisual,
+  isGkcQueryMetaCurrent,
+  toGkcQueryFazId,
+} from './utils/gkcHealth';
 import { OscillationPage } from './features/oscillation/components/OscillationPage';
 import { useOscillationStore } from './features/oscillation/store/oscillationStore';
 import ReactECharts from 'echarts-for-react';
@@ -101,12 +107,6 @@ interface TimeChartSeries {
 
 interface ProcessedYtbsData {
   groups: YtbsChartGroup[];
-  guc: TimeChartSeries[];
-  gerilim: TimeChartSeries[];
-  gerilimFazoru: TimeChartSeries[];
-  akim: TimeChartSeries[];
-  akimFazoru: TimeChartSeries[];
-  frekans: TimeChartSeries[];
   timeResolution: YtbsTimeResolution;
 }
 
@@ -353,21 +353,16 @@ function App() {
   // YTBS Veri İşleme Optimizasyonu (En Üst Seviyede)
   const processedYtbsData = useMemo<ProcessedYtbsData | null>(() => {
     if (ytbs.ytbsRawData.length === 0) return null;
+    if (!ytbs.ytbsQueryMeta || !isGkcQueryMetaCurrent(ytbs.ytbsQueryMeta, ytbs.filters)) return null;
     const t0 = performance.now();
-    const groups = buildYtbsChartGroups(ytbs.ytbsRawData, ytbs.filters.olcumTipi);
+    const groups = buildYtbsChartGroups(ytbs.ytbsRawData, ytbs.ytbsQueryMeta.measurementType);
     const t1 = performance.now();
     console.log(`>>> [PERFORMANS] YTBS JS İşleme: ${ytbs.ytbsRawData.length} nokta, Süre: ${(t1 - t0).toFixed(2)}ms`);
     return {
       groups,
-      guc: groups.find(group => group.key === 'guc')?.series ?? [],
-      gerilim: groups.find(group => group.key === 'gerilim')?.series ?? [],
-      gerilimFazoru: groups.find(group => group.key === 'gerilimFazoru')?.series ?? [],
-      akim: groups.find(group => group.key === 'akim')?.series ?? [],
-      akimFazoru: groups.find(group => group.key === 'akimFazoru')?.series ?? [],
-      frekans: groups.find(group => group.key === 'frekans')?.series ?? [],
       timeResolution: groups[0]?.timeResolution ?? 'second',
     };
-  }, [ytbs.filters.olcumTipi, ytbs.ytbsRawData]);
+  }, [ytbs.filters, ytbs.ytbsQueryMeta, ytbs.ytbsRawData]);
 
   // YTBS Filtreleri store'a taşındı
   const [isHealthScanning, setIsHealthScanning] = useState(false);
@@ -391,6 +386,18 @@ function App() {
   const ytbsQueryProgressText = ytbs.ytbsQueryProgress && ytbs.ytbsQueryProgress.totalChunks > 1
     ? `${ytbs.ytbsQueryProgress.completedChunks}/${ytbs.ytbsQueryProgress.totalChunks} parça`
     : null;
+  const hasYtbsGkcData = ytbs.ytbsData.length > 0 || ytbs.ytbsRawData.length > 0 || Boolean(ytbs.ytbsQueryMeta);
+  const ytbsChartRailIcon = (key: YtbsChartGroup['key']): string => {
+    const icons: Record<YtbsChartGroup['key'], string> = {
+      guc: '⚡',
+      gerilim: '🔌',
+      gerilimFazoru: '∠',
+      akim: '📊',
+      akimFazoru: '∠',
+      frekans: '📈',
+    };
+    return icons[key];
+  };
 
   // Filtrelenmiş cihaz listesi
   const filteredDevices = useMemo(() => {
@@ -1130,11 +1137,9 @@ function App() {
                           (d.olcumModu === ytbs.filters.olcumTipi)
                         ).map(dev => {
                           const healthInfo = ytbs.healthStatus[dev.id];
-                          const status = healthInfo?.status || 'idle';
-                          const dot = status === 'ok' ? '🟢' : status === 'fail' ? '🔴' : status === 'scanning' ? '🔵' : '⚪';
                           return (
                             <option key={dev.id} value={dev.id}>
-                              {dot} {dev.tmAdi}, {dev.fiderAdi} ({dev.id})
+                              {formatGkcHealthLabel(`${dev.tmAdi}, ${dev.fiderAdi} (${dev.id})`, healthInfo?.status)}
                             </option>
                           );
                         })}
@@ -1143,11 +1148,17 @@ function App() {
                     <button className="btn btn-primary"
                       disabled={ytbs.ytbsQueryLoading || ytbs.status !== 'connected' || !ytbs.filters.cihaz || isHealthScanning || ytbsQueryWindow.status !== 'ok'}
                       onClick={() => {
-                        const fazVal = ytbs.filters.faz === 'Üç Faz' ? '' : '1';
+                        const fazVal = toGkcQueryFazId(ytbs.filters.faz);
                         ytbs.queryRange(ytbs.filters.cihaz, ytbs.filters.olcumTipi, ytbs.filters.startTime, ytbs.filters.endTime, ytbs.filters.gerilim, fazVal);
                       }}
                       style={{ fontWeight: 600, fontSize: 12 }}>
                       {ytbs.ytbsQueryLoading ? '⏳ Sorgulanıyor...' : '📊 GÖSTER'}
+                    </button>
+                    <button className="btn btn-danger"
+                      disabled={ytbs.ytbsQueryLoading || isHealthScanning || !hasYtbsGkcData}
+                      onClick={ytbs.clearGkcData}
+                      style={{ fontWeight: 600, fontSize: 12 }}>
+                      🧹 Verileri Temizle
                     </button>
                     <button className="btn"
                       disabled={ytbs.status !== 'connected'}
@@ -1190,6 +1201,12 @@ function App() {
                   {ytbs.filters.cihaz && DEVICE_MAP.get(ytbs.filters.cihaz) && (
                     <div style={{ marginTop: 8, padding: '4px 8px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 4, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ color: '#3b82f6', fontSize: 16 }}>📍</span>
+                      <span
+                        title={getGkcHealthVisual(ytbs.healthStatus[ytbs.filters.cihaz]?.status).title}
+                        style={{ color: getGkcHealthVisual(ytbs.healthStatus[ytbs.filters.cihaz]?.status).color, fontSize: 13, lineHeight: 1 }}
+                      >
+                        {getGkcHealthVisual(ytbs.healthStatus[ytbs.filters.cihaz]?.status).bullet}
+                      </span>
                       <span style={{ fontSize: 11, fontWeight: 500, color: '#3b82f6', letterSpacing: '0.02em' }}>
                         {DEVICE_MAP.get(ytbs.filters.cihaz)?.tmAdi}, {DEVICE_MAP.get(ytbs.filters.cihaz)?.fiderAdi} — {DEVICE_MAP.get(ytbs.filters.cihaz)?.gerilim} kV | {ytbs.filters.olcumTipi}
                       </span>
@@ -1201,63 +1218,28 @@ function App() {
               {/* YTBS Grafik Panelleri (Ekrana Tam Sığacak Şekilde Dikey Dizilim) */}
               {ytbs.ytbsData.length > 0 && processedYtbsData ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', paddingBottom: '20px' }}>
-                  <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
-                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
-                      ⚡ Güç
-                    </div>
-                    <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'guc')?.title ?? 'Güç Analizi (MW/MVAr)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'guc')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.guc} timeResolution={processedYtbsData.timeResolution} />
-                    </div>
-                  </div>
-
-                  <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
-                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
-                      🔌 Gerilim
-                    </div>
-                    <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'gerilim')?.title ?? 'Gerilim Analizi (kV)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'gerilim')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilim} timeResolution={processedYtbsData.timeResolution} />
-                    </div>
-                  </div>
-
-                  {processedYtbsData.gerilimFazoru.length > 0 && (
-                    <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
+                  {processedYtbsData.groups.map(group => (
+                    <div
+                      key={`${ytbs.ytbsQueryMeta?.measurementType ?? ytbs.filters.olcumTipi}-${group.key}-${ytbs.ytbsQueryMeta?.deviceId ?? ytbs.filters.cihaz}`}
+                      className="card"
+                      style={{ flex: '1', display: 'flex', flexDirection: 'row' }}
+                    >
                       <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
-                        Gerilim Fazörü
+                        {ytbsChartRailIcon(group.key)} {group.railLabel}
                       </div>
                       <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                        <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'gerilimFazoru')?.title ?? 'PMU Gerilim Fazörü (°)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'gerilimFazoru')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.gerilimFazoru} timeResolution={processedYtbsData.timeResolution} />
+                        <TimeChart
+                          height={300}
+                          title={group.title}
+                          valueAxisName={group.valueAxisName}
+                          cssHeight="100%"
+                          themeMode={themeMode}
+                          series={group.series}
+                          timeResolution={group.timeResolution}
+                        />
                       </div>
                     </div>
-                  )}
-
-                  <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
-                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
-                      📊 Akım
-                    </div>
-                    <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'akim')?.title ?? 'Akım Analizi (A)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'akim')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akim} timeResolution={processedYtbsData.timeResolution} />
-                    </div>
-                  </div>
-
-                  {processedYtbsData.akimFazoru.length > 0 && (
-                    <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
-                      <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
-                        Akım Fazörü
-                      </div>
-                      <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                        <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'akimFazoru')?.title ?? 'PMU Akım Fazörü (°)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'akimFazoru')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.akimFazoru} timeResolution={processedYtbsData.timeResolution} />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="card" style={{ flex: '1', display: 'flex', flexDirection: 'row' }}>
-                    <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.02)', borderRight: '1px solid var(--border-color)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: '10px 0', fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '1px' }}>
-                      📈 Frekans
-                    </div>
-                    <div className="card-body" style={{ padding: '4px', flex: 1, position: 'relative' }}>
-                      <TimeChart height={300} title={processedYtbsData.groups.find(group => group.key === 'frekans')?.title ?? 'Frekans Analizi (Hz)'} valueAxisName={processedYtbsData.groups.find(group => group.key === 'frekans')?.valueAxisName} cssHeight="100%" themeMode={themeMode} series={processedYtbsData.frekans} timeResolution={processedYtbsData.timeResolution} />
-                    </div>
-                  </div>
+                  ))}
                 </div>
               ) : (
                 <div className="card">

@@ -1,6 +1,6 @@
 import * as echarts from 'echarts';
 import type { EChartsType } from 'echarts';
-import type { PmuSample, PmuSignalKey, SignalBandMetric } from '../types/oscillationTypes.ts';
+import type { OscillationWindowMetric, PmuSample, PmuSignalKey, SignalBandMetric } from '../types/oscillationTypes.ts';
 import { getSignalValue } from '../utils/pmuSamples.ts';
 export {
   buildDampingTooltipPayload,
@@ -122,6 +122,23 @@ export const calculatePmuDataZoomStart = (samples: PmuSample[], initialWindowMin
   if (durationMs <= windowMs) return 0;
   return Math.max(0, Math.min(100, ((durationMs - windowMs) / durationMs) * 100));
 };
+
+export const buildDampingScatterData = (
+  metrics: OscillationWindowMetric[],
+  colors: { negative: string; nonNegative: string },
+) =>
+  metrics
+    .filter(metric => metric.dampingRatioPercent !== null && Number.isFinite(metric.dampingRatioPercent))
+    .map(metric => {
+      const damping = metric.dampingRatioPercent as number;
+      return {
+        value: [metric.timestampMs, damping] as [number, number],
+        symbol: 'circle' as const,
+        symbolSize: 7,
+        itemStyle: { color: damping < 0 ? colors.negative : colors.nonNegative },
+        metric,
+      };
+    });
 
 export const toTimeSeries = (
   samples: PmuSample[],

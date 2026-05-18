@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Salınım Eğitimi | SCADA / PMU / WAMPAC</title>
+  <style>
+    :root{
+      --bg:#f6f8fb;
+      --panel:#ffffff;
+      --ink:#152033;
+      --muted:#65748b;
+      --muted2:#94a3b8;
+      --line:#dbe4ef;
+      --primary:#0ea5e9;
+      --primary2:#0369a1;
+      --teal:#14b8a6;
+      --amber:#f59e0b;
+      --rose:#e11d48;
+      --violet:#7c3aed;
+      --green:#16a34a;
+      --dark:#0f172a;
+      --soft-blue:#e0f2fe;
+      --soft-teal:#ccfbf1;
+      --soft-amber:#fef3c7;
+      --soft-rose:#ffe4e6;
+      --soft-violet:#ede9fe;
+      --radius:18px;
+      --shadow:0 14px 34px rgba(15,23,42,.08);
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{
+      margin:0;
+      font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 15% 0%, rgba(14,165,233,.12), transparent 32rem),
+        radial-gradient(circle at 95% 10%, rgba(20,184,166,.10), transparent 30rem),
+        var(--bg);
+      color:var(--ink);
+      line-height:1.55;
+    }
+    a{color:inherit;text-decoration:none}
+    .topbar{
+      position:sticky;top:0;z-index:50;
+      backdrop-filter:blur(18px);
+      background:rgba(255,255,255,.86);
+      border-bottom:1px solid rgba(219,228,239,.9);
+    }
+    .navwrap{max-width:1440px;margin:auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;min-height:68px;gap:16px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:900;letter-spacing:-.03em;color:var(--dark)}
+    .brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--teal));color:white;box-shadow:0 10px 22px rgba(14,165,233,.25)}
+    .navlinks{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+    .navlinks a{font-size:13px;font-weight:800;color:#475569;padding:9px 11px;border-radius:999px;transition:.18s}
+    .navlinks a:hover{background:#eef6ff;color:var(--primary2)}
+    .hero{background:linear-gradient(135deg,#0f172a 0%,#12243d 52%,#082f49 100%);color:white;padding:64px 24px 44px;border-bottom:1px solid rgba(255,255,255,.12)}
+    .hero-inner{max-width:1440px;margin:auto;display:grid;grid-template-columns:1.25fr .75fr;gap:28px;align-items:center}
+    .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;background:rgba(14,165,233,.16);border:1px solid rgba(125,211,252,.28);color:#bae6fd;font-weight:800;font-size:13px;margin-bottom:18px}
+    h1{font-size:clamp(34px,6vw,72px);line-height:.97;margin:0 0 18px;letter-spacing:-.065em}
+    .lead{font-size:clamp(17px,2vw,22px);color:#cbd5e1;max-width:900px;margin:0}
+    .hero-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:28px;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+    .hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}
+    .mini-metric{padding:15px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.10)}
+    .mini-metric b{display:block;font-size:24px;line-height:1;color:white}.mini-metric span{font-size:12px;color:#cbd5e1;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+    main{max-width:1440px;margin:auto;padding:36px 24px 80px}
+    section{scroll-margin-top:86px;margin:0 0 74px}
+    .section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:24px}
+    .section-kicker{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--primary2);font-weight:900;margin-bottom:7px}
+    h2{font-size:clamp(26px,3vw,42px);line-height:1.05;margin:0;letter-spacing:-.045em;color:#122036}
+    .section-head p{max-width:820px;margin:9px 0 0;color:var(--muted)}
+    h3{margin:0 0 12px;font-size:21px;letter-spacing:-.025em} h4{margin:0 0 8px;font-size:16px}
+    .grid{display:grid;gap:18px}.grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-4{grid-template-columns:repeat(4,minmax(0,1fr))}.grid-5{grid-template-columns:repeat(5,minmax(0,1fr))}.span-2{grid-column:span 2}.span-3{grid-column:span 3}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}.card.soft{box-shadow:none;background:rgba(255,255,255,.72)}
+    .pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;border:1px solid var(--line);background:#f8fafc;color:#334155}
+    .pill.blue{background:var(--soft-blue);border-color:#bae6fd;color:#075985}.pill.green{background:#dcfce7;border-color:#bbf7d0;color:#166534}.pill.amber{background:var(--soft-amber);border-color:#fde68a;color:#92400e}.pill.rose{background:var(--soft-rose);border-color:#fecdd3;color:#9f1239}.pill.violet{background:var(--soft-violet);border-color:#ddd6fe;color:#5b21b6}.pill.teal{background:var(--soft-teal);border-color:#99f6e4;color:#115e59}
+    .muted{color:var(--muted)}.small{font-size:13px}.tiny{font-size:12px}.mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+    .metric{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.metric .icon{width:42px;height:42px;display:grid;place-items:center;border-radius:14px;background:#f1f5f9;font-size:22px}.metric .value{font-size:28px;font-weight:950;letter-spacing:-.04em;color:#0f172a;line-height:1}.metric .label{color:var(--muted);font-weight:800;font-size:13px;margin-top:5px}
+    .tabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.tab{border:1px solid var(--line);background:#fff;border-radius:999px;padding:10px 14px;font-size:13px;font-weight:900;cursor:pointer;color:#475569;transition:.18s}.tab:hover{border-color:#93c5fd;color:#0369a1}.tab.active{background:#0f172a;color:white;border-color:#0f172a;box-shadow:0 10px 22px rgba(15,23,42,.18)}
+    .chartbox{position:relative;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,#ffffff,#fbfdff);padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.05)}
+    .chartbox .chart-title{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;font-weight:900;color:#26364f}.chartbox .chart-title span{color:var(--muted);font-weight:800;font-size:12px}
+    canvas{width:100%;display:block;border-radius:12px}.h220 canvas{height:220px}.h260 canvas{height:260px}.h300 canvas{height:300px}.h360 canvas{height:360px}.h420 canvas{height:420px}
+    .note{border-left:4px solid var(--primary);background:#f0f9ff;border-radius:12px;padding:15px;color:#174667}.note.amber{border-left-color:var(--amber);background:#fffbeb;color:#7c4a03}.note.rose{border-left-color:var(--rose);background:#fff1f2;color:#881337}.note.teal{border-left-color:var(--teal);background:#f0fdfa;color:#115e59}.note.violet{border-left-color:var(--violet);background:#f5f3ff;color:#4c1d95}
+    table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border-radius:16px;border:1px solid var(--line);font-size:13px;background:white}th,td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}th{background:#f8fafc;color:#334155;font-weight:950}tr:last-child td{border-bottom:0}td.num{text-align:right;font-family:"SFMono-Regular",Consolas,monospace;white-space:nowrap}
+    .flow{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:center}.flow-step{min-height:116px;border:1px solid var(--line);background:#fff;border-radius:18px;padding:14px;position:relative}.flow-step:not(:last-child)::after{content:"→";position:absolute;right:-14px;top:42%;font-weight:900;color:#94a3b8}.flow-step b{display:block;color:#0f172a;margin-bottom:4px}.flow-step span{color:var(--muted);font-size:12px}
+    .controls{display:grid;gap:14px}.control-row{display:grid;grid-template-columns:180px 1fr 92px;gap:14px;align-items:center}.control-row label{font-weight:900;color:#334155}.control-row output{font-family:"SFMono-Regular",Consolas,monospace;font-weight:900;color:var(--primary2);background:#f0f9ff;border-radius:10px;padding:7px 9px;text-align:center}
+    input[type=range]{width:100%;accent-color:var(--primary)} select{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:#fff;color:#334155;font-weight:800}
+    .formula{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;background:#0f172a;color:#e2e8f0;border-radius:16px;padding:16px;overflow:auto;font-size:13px}.formula .hl{color:#7dd3fc}.formula .ok{color:#86efac}.formula .warn{color:#fbbf24}
+    .timeline{display:grid;gap:12px}.event{display:grid;grid-template-columns:112px 1fr;gap:14px;align-items:start}.event-time{font-family:"SFMono-Regular",Consolas,monospace;font-weight:900;color:#0369a1;background:#e0f2fe;border:1px solid #bae6fd;border-radius:12px;padding:10px;text-align:center}.event-body{border:1px solid var(--line);border-radius:16px;background:#fff;padding:14px}
+    .callout-row{display:flex;gap:10px;flex-wrap:wrap}.kbd{display:inline-flex;border:1px solid #cbd5e1;background:#fff;border-bottom-width:3px;border-radius:8px;padding:2px 7px;font-family:"SFMono-Regular",Consolas,monospace;font-size:12px;font-weight:900;color:#334155}
+    .quiz-option{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:14px;background:#fff;cursor:pointer}.quiz-option input{margin-top:4px}.quiz-result{padding:12px;border-radius:14px;font-weight:800;display:none}.quiz-result.show{display:block}
+    .footer{border-top:1px solid var(--line);padding-top:24px;color:var(--muted)}
+    @media(max-width:1100px){.hero-inner,.grid-4,.grid-5{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr 1fr 1fr}.flow-step::after{display:none}.span-3,.span-2{grid-column:auto}.navlinks{display:none}}
+    @media(max-width:760px){.hero{padding-top:40px}.hero-inner,.hero-grid,.grid-2,.grid-3,.grid-4,.grid-5{grid-template-columns:1fr}.section-head{display:block}.control-row{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.event{grid-template-columns:1fr}.card{padding:16px}.h360 canvas,.h420 canvas{height:300px}}
+    @media print{.topbar,.tab,.controls button{display:none!important}body{background:white}.card,.chartbox{box-shadow:none;break-inside:avoid}section{break-inside:avoid;margin-bottom:32px}.hero{background:#0f172a!important}}
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <div class="navwrap">
+      <a class="brand" href="#top" aria-label="Salınım Eğitimi Ana Sayfa"><span class="brand-mark">⚡</span><span>Salınım Eğitimi</span></a>
+      <div class="navlinks">
+        <a href="#baglam">SCADA Bağlamı</a><a href="#modlar">Modlar</a><a href="#etkiler">P-Q-V-f</a><a href="#sonumleme">Sönümleme</a><a href="#algilama">Algılama</a><a href="#alarm">Alarm</a><a href="#vakalar">Vakalar</a><a href="#quiz">Kontrol Listesi</a>
+      </div>
+    </div>
+  </nav>
+
+  <header id="top" class="hero">
+    <div class="hero-inner">
+      <div>
+        <div class="eyebrow">SCADA / WAMS / PMU / WAMPAC tek sayfa eğitim modülü</div>
+        <h1>Elektrik Şebekelerinde Salınım Eğitimi</h1>
+        <p class="lead">Bu sayfa, mevcut <b>salinim_egitim1.html</b> içeriğini SCADA operatörü, sistem analisti ve geliştirici için genişletilmiş tek sayfalık bir eğitim deneyimine dönüştürür. Eğitim; salınım modları, P-Q-V-f etkileri, sönümleme, enerji akışı, PMU tabanlı FFT/Prony/DMD algılama ve alarm karar matrisini birlikte anlatır.</p>
+        <div class="callout-row" style="margin-top:22px">
+          <span class="pill blue">0.1-2.5 Hz düşük frekanslı salınımlar</span>
+          <span class="pill teal">10 örnek/s PMU eğitim simülasyonu</span>
+          <span class="pill amber">SAS 0.10-0.20 Hz hedef bandı</span>
+          <span class="pill violet">Mode shape + spektrum + spektrogram</span>
+        </div>
+      </div>
+      <div class="hero-card">
+        <h3 style="color:white">Eğitim hedefleri</h3>
+        <p style="color:#cbd5e1;margin-top:0">Sayfa sonunda kullanıcı şunları okuyup yorumlayabilir:</p>
+        <div class="hero-grid">
+          <div class="mini-metric"><span>Mod ayrımı</span><b>4+</b><small>Lokal, inter-area, forced, SSO</small></div>
+          <div class="mini-metric"><span>SCADA sinyali</span><b>P/Q/V/f</b><small>eş zamanlı etkiler</small></div>
+          <div class="mini-metric"><span>Analiz</span><b>FFT</b><small>Prony ve DMD mantığı</small></div>
+          <div class="mini-metric"><span>Karar</span><b>Alarm</b><small>eşik, süre, damping</small></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section id="baglam">
+      <div class="section-head">
+        <div><div class="section-kicker">1. Uygulama bağlamı</div><h2>SCADA içinde tek sayfa eğitim tasarımı</h2><p>Sayfa, canlı veri ekranı değil; SCADA içindeki “Salınım Eğitimi” sekmesinde operatöre aynı kavramları görsel olarak öğreten self-contained bir eğitim panelidir. Tasarım, mevcut dashboard yaklaşımıyla uyumlu olacak şekilde kartlar, aynı zaman eksenli grafikler, olay tablosu, eşik açıklamaları ve dışa aktarım notları içerir.</p></div>
+      </div>
+      <div class="grid grid-4">
+        <div class="card metric"><div><div class="value">30 dk</div><div class="label">Önerilen maksimum eğitim veri penceresi</div></div><div class="icon">⏳</div></div>
+        <div class="card metric"><div><div class="value">6 PMU</div><div class="label">Mode shape anlatımı için seçilebilir nokta sayısı</div></div><div class="icon">📡</div></div>
+        <div class="card metric"><div><div class="value">10 Hz</div><div class="label">Örnek veri / simülasyon hızı</div></div><div class="icon">⏱️</div></div>
+        <div class="card metric"><div><div class="value">P-Q-V-f</div><div class="label">Operatörün birlikte izleyeceği temel büyüklükler</div></div><div class="icon">📈</div></div>
+      </div>
+      <div class="grid grid-3" style="margin-top:18px">
+        <div class="card span-2">
+          <h3>SCADA menü yerleşimi ve davranış</h3>
+          <div class="flow" style="margin-top:14px">
+            <div class="flow-step"><b>GKÇ İzleme</b><span>PMU/GKÇ cihazlarının bağlamı</span></div>
+            <div class="flow-step"><b>YTBS GKÇ Verileri</b><span>P, Q, f, V ölçümleri</span></div>
+            <div class="flow-step"><b>Salınım Eğitimi</b><span>bu statik eğitim sayfası</span></div>
+            <div class="flow-step"><b>Salınım Algılayıcı</b><span>canlı analiz ekranı ile ilişki</span></div>
+            <div class="flow-step"><b>Raporlama</b><span>CSV / görsel / PDF akışı</span></div>
+            <div class="flow-step"><b>Kabul testi</b><span>grafik çizim metriği kontrolü</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Uyumluluk notu</h3>
+          <p class="muted small">Eğitim sayfası tek HTML olarak hazırlanmıştır. Gerçek ürün entegrasyonunda bu içerik React/TypeScript bileşenlerine veya mevcut monolit dashboard bölmesine taşınabilir. Grafiklerde dış veri kaynağı kullanılmaz; tüm örnekler sentetik ve açıklama amaçlıdır.</p>
+          <div class="note teal small"><b>Operasyonel ayrım:</b> Eğitim ekranı alarm üretmez. Alarm mantığı, canlı PMU verisini kullanan Salınım Algılayıcı ekranında uygulanmalıdır.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="modlar">
+      <div class="section-head">
+        <div><div class="section-kicker">2. Temel kavram</div><h2>Salınım modları ve frekans bantları</h2><p>Her salınım türü farklı kök nedene, farklı coğrafi etkiye ve farklı operatör aksiyonuna sahiptir. Sekmelerden birini seçerek grafikte zaman alanı davranışını ve eğitim notlarını değiştirin.</p></div>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <div class="tabs" role="tablist" aria-label="Salınım modu seçimi">
+            <button class="tab active" data-mode="interarea">Bölgeler arası</button>
+            <button class="tab" data-mode="local">Lokal</button>
+            <button class="tab" data-mode="forced">Zorlanmış</button>
+            <button class="tab" data-mode="sso">SSO / torsiyonel</button>
+            <button class="tab" data-mode="ibr">IBR kontrol</button>
+          </div>
+          <div id="modeInfo" class="note"></div>
+          <table style="margin-top:16px">
+            <thead><tr><th>Bant</th><th>Tip</th><th>Operatör yorumu</th></tr></thead>
+            <tbody>
+              <tr><td class="num">0.01-0.10 Hz</td><td>Çok yavaş trend</td><td>AGC, yük trendi veya alanlar arası yavaş güç salınımı olabilir.</td></tr>
+              <tr><td class="num">0.10-0.20 Hz</td><td>SAS hedef bandı</td><td>Uzun periyotlu bölgeler arası mod; süre ve genlik eşiği önemlidir.</td></tr>
+              <tr><td class="num">0.15-1.00 Hz</td><td>Inter-area</td><td>Geniş alan güç alışverişi; bağ hatlarında P salınımı belirgindir.</td></tr>
+              <tr><td class="num">1.00-2.00 Hz</td><td>Lokal/kontrol</td><td>Santral, PSS/AVR/gov ayarı veya yerel kontrol döngüsü incelenir.</td></tr>
+              <tr><td class="num">2.00-4.50 Hz</td><td>Üst bant</td><td>10 Hz örneklemede tanısal; alias riski kontrol edilir.</td></tr>
+              <tr><td class="num">5.00+ Hz</td><td>SSO/torsiyonel</td><td>10 Hz veriyle güvenilir değildir; 30-50 fps ve EMT/özel analiz gerekir.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card span-2">
+          <div class="chartbox h360"><div class="chart-title">Seçili modun zaman alanı davranışı <span id="modeChartLabel">0.35 Hz / bölgeler arası</span></div><canvas id="modeChart" height="360"></canvas></div>
+          <div class="grid grid-3" style="margin-top:14px">
+            <div class="note small"><b>Frekans</b><br>Yavaş modlarda periyot uzar; 0.15 Hz yaklaşık 6.7 saniyedir.</div>
+            <div class="note amber small"><b>Damping</b><br>Negatif veya sıfıra yakın damping, sürekli/büyüyen salınım uyarısıdır.</div>
+            <div class="note violet small"><b>Mode shape</b><br>Çoklu PMU faz farkı, yerel/geniş alan ayrımının anahtarıdır.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="etkiler">
+      <div class="section-head">
+        <div><div class="section-kicker">3. Fiziksel etki</div><h2>Salınım sırasında P, Q, V ve f birlikte hareket eder</h2><p>Bir arıza, hat açılması veya büyük üretim/yük değişimi sonrası rotor açısı ve hız sapmaları aktif güç, reaktif güç, gerilim ve frekansı kuple eder. Aşağıdaki grafikler aynı olayın dört farklı ölçümde nasıl görüldüğünü gösterir.</p></div>
+      </div>
+      <div class="card">
+        <div class="controls" style="margin-bottom:18px">
+          <div class="control-row"><label for="distScenario">Eğitim senaryosu</label><select id="distScenario"><option value="interarea">0.6 Hz bölgeler arası salınım - zayıf bağ hattı</option><option value="local">1.35 Hz lokal santral modu - yetersiz PSS</option><option value="forced">0.74 Hz zorlanmış salınım - periyodik kontrol arızası</option></select><output id="distSummary">0.60 Hz</output></div>
+        </div>
+        <div class="grid grid-4">
+          <div class="chartbox h220"><div class="chart-title">Frekans f <span>Hz</span></div><canvas id="freqChart" height="220"></canvas></div>
+          <div class="chartbox h220"><div class="chart-title">Aktif güç P <span>MW</span></div><canvas id="pChart" height="220"></canvas></div>
+          <div class="chartbox h220"><div class="chart-title">Gerilim V <span>p.u.</span></div><canvas id="vChart" height="220"></canvas></div>
+          <div class="chartbox h220"><div class="chart-title">Reaktif güç Q <span>MVAr</span></div><canvas id="qChart" height="220"></canvas></div>
+        </div>
+        <div class="grid grid-3" style="margin-top:16px">
+          <div class="note small"><b>Aktif güç - rotor açısı:</b> Basit yaklaşımda güç aktarımı rotor açı farkının sinüsü ile değişir. Açı salındıkça bağ hattı MW akışı da salınır.</div>
+          <div class="note teal small"><b>Reaktif güç - gerilim:</b> Salınan akım, hat reaktif kayıplarını değiştirir. Reaktif talep arttığında alıcı bara gerilimi düşer.</div>
+          <div class="note rose small"><b>Koruma etkisi:</b> Büyük power swing mesafe koruma empedans yörüngesini yanlış bölgelere taşıyabilir; out-of-step / power swing blocking mantığı değerlendirilir.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="sonumleme">
+      <div class="section-head">
+        <div><div class="section-kicker">4. Kararlılık metriği</div><h2>Sönümleme oranı, genlik ve salınım enerjisi</h2><p>Sönümleme oranı pozitifse zarf azalır, sıfıra yakınsa salınım devam eder, negatifse genlik büyür. Eğitimdeki kaydırıcı ile aynı modun güvenli, uyarı ve kritik davranışlarını görün.</p></div>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3>Parametreleri değiştir</h3>
+          <div class="controls">
+            <div class="control-row"><label for="zetaSlider">Damping ζ</label><input id="zetaSlider" type="range" min="-4" max="14" step="1" value="5"><output id="zetaOut">5%</output></div>
+            <div class="control-row"><label for="ampSlider">Başlangıç genliği</label><input id="ampSlider" type="range" min="20" max="160" step="10" value="100"><output id="ampOut">1.00 pu</output></div>
+            <div class="control-row"><label for="freqSlider">Mod frekansı</label><input id="freqSlider" type="range" min="15" max="150" step="5" value="45"><output id="freqOut">0.45 Hz</output></div>
+          </div>
+          <div id="dampingStatus" class="note" style="margin-top:16px"></div>
+          <div class="formula" style="margin-top:16px"><span class="hl">x(t)</span> = A · e<sup>σt</sup> · sin(2πf t + φ)<br><span class="hl">ζ</span> = -σ / √(σ² + (2πf)²)<br><span class="ok">ζ &gt; 0</span> sönümlü · <span class="warn">ζ ≈ 0</span> sürekli · <span class="warn">ζ &lt; 0</span> büyüyen</div>
+        </div>
+        <div class="card span-2">
+          <div class="chartbox h360"><div class="chart-title">Sönümlenen / büyüyen salınım ve zarfı <span id="energyLabel">Enerji: hesaplanıyor</span></div><canvas id="dampingChart" height="360"></canvas></div>
+          <div class="grid grid-3" style="margin-top:14px">
+            <div class="metric card soft"><div><div id="settleMetric" class="value">-</div><div class="label">Yaklaşık sönüm süresi</div></div><div class="icon">🧯</div></div>
+            <div class="metric card soft"><div><div id="peakMetric" class="value">-</div><div class="label">Maksimum genlik</div></div><div class="icon">📏</div></div>
+            <div class="metric card soft"><div><div id="energyMetric" class="value">-</div><div class="label">Göreli salınım enerjisi</div></div><div class="icon">🔋</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-2" style="margin-top:18px">
+        <div class="card"><h3>DEF / dağılan enerji mantığı</h3><p class="muted">Zorlanmış salınımlarda sadece frekans tepesini bulmak yetmez; kaynak yerini anlamak gerekir. PMU ile aktif güç, reaktif güç, gerilim ve açı sapmaları birlikte izlenerek dağılan enerji akışı eğimi yorumlanır.</p><ul class="small"><li><b>Azalan enerji eğimi:</b> cihaz salınım enerjisini emiyor, sönümlemeye katkı veriyor.</li><li><b>Artan enerji eğimi:</b> cihaz veya kontrol döngüsü şebekeye periyodik enerji enjekte ediyor olabilir.</li><li><b>Çoklu PMU karşılaştırması:</b> kaynak yönü, enerji akışının nereden nereye ilerlediğiyle daraltılır.</li></ul></div>
+        <div class="card"><h3>Operatör için kısa yorum dili</h3><table><thead><tr><th>Gözlem</th><th>Yorum</th><th>Öncelik</th></tr></thead><tbody><tr><td>ζ &gt; 5%</td><td>İyi sönümlü, trend izleme yeterli.</td><td><span class="pill green">Normal</span></td></tr><tr><td>3% &lt; ζ ≤ 5%</td><td>Damping zayıflıyor; olay tablosunda bilgi kaydı.</td><td><span class="pill amber">Uyarı</span></td></tr><tr><td>0% &lt; ζ ≤ 3%</td><td>Kritik düşük damping; operatör aksiyonu hazırlanır.</td><td><span class="pill rose">Alarm</span></td></tr><tr><td>ζ ≤ 0%</td><td>Sürekli veya büyüyen salınım; koridor gücü ve kaynak araştırılır.</td><td><span class="pill rose">Kritik</span></td></tr></tbody></table></div>
+      </div>
+    </section>
+
+    <section id="algilama">
+      <div class="section-head">
+        <div><div class="section-kicker">5. PMU tabanlı algılama</div><h2>Kayan pencere, FFT, Prony ve DMD eğitim paneli</h2><p>PMU/senkrofazör verisi, SCADA'nın birkaç saniyelik örnekleme hızının göremediği dinamik olayları yakalamak için kullanılır. Bu panelde bir PMU sinyalinin kayan pencere ile nasıl analiz edildiği gösterilir.</p></div>
+      </div>
+      <div class="grid grid-3">
+        <div class="card">
+          <h3>Analiz boru hattı</h3>
+          <div class="timeline">
+            <div class="event"><div class="event-time">1</div><div class="event-body"><b>Veri kalite kapısı</b><br><span class="muted small">48-52 Hz dışı frekans, NaN, boş paket ve zaman hatası ayıklanır.</span></div></div>
+            <div class="event"><div class="event-time">2</div><div class="event-body"><b>Trend çıkarma</b><br><span class="muted small">DC bileşen ve yavaş yük trendi bastırılır.</span></div></div>
+            <div class="event"><div class="event-time">3</div><div class="event-body"><b>Kayan pencere</b><br><span class="muted small">60/120/300/1800 s gibi pencerelerde spektrum ve damping hesaplanır.</span></div></div>
+            <div class="event"><div class="event-time">4</div><div class="event-body"><b>Modal analiz</b><br><span class="muted small">FFT hızlı tepe bulur; Prony sönüm ve mod parametresi verir; DMD çoklu sinyal modlarını ayrıştırır.</span></div></div>
+            <div class="event"><div class="event-time">5</div><div class="event-body"><b>Alarm kararı</b><br><span class="muted small">Genlik + süre + damping + çoklu PMU tutarlılığı birlikte değerlendirilir.</span></div></div>
+          </div>
+        </div>
+        <div class="card span-2">
+          <div class="controls" style="margin-bottom:14px">
+            <div class="control-row"><label for="windowSlider">Kayan pencere başlangıcı</label><input id="windowSlider" type="range" min="0" max="120" step="1" value="20"><output id="windowOut">20 s</output></div>
+          </div>
+          <div class="grid grid-2">
+            <div class="chartbox h260"><div class="chart-title">Ham PMU frekans sinyali <span>pencere vurgulu</span></div><canvas id="rawPmuChart" height="260"></canvas></div>
+            <div class="chartbox h260"><div class="chart-title">Pencere içi spektrum <span>FFT benzeri genlik</span></div><canvas id="spectrumChart" height="260"></canvas></div>
+          </div>
+          <div class="grid grid-2" style="margin-top:16px">
+            <div class="chartbox h260"><div class="chart-title">Bant enerji özeti <span>RMS</span></div><canvas id="bandEnergyChart" height="260"></canvas></div>
+            <div class="chartbox h260"><div class="chart-title">Spektrogram <span>zaman-frekans</span></div><canvas id="spectrogramChart" height="260"></canvas></div>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-3" style="margin-top:18px">
+        <div class="note small"><b>FFT ne için iyi?</b><br>Hızlı baskın frekans ve genlik tespiti. Çoklu frekans bileşenlerini ayırt eder, ancak damping doğrudan çıkmaz.</div>
+        <div class="note violet small"><b>Prony ne için iyi?</b><br>Ringdown veya pencere içi salınımı üstel sönümlü sinüzoidler olarak modelleyip f, σ ve ζ tahmin eder.</div>
+        <div class="note teal small"><b>DMD ne için iyi?</b><br>Çoklu PMU sinyallerinden uzamsal mod, mod şekli ve faz ilişkisini çıkararak geniş alan davranışını yorumlatır.</div>
+      </div>
+    </section>
+
+    <section id="alarm">
+      <div class="section-head">
+        <div><div class="section-kicker">6. SCADA karar desteği</div><h2>Alarm, olay ve operatör aksiyon matrisi</h2><p>Canlı sistemde alarm üretilirken tek bir frekans tepesine güvenilmez. Veri kalitesi, eşik, minimum süre, damping ve çoklu PMU tutarlılığı birlikte kontrol edilir.</p></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Önerilen karar matrisi</h3>
+          <table>
+            <thead><tr><th>Koşul</th><th>Karar</th><th>Ekran dili</th></tr></thead>
+            <tbody>
+              <tr><td>BAD/MISSING/TIME_ERROR</td><td>Analiz durdurulur</td><td><span class="pill amber">Veri kalite uyarısı</span></td></tr>
+              <tr><td>SAS band peak &lt; 9 mHz</td><td>Alarm yok</td><td><span class="pill green">Normal</span></td></tr>
+              <tr><td>9-11 mHz ve kısa süre</td><td>Histerezis / izleme</td><td><span class="pill amber">Uyarı</span></td></tr>
+              <tr><td>&gt; 11 mHz ve süre şartı</td><td>SAS salınım alarmı</td><td><span class="pill rose">Alarm</span></td></tr>
+              <tr><td>ζ &lt; 0 veya σ &gt; 0</td><td>Büyüyen salınım uyarısı</td><td><span class="pill rose">Kritik</span></td></tr>
+              <tr><td>Aynı mod 3+ PMU'da</td><td>Geniş alan salınımı</td><td><span class="pill violet">Inter-area</span></td></tr>
+              <tr><td>Yalnız 1-2 PMU'da</td><td>Yerel kaynak adayı</td><td><span class="pill blue">Lokal</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h3>Örnek olay tablosu</h3>
+          <table id="eventTable">
+            <thead><tr><th>Zaman</th><th>PMU</th><th>Bant</th><th>f0</th><th>Genlik</th><th>ζ</th><th>Durum</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h3>Mode shape ve kaynak yönü örneği</h3>
+        <div class="grid grid-2">
+          <div class="chartbox h300"><div class="chart-title">Çoklu PMU mod şekli <span>genlik + faz</span></div><canvas id="modeShapeChart" height="300"></canvas></div>
+          <div>
+            <p class="muted">Her PMU için baskın frekanstaki kompleks katsayı hesaplanır: <span class="mono">M_i = |M_i| ∠ θ_i</span>. Genlik yüksekliği salınıma katılımı, faz açısı ise bölgenin diğer alanlara göre ileri/geri salındığını gösterir.</p>
+            <div class="note amber small"><b>Eğitim yorumu:</b> PMU-1 ve PMU-2 benzer fazda, PMU-5 ve PMU-6 yaklaşık karşı fazda ise bu bir bölgeler arası mod adayına işaret eder. Tek PMU genliği belirgin yüksekse yerel kontrol/tesis problemi daha olasıdır.</div>
+            <div class="formula" style="margin-top:14px">M_i = X_i(f0) = |M_i| ∠ θ_i<br>θ_rel,i = θ_i - θ_ref<br>coherence = phase consistency + frequency match</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="vakalar">
+      <div class="section-head">
+        <div><div class="section-kicker">7. Vaka odaklı öğrenme</div><h2>Örnek olaylar ve güncellenmiş eğitim senaryoları</h2><p>Aşağıdaki kartlar, dokümanlarda geçen uygulama fikirlerini eğitim ekranına çevrilmiş şekilde özetler. Her kartın amacı, operatöre “grafikte ne görürüm, nasıl yorumlarım?” sorusunu cevaplatmaktır.</p></div>
+      </div>
+      <div class="grid grid-3">
+        <div class="card"><span class="pill violet">Kundur iki bölgeli sistem</span><h3>0.6 Hz bağ hattı salınımı</h3><p class="muted small">Arıza sonrası aktif güç ve gerilim zıt fazlı salınır. Eğitimde P yükselirken V düşer örneği bu senaryodan türetilmiştir.</p><ul class="small"><li>Bağ hattında MW swing belirgin</li><li>Alıcı bara gerilimi reaktif kayıplara duyarlı</li><li>POD/SVC veya PSS katkısı karşılaştırılabilir</li></ul></div>
+        <div class="card"><span class="pill blue">Sliding Window Prony</span><h3>Itaipu/SADI modu</h3><p class="muted small">0.3-0.4 Hz aralığında inter-area mod gerçek zamanlı takip edilebilir. Prony yöntemi pencereyi kaydırarak frekans ve damping tahminini zaman içinde günceller.</p><ul class="small"><li>Mode energy sıralaması</li><li>Decimation ile gürültü azaltma</li><li>Trigger sonrası modal tahmin</li></ul></div>
+        <div class="card"><span class="pill teal">FFT tabanlı LFODA</span><h3>Kontrol odası için hızlı tespit</h3><p class="muted small">Frekans sinyalinin gerçek zamanlı FFT'si, düşük hesaplama yüküyle baskın salınım frekansını hızlı gösterir.</p><ul class="small"><li>Outlier ve NaN temizliği</li><li>Çoklu frekans bileşeni ayrımı</li><li>GIS/PMU durum entegrasyonu</li></ul></div>
+        <div class="card"><span class="pill amber">WAMPAC / DMD</span><h3>Geniş alan savunma mantığı</h3><p class="muted small">DMD gibi çoklu sinyal teknikleri, zayıf sönümlü inter-area salınımları kontrol merkezinde uyarı/aksiyon mantığına dönüştürmek için kullanılabilir.</p><ul class="small"><li>PMU ağı ve PDC</li><li>Uyarı/alarm eşiği</li><li>SIPS/WAMPAC ile otomatik karşı önlem</li></ul></div>
+        <div class="card"><span class="pill rose">SSO / IBR</span><h3>Yüksek frekans ve kontrol etkileşimi</h3><p class="muted small">Evirici tabanlı kaynakların kontrol döngüleri şebeke empedansı ile etkileşebilir. 10 Hz veride eğitim yapılır; gerçek algılama için daha yüksek raporlama gerekir.</p><ul class="small"><li>EMT senaryoları</li><li>Özellik mühendisliği</li><li>ML destekli sınıflandırma</li></ul></div>
+        <div class="card"><span class="pill green">Model doğrulama</span><h3>Olay sonrası öğrenme</h3><p class="muted small">PMU kayıtları yalnız alarm için değil; olay sonrası model kalibrasyonu, PSS ayarı, HVDC/POD kontrol testi ve raporlama için de kullanılır.</p><ul class="small"><li>Ham olay kesiti</li><li>Simülasyon/gerçek karşılaştırma</li><li>Kontrol parametresi güncelleme</li></ul></div>
+      </div>
+    </section>
+
+    <section id="quiz">
+      <div class="section-head">
+        <div><div class="section-kicker">8. Eğitim kontrolü</div><h2>Operatör karar egzersizi</h2><p>Aşağıdaki kısa senaryo, kullanıcıya tek bir metrikle değil bütüncül düşünmeyi öğretir.</p></div>
+      </div>
+      <div class="grid grid-2">
+        <div class="card">
+          <h3>Senaryo</h3>
+          <p class="muted">Son 120 saniyelik PMU penceresinde 0.16 Hz baskın bileşen var. Frekans tepe genliği 10.7 mHz, damping ζ = 1.8%, aynı bileşen 4 PMU'da görülüyor ve PMU-1/2 ile PMU-5/6 yaklaşık karşı fazda. Veri kalite bayrakları iyi.</p>
+          <label class="quiz-option"><input type="radio" name="quiz" value="A"> <span><b>A.</b> Normal kabul edilir; çünkü genlik 11 mHz'in biraz altında.</span></label>
+          <label class="quiz-option"><input type="radio" name="quiz" value="B"> <span><b>B.</b> Uyarı/alarm adayına alınır; süre, damping ve çoklu PMU tutarlılığı kritik olduğu için operatör aksiyonu hazırlanır.</span></label>
+          <label class="quiz-option"><input type="radio" name="quiz" value="C"> <span><b>C.</b> Sadece lokal salınım denir; çünkü 0.16 Hz tek bir santral modu olmalıdır.</span></label>
+          <button id="quizBtn" class="tab active" style="margin-top:14px">Cevabı kontrol et</button>
+          <div id="quizResult" class="quiz-result"></div>
+        </div>
+        <div class="card">
+          <h3>Canlı ekrana çevrilecek kabul kriterleri</h3>
+          <table><thead><tr><th>#</th><th>Kriter</th></tr></thead><tbody><tr><td>1</td><td>30 dakika üzeri sorgu UI tarafından engellenmeli.</td></tr><tr><td>2</td><td>P, Q, f ve V ham grafiklerde aynı zaman ekseninde gösterilmeli.</td></tr><tr><td>3</td><td>10 Hz veri için Nyquist uyarısı gösterilmeli; 5 Hz üzeri analiz devre dışı bırakılmalı.</td></tr><tr><td>4</td><td>SAS 0.1-0.2 Hz bandında f0, peak, RMS ve damping hesaplanmalı.</td></tr><tr><td>5</td><td>Mode shape paneli 6 PMU için genlik/faz yorumunu vermeli.</td></tr><tr><td>6</td><td>Olay tablosu alarm gerekçesini açık yazmalı; yalnız renkli ikonla yetinmemeli.</td></tr></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section id="kaynaklar">
+      <div class="section-head"><div><div class="section-kicker">9. Kaynak notları</div><h2>Bu eğitim sayfasına işlenen doküman başlıkları</h2><p>İçerik; yüklenen salınım eğitimi HTML'i, salınım modları sunumu, WAM/WAMPAC teknik broşürü, PMU tabanlı FFT/Prony vaka dokümanları ve SCADA mimari notları esas alınarak genişletilmiştir.</p></div></div>
+      <div class="grid grid-3">
+        <div class="card"><h3>SCADA / README uyumu</h3><p class="muted small">Tek sayfa tasarımında mevcut monolit/desktop köprü ve chart render kalite notları dikkate alınmıştır. Eğitim sayfası, canlı analiz sayfasıyla karıştırılmamalıdır.</p></div>
+        <div class="card"><h3>PMU analiz kapsamı</h3><p class="muted small">10 örnek/s eğitim simülasyonu 0.1-2 Hz elektromekanik bantları anlatmak içindir. Torsiyonel/SSO anlatımı kavramsaldır; gerçek sistemde daha yüksek örnekleme ve özel analiz gerekir.</p></div>
+        <div class="card"><h3>Operatör odaklı dil</h3><p class="muted small">Her grafik “ne görüyorum, ne anlama gelir, ne yapmalıyım?” sorularını yanıtlayacak şekilde olay, alarm ve yorum kartlarıyla desteklenmiştir.</p></div>
+      </div>
+      <div class="footer small" style="margin-top:24px">Hazırlanan çıktı: <b>salinim_egitimi_detayli.html</b> · Tek dosya HTML · Dış veri gerektirmez · Eğitim amaçlı sentetik örnekler içerir.</div>
+    </section>
+  </main>
+
+  <script>
+    // ---------- Utility chart functions (self-contained, no external dependency) ----------
+    const COLORS = {blue:'#0ea5e9',blue2:'#0369a1',teal:'#14b8a6',amber:'#f59e0b',rose:'#e11d48',violet:'#7c3aed',green:'#16a34a',slate:'#64748b',grid:'#e2e8f0',ink:'#172033'};
+    function setupCanvas(canvas){
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(320, Math.round(rect.width * dpr));
+      canvas.height = Math.max(180, Math.round((parseFloat(canvas.getAttribute('height')) || rect.height || 260) * dpr));
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      return {ctx,w:canvas.width/dpr,h:canvas.height/dpr};
+    }
+    function niceRange(values, pad=0.12){
+      let min = Math.min(...values), max = Math.max(...values);
+      if(!isFinite(min) || !isFinite(max)){ min=0; max=1; }
+      if(Math.abs(max-min)<1e-9){ min-=1; max+=1; }
+      const p = (max-min)*pad;
+      return [min-p,max+p];
+    }
+    function drawAxes(ctx,w,h,plot,xLabel='',yLabel='',yTicks=5){
+      ctx.save();
+      ctx.strokeStyle = COLORS.grid; ctx.lineWidth = 1;
+      ctx.fillStyle = '#64748b'; ctx.font = '11px Inter, sans-serif';
+      for(let i=0;i<=yTicks;i++){
+        const y = plot.t + (plot.h*i/yTicks);
+        ctx.beginPath(); ctx.moveTo(plot.l,y); ctx.lineTo(plot.l+plot.w,y); ctx.stroke();
+      }
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.beginPath(); ctx.moveTo(plot.l,plot.t); ctx.lineTo(plot.l,plot.t+plot.h); ctx.lineTo(plot.l+plot.w,plot.t+plot.h); ctx.stroke();
+      if(xLabel){ctx.textAlign='center';ctx.fillText(xLabel,plot.l+plot.w/2,h-10)}
+      if(yLabel){ctx.save();ctx.translate(13,plot.t+plot.h/2);ctx.rotate(-Math.PI/2);ctx.textAlign='center';ctx.fillText(yLabel,0,0);ctx.restore();}
+      ctx.restore();
+    }
+    function plotLines(canvasId, series, opts={}){
+      const canvas = document.getElementById(canvasId); if(!canvas) return;
+      const {ctx,w,h}=setupCanvas(canvas); ctx.clearRect(0,0,w,h);
+      const plot={l:opts.left||50,t:22,w:w-(opts.left||50)-18,h:h-54};
+      const xs = series.flatMap(s => s.x || []); const ys = series.flatMap(s => s.y || []);
+      const xMin = opts.xMin ?? Math.min(...xs), xMax = opts.xMax ?? Math.max(...xs);
+      const [autoMin, autoMax]=niceRange(ys,opts.pad??0.12);
+      const yMin = opts.yMin ?? autoMin, yMax = opts.yMax ?? autoMax;
+      const xScale=x=>plot.l+(x-xMin)/(xMax-xMin)*plot.w;
+      const yScale=y=>plot.t+plot.h-(y-yMin)/(yMax-yMin)*plot.h;
+      drawAxes(ctx,w,h,plot,opts.xLabel||'',opts.yLabel||'');
+      ctx.save(); ctx.fillStyle='#64748b'; ctx.font='11px Inter, sans-serif'; ctx.textAlign='right';
+      for(let i=0;i<=5;i++){ const val=yMax-(yMax-yMin)*i/5; ctx.fillText(opts.yFmt?opts.yFmt(val):val.toFixed(2),plot.l-7,plot.t+plot.h*i/5+4); }
+      ctx.textAlign='center';
+      for(let i=0;i<=5;i++){ const val=xMin+(xMax-xMin)*i/5; ctx.fillText(opts.xFmt?opts.xFmt(val):val.toFixed(0),plot.l+plot.w*i/5,plot.t+plot.h+18); }
+      ctx.restore();
+      if(opts.window){
+        const x1=xScale(opts.window[0]), x2=xScale(opts.window[1]);
+        ctx.fillStyle='rgba(14,165,233,.11)'; ctx.fillRect(x1,plot.t,Math.max(0,x2-x1),plot.h);
+        ctx.strokeStyle='rgba(14,165,233,.65)'; ctx.setLineDash([5,4]); ctx.beginPath(); ctx.moveTo(x1,plot.t); ctx.lineTo(x1,plot.t+plot.h); ctx.moveTo(x2,plot.t); ctx.lineTo(x2,plot.t+plot.h); ctx.stroke(); ctx.setLineDash([]);
+      }
+      for(const s of series){
+        ctx.save(); ctx.strokeStyle=s.color||COLORS.blue; ctx.lineWidth=s.width||2; ctx.setLineDash(s.dash||[]);
+        ctx.beginPath();
+        s.x.forEach((x,i)=>{ const px=xScale(x), py=yScale(s.y[i]); if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py); });
+        ctx.stroke();
+        if(s.fill){
+          ctx.lineTo(xScale(s.x[s.x.length-1]), yScale(opts.fillBase??0)); ctx.lineTo(xScale(s.x[0]), yScale(opts.fillBase??0)); ctx.closePath(); ctx.fillStyle=s.fill; ctx.fill();
+        }
+        ctx.restore();
+      }
+      if(series.length>1 || opts.legend){
+        let lx=plot.l+8, ly=plot.t+8; ctx.font='12px Inter, sans-serif'; ctx.textAlign='left';
+        series.forEach(s=>{ ctx.fillStyle=s.color||COLORS.blue; ctx.fillRect(lx,ly-8,18,3); ctx.fillStyle='#334155'; ctx.fillText(s.name||'',lx+24,ly-4); lx += (s.name||'').length*7 + 58; });
+      }
+    }
+    function plotBars(canvasId, labels, values, opts={}){
+      const canvas=document.getElementById(canvasId); if(!canvas) return;
+      const {ctx,w,h}=setupCanvas(canvas); ctx.clearRect(0,0,w,h);
+      const plot={l:50,t:24,w:w-70,h:h-66}; const max=opts.max ?? Math.max(...values)*1.18; const min=opts.min ?? 0;
+      drawAxes(ctx,w,h,plot,opts.xLabel||'',opts.yLabel||'');
+      ctx.font='11px Inter, sans-serif'; ctx.fillStyle='#64748b'; ctx.textAlign='right';
+      for(let i=0;i<=4;i++){ const v=max-(max-min)*i/4; ctx.fillText(v.toFixed(opts.decimals??2),plot.l-7,plot.t+plot.h*i/4+4); }
+      const gap=10; const bw=(plot.w-gap*(labels.length+1))/labels.length;
+      values.forEach((v,i)=>{ const x=plot.l+gap+i*(bw+gap); const y=plot.t+plot.h-(v-min)/(max-min)*plot.h; const bh=plot.t+plot.h-y; ctx.fillStyle=(opts.colors&&opts.colors[i])||COLORS.teal; roundRect(ctx,x,y,bw,bh,7,true,false); ctx.fillStyle='#334155'; ctx.textAlign='center'; ctx.fillText(labels[i],x+bw/2,plot.t+plot.h+20); });
+    }
+    function roundRect(ctx,x,y,w,h,r,fill,stroke){ if(h<0){y+=h;h=-h} ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); if(fill)ctx.fill(); if(stroke)ctx.stroke(); }
+    function plotHeatmap(canvasId, matrix, opts={}){
+      const canvas=document.getElementById(canvasId); if(!canvas) return; const {ctx,w,h}=setupCanvas(canvas); ctx.clearRect(0,0,w,h);
+      const plot={l:50,t:24,w:w-68,h:h-58}; drawAxes(ctx,w,h,plot,'Zaman','Hz');
+      const rows=matrix.length, cols=matrix[0].length; const max=Math.max(...matrix.flat());
+      for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ const val=matrix[r][c]/(max||1); ctx.fillStyle=heatColor(val); ctx.fillRect(plot.l+c*plot.w/cols, plot.t+(rows-1-r)*plot.h/rows, Math.ceil(plot.w/cols)+1, Math.ceil(plot.h/rows)+1); }}
+      ctx.fillStyle='#64748b'; ctx.font='11px Inter, sans-serif'; ctx.textAlign='right';
+      for(let i=0;i<=4;i++){ ctx.fillText((0.1+i*0.45).toFixed(2),plot.l-7,plot.t+plot.h-(i/4)*plot.h+4); }
+      ctx.textAlign='center'; for(let i=0;i<=4;i++){ ctx.fillText((i*45).toFixed(0)+'s',plot.l+plot.w*i/4,plot.t+plot.h+18); }
+    }
+    function heatColor(v){ const r=Math.round(14 + 230*v); const g=Math.round(165 - 70*v); const b=Math.round(233 - 185*v); return `rgb(${r},${Math.max(55,g)},${Math.max(45,b)})`; }
+    function plotPolar(canvasId, points){
+      const canvas=document.getElementById(canvasId); if(!canvas) return; const {ctx,w,h}=setupCanvas(canvas); ctx.clearRect(0,0,w,h);
+      const cx=w/2, cy=h/2, R=Math.min(w,h)*.34; ctx.strokeStyle=COLORS.grid; ctx.lineWidth=1; ctx.fillStyle='#64748b'; ctx.font='12px Inter, sans-serif';
+      for(let r=1;r<=4;r++){ ctx.beginPath(); ctx.arc(cx,cy,R*r/4,0,Math.PI*2); ctx.stroke(); }
+      for(let a=0;a<360;a+=45){ const rad=(a-90)*Math.PI/180; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(rad)*R,cy+Math.sin(rad)*R); ctx.stroke(); ctx.fillText(a+'°',cx+Math.cos(rad)*(R+20)-8,cy+Math.sin(rad)*(R+20)+4); }
+      points.forEach((p,i)=>{ const rad=(p.phase-90)*Math.PI/180; const rr=R*p.amp; const x=cx+Math.cos(rad)*rr, y=cy+Math.sin(rad)*rr; ctx.strokeStyle=p.color; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(x,y); ctx.stroke(); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#0f172a'; ctx.font='bold 12px Inter'; ctx.fillText(p.name,x+9,y-9); });
+    }
+    function linspace(a,b,n){ return Array.from({length:n},(_,i)=>a+(b-a)*i/(n-1)); }
+    function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+    // ---------- Section 2: modes ----------
+    const modeDefs={
+      interarea:{title:'Bölgeler arası mod', freq:.35, zeta:.035, color:COLORS.blue, label:'0.35 Hz / geniş alan', text:'Uzak coğrafi bölgelerdeki jeneratör grupları birbirine karşı salınır. Bağ hatlarında aktif güç dalgalanması ve bölgeler arasında faz karşıtlığı belirgindir. Operatör, koridor yüklenmesini, damping trendini ve çoklu PMU mode shape bilgisini birlikte izler.'},
+      local:{title:'Lokal santral modu', freq:1.35, zeta:.07, color:COLORS.teal, label:'1.35 Hz / lokal tesis', text:'Tek bir jeneratör veya yakın santral grubu şebekenin geri kalanına karşı salınır. Genellikle PSS/AVR/gov ayarıyla ilişkilidir. Mode shape tek bölgede yoğunlaşır.'},
+      forced:{title:'Zorlanmış salınım', freq:.74, zeta:0, color:COLORS.amber, label:'0.74 Hz / sürekli kaynak', text:'Sistemin doğal modundan bağımsız, dışarıdan veya arızalı bir kontrol döngüsünden periyodik enerji girişi vardır. Genlik sönümlenmeyebilir; kaynak yeri için enerji akışı/DEF mantığı kullanılır.'},
+      sso:{title:'SSO / torsiyonel salınım', freq:6.5, zeta:.015, color:COLORS.rose, label:'6.5 Hz / yüksek bant örneği', text:'Şaft torsiyonu, seri kompanzasyon veya evirici kontrol etkileşimi gibi daha hızlı dinamiklerdir. 10 örnek/s eğitim verisi yalnız kavramsal anlatım içindir; gerçek analiz için daha yüksek örnekleme gerekir.'},
+      ibr:{title:'IBR kontrol modu', freq:2.8, zeta:-.008, color:COLORS.violet, label:'2.8 Hz / kontrol etkileşimi', text:'Evirici tabanlı kaynak kontrol döngüsü ile zayıf şebeke empedansı etkileşebilir. Genlik büyüyorsa kontrol parametresi, kısa devre gücü ve topoloji incelenir.'}
+    };
+    function updateMode(mode){
+      document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+      const d=modeDefs[mode]; document.getElementById('modeInfo').innerHTML=`<b>${d.title}</b><br>${d.text}`; document.getElementById('modeChartLabel').textContent=d.label;
+      const t=linspace(0,22,800); const y=t.map(x=>Math.exp(-d.zeta*2*Math.PI*d.freq*x)*Math.sin(2*Math.PI*d.freq*x));
+      const env=t.map(x=>Math.exp(-d.zeta*2*Math.PI*d.freq*x));
+      plotLines('modeChart',[{x:t,y:y,color:d.color,name:d.title,width:2},{x:t,y:env,color:COLORS.slate,name:'üst zarf',dash:[5,4],width:1},{x:t,y:env.map(v=>-v),color:COLORS.slate,name:'alt zarf',dash:[5,4],width:1}],{xLabel:'Saniye',yLabel:'Göreli genlik',xMax:22,yMin:-1.45,yMax:mode==='ibr'?1.65:1.45,legend:true});
+    }
+    document.querySelectorAll('[data-mode]').forEach(btn=>btn.addEventListener('click',()=>updateMode(btn.dataset.mode)));
+
+    // ---------- Section 3: P-Q-V-f effects ----------
+    function disturbanceData(type){
+      const cfg={interarea:{f:.6,z:.04,ampF:.045,ampP:86,ampV:.052,ampQ:28,baseP:400,baseQ:110,label:'0.60 Hz'}, local:{f:1.35,z:.065,ampF:.025,ampP:35,ampV:.022,ampQ:12,baseP:265,baseQ:58,label:'1.35 Hz'}, forced:{f:.74,z:0,ampF:.038,ampP:56,ampV:.033,ampQ:20,baseP:340,baseQ:82,label:'0.74 Hz'}}[type];
+      const t=linspace(0,18,500);
+      const env=t.map(x=>x<1?0:Math.exp(-cfg.z*2*Math.PI*cfg.f*(x-1)));
+      const wave=t.map((x,i)=>x<1?0:env[i]*Math.sin(2*Math.PI*cfg.f*(x-1)));
+      const impulse=t.map(x=>x>=1&&x<1.25?1:0);
+      return {cfg,t,
+        freq:t.map((x,i)=>50 + cfg.ampF*wave[i] - .018*impulse[i]),
+        p:t.map((x,i)=>cfg.baseP + cfg.ampP*wave[i] + 45*impulse[i]),
+        v:t.map((x,i)=>1 - cfg.ampV*wave[i] - .12*impulse[i]),
+        q:t.map((x,i)=>cfg.baseQ + cfg.ampQ*Math.sin(2*Math.PI*cfg.f*Math.max(0,x-1)+Math.PI/3)*env[i] + 24*impulse[i])};
+    }
+    function updateDisturbance(){
+      const type=document.getElementById('distScenario').value; const d=disturbanceData(type); document.getElementById('distSummary').textContent=d.cfg.label;
+      plotLines('freqChart',[{x:d.t,y:d.freq,color:COLORS.amber,name:'f'}],{xLabel:'s',yLabel:'Hz',yFmt:v=>v.toFixed(3)});
+      plotLines('pChart',[{x:d.t,y:d.p,color:COLORS.blue,name:'P'}],{xLabel:'s',yLabel:'MW',yFmt:v=>v.toFixed(0)});
+      plotLines('vChart',[{x:d.t,y:d.v,color:COLORS.rose,name:'V'}],{xLabel:'s',yLabel:'pu',yFmt:v=>v.toFixed(3)});
+      plotLines('qChart',[{x:d.t,y:d.q,color:COLORS.teal,name:'Q'}],{xLabel:'s',yLabel:'MVAr',yFmt:v=>v.toFixed(0)});
+    }
+    document.getElementById('distScenario').addEventListener('change',updateDisturbance);
+
+    // ---------- Section 4: damping ----------
+    function updateDamping(){
+      const zeta=parseInt(document.getElementById('zetaSlider').value,10)/100;
+      const amp=parseInt(document.getElementById('ampSlider').value,10)/100;
+      const freq=parseInt(document.getElementById('freqSlider').value,10)/100;
+      document.getElementById('zetaOut').textContent=(zeta*100).toFixed(0)+'%'; document.getElementById('ampOut').textContent=amp.toFixed(2)+' pu'; document.getElementById('freqOut').textContent=freq.toFixed(2)+' Hz';
+      const t=linspace(0,32,800); const sigma=-zeta*2*Math.PI*freq; const y=t.map(x=>amp*Math.exp(sigma*x)*Math.sin(2*Math.PI*freq*x)); const env=t.map(x=>amp*Math.exp(sigma*x));
+      const energy=y.reduce((a,b)=>a+b*b*(32/800),0); const peak=Math.max(...y.map(Math.abs));
+      plotLines('dampingChart',[{x:t,y:y,color:zeta<0?COLORS.rose:(zeta<.03?COLORS.amber:COLORS.blue),name:'salınım',width:2},{x:t,y:env,color:COLORS.slate,name:'zarf',dash:[6,5],width:1},{x:t,y:env.map(v=>-v),color:COLORS.slate,name:'zarf',dash:[6,5],width:1}],{xLabel:'Saniye',yLabel:'p.u.',legend:true,yMin:zeta<0?-2.5:-1.3,yMax:zeta<0?2.5:1.3});
+      const status=document.getElementById('dampingStatus');
+      if(zeta<0){ status.className='note rose'; status.innerHTML='<b>Kritik:</b> ζ negatiftir. Genlik büyüyen salınım davranışı gösterir; kaynak/kontrol döngüsü araştırılmalıdır.'; }
+      else if(zeta<.03){ status.className='note amber'; status.innerHTML='<b>Zayıf damping:</b> Salınım uzun süre devam eder. Minimum süre ve çoklu PMU tutarlılığı sağlanıyorsa alarm adayına alınır.'; }
+      else if(zeta<.05){ status.className='note'; status.innerHTML='<b>Uyarı:</b> Salınım sönümlenir ancak damping marjı sınırlıdır. Trend ve koridor yükü izlenmelidir.'; }
+      else{ status.className='note teal'; status.innerHTML='<b>Güvenli:</b> Salınım makul sürede sönümleniyor. Olay sonrası raporlama yeterlidir.'; }
+      document.getElementById('settleMetric').textContent=zeta>0?(Math.log(amp/.05)/(zeta*2*Math.PI*freq)).toFixed(1)+' s':'∞';
+      document.getElementById('peakMetric').textContent=peak.toFixed(2)+' pu';
+      document.getElementById('energyMetric').textContent=zeta<0?'∞':energy.toFixed(1); document.getElementById('energyLabel').textContent='Enerji: '+(zeta<0?'büyüyor':energy.toFixed(2));
+    }
+    ['zetaSlider','ampSlider','freqSlider'].forEach(id=>document.getElementById(id).addEventListener('input',updateDamping));
+
+    // ---------- Section 5: PMU detection ----------
+    const fs=10, total=180, pmuT=linspace(0,total,total*fs+1);
+    const pmuSignal=pmuT.map(t=>50 + 0.0015*Math.sin(2*Math.PI*.16*t) + (t>40&&t<110?0.008*Math.sin(2*Math.PI*.35*t)*Math.exp(-.01*(t-40)):0) + (t>88&&t<150?0.004*Math.sin(2*Math.PI*1.2*t):0) + 0.0008*Math.sin(2*Math.PI*2.7*t));
+    function spectrumFor(start,win=60){
+      const slice=pmuT.map((t,i)=>({t,v:pmuSignal[i]})).filter(p=>p.t>=start&&p.t<start+win); const vals=slice.map(p=>p.v - mean(slice.map(q=>q.v)));
+      const freqs=[]; const mags=[];
+      for(let f=.05; f<=2.01; f+=.05){ let re=0, im=0; vals.forEach((v,k)=>{ const w=0.5-0.5*Math.cos(2*Math.PI*k/(vals.length-1)); const ang=2*Math.PI*f*k/fs; re+=v*w*Math.cos(ang); im-=v*w*Math.sin(ang); }); const mag=2*Math.sqrt(re*re+im*im)/vals.length*1000; freqs.push(+f.toFixed(2)); mags.push(mag); }
+      return {freqs,mags};
+    }
+    function mean(a){return a.reduce((x,y)=>x+y,0)/a.length}
+    function updateDetection(){
+      const start=parseInt(document.getElementById('windowSlider').value,10); document.getElementById('windowOut').textContent=start+' s';
+      plotLines('rawPmuChart',[{x:pmuT,y:pmuSignal,color:COLORS.blue,name:'PMU f'}],{xLabel:'Saniye',yLabel:'Hz',xMax:180,yFmt:v=>v.toFixed(3),window:[start,start+60]});
+      const sp=spectrumFor(start,60); plotBars('spectrumChart',sp.freqs.map(f=>f.toFixed(2)),sp.mags,{yLabel:'mHz',decimals:1,colors:sp.freqs.map(f=>f>.1&&f<.2?COLORS.amber:(f<1?COLORS.blue:COLORS.teal)),max:12});
+      const bands=[['0.10-0.20',.10,.20,COLORS.amber],['0.15-1.00',.15,1.0,COLORS.blue],['1.00-2.00',1.0,2.0,COLORS.teal],['2.00-4.50',2.0,4.5,COLORS.violet]];
+      const vals=bands.map(b=>Math.sqrt(sp.mags.filter((_,i)=>sp.freqs[i]>=b[1]&&sp.freqs[i]<b[2]).reduce((s,v)=>s+v*v,0))/3);
+      plotBars('bandEnergyChart',bands.map(b=>b[0]),vals,{yLabel:'RMS mHz',decimals:1,colors:bands.map(b=>b[3])});
+    }
+    document.getElementById('windowSlider').addEventListener('input',updateDetection);
+    function buildSpectrogram(){ const matrix=[]; for(let r=0;r<18;r++){ const f=.1+r*(1.9/17); const row=[]; for(let c=0;c<36;c++){ const t=c*5; let v=.05; v += Math.exp(-Math.pow((f-.35)/.08,2))*((t>40&&t<110)?1.0:.12); v += Math.exp(-Math.pow((f-.16)/.04,2))*.38; v += Math.exp(-Math.pow((f-1.2)/.12,2))*((t>88&&t<150)?.52:.05); row.push(v); } matrix.push(row); } return matrix; }
+
+    // ---------- Section 6: alarms and mode shape ----------
+    function populateEvents(){ const rows=[['10:14:22','PMU-3','0.10-0.20','0.158 Hz','10.7 mHz','1.8%','UYARI'],['10:15:04','PMU-4','0.15-1.00','0.352 Hz','7.4 mHz','4.6%','BILGI'],['10:17:51','PMU-1','1.00-2.00','1.21 Hz','3.2 mHz','6.2%','LOKAL'],['10:22:13','PMU-6','0.10-0.20','0.160 Hz','12.1 mHz','0.9%','ALARM']]; const tb=document.querySelector('#eventTable tbody'); tb.innerHTML=''; rows.forEach(r=>{ const tr=document.createElement('tr'); r.forEach((c,i)=>{ const td=document.createElement('td'); td.textContent=c; if(i>2&&i<6)td.className='num'; if(i===6){ td.innerHTML=c==='ALARM'?'<span class="pill rose">ALARM</span>':c==='UYARI'?'<span class="pill amber">UYARI</span>':c==='LOKAL'?'<span class="pill blue">LOKAL</span>':'<span class="pill green">BILGI</span>'; } tr.appendChild(td); }); tb.appendChild(tr); }); }
+    function drawModeShape(){ const pts=[{name:'PMU-1',amp:.92,phase:5,color:COLORS.blue},{name:'PMU-2',amp:.78,phase:18,color:COLORS.blue2},{name:'PMU-3',amp:.38,phase:82,color:COLORS.teal},{name:'PMU-4',amp:.30,phase:112,color:COLORS.green},{name:'PMU-5',amp:.84,phase:184,color:COLORS.rose},{name:'PMU-6',amp:.75,phase:198,color:COLORS.rose}]; plotPolar('modeShapeChart',pts); }
+
+    // ---------- Quiz ----------
+    document.getElementById('quizBtn').addEventListener('click',()=>{ const ans=document.querySelector('input[name="quiz"]:checked'); const box=document.getElementById('quizResult'); box.classList.add('show'); if(ans && ans.value==='B'){ box.className='quiz-result show note teal'; box.innerHTML='<b>Doğru.</b> Genlik histerezis bandında olsa bile düşük damping, süre ve 4 PMU tutarlılığı geniş alan uyarı/alarm adayını güçlendirir.'; } else { box.className='quiz-result show note rose'; box.innerHTML='<b>Tekrar deneyin.</b> Alarm kararı yalnız peak genliğe göre verilmez; damping, süre, çoklu PMU ve faz ilişkisi birlikte değerlendirilir.'; }});
+
+    // ---------- Initialize and resize ----------
+    function init(){ updateMode('interarea'); updateDisturbance(); updateDamping(); updateDetection(); plotHeatmap('spectrogramChart',buildSpectrogram()); populateEvents(); drawModeShape(); }
+    window.addEventListener('load',init);
+    let resizeTimer; window.addEventListener('resize',()=>{ clearTimeout(resizeTimer); resizeTimer=setTimeout(init,180); });
+  </script>
+</body>
+</html>
