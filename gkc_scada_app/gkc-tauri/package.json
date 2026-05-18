@@ -19,6 +19,7 @@
     "test:scada-query-chunks": "node scripts/scadaQueryChunks.test.ts",
     "test:ytbs-pmu": "node scripts/ytbsPmu.test.ts",
     "test:oscillation": "node scripts/oscillation.test.ts",
+    "test:oscillation-training": "node scripts/oscillationTraining.test.ts",
     "test:scada-quality-report": "node scripts/scadaQualityReport.test.ts",
     "test:scada-details": "node scripts/scadaPointDetails.test.ts"
   },

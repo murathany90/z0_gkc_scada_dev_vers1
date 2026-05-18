@@ -46,6 +46,7 @@ import {
   toGkcQueryFazId,
 } from './utils/gkcHealth';
 import { OscillationPage } from './features/oscillation/components/OscillationPage';
+import { OscillationTrainingPage } from './features/oscillationTraining/components/OscillationTrainingPage';
 import { useOscillationStore } from './features/oscillation/store/oscillationStore';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
@@ -918,6 +919,13 @@ function App() {
               </svg>
               <span className="nav-text">Salınım Algılayıcı</span>
             </button>
+            <button className={`nav-item ${activeTab === 'oscillation_training' ? 'active' : ''}`} onClick={() => setActiveTab('oscillation_training')} title="Salınım Eğitimi ve Simülasyon" aria-label="Salınım Eğitimi ve Simülasyon">
+              <svg className="nav-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M4 19.5V5.8A2.8 2.8 0 0 1 6.8 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M8 7h8M8 11h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <span className="nav-text">Salınım Eğitimi ve Simülasyon</span>
+            </button>
             <button className={`nav-item ${activeTab === 'rms' ? 'active' : ''}`} onClick={() => setActiveTab('rms')} title="RMS Verileri" aria-label="RMS Verileri">
               📊 <span className="nav-text">RMS Verileri</span>
             </button>
@@ -1317,6 +1325,10 @@ function App() {
           )}
 
           {/* YTBS SCADA Veri — Tarih Aralığı Sorgusu */}
+          {activeTab === 'oscillation_training' && (
+            <OscillationTrainingPage themeMode={themeMode} />
+          )}
+
           {activeTab === 'ytbs_scada' && (
             <>
               <div className="card" style={{ marginBottom: 12, flexShrink: 0 }}>

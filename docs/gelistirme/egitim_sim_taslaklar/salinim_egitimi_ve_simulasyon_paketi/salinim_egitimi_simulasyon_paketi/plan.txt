@@ -1,0 +1,259 @@
+Görev:
+GKÇ-SCADA React/Tauri uygulamasına, docs referans klasöründeki “Salınım Eğitimi ve Simülasyon” HTML taslağını native bir uygulama sayfası olarak ekle.
+
+Çalışma dizini:
+c:\yazilim_projeler\z0_gkc_scada_dev_vers1
+
+Uygulama kökü:
+gkc_scada_app/gkc-tauri
+
+Referans dosyalar:
+- docs/gelistirme/egitim_sim_taslaklar/salinim_egitimi_ve_simulasyon_paketi/salinim_egitimi_simulasyon_paketi/salinim_egitimi_ve_simulasyon.html
+- docs/gelistirme/egitim_sim_taslaklar/salinim_egitimi_ve_simulasyon_paketi/salinim_egitimi_simulasyon_paketi/assets/*
+- docs/gelistirme/egitim_sim_taslaklar/salinim_egitim_v2.html
+
+Kesin kural:
+Bu sayfa docs dizininden çalışmayacak. HTML ve assets yalnız referans olarak kullanılacak.
+Sayfa uygulamanın gerçek kaynak klasörlerine native React bileşeni olarak eklenecek.
+Docs klasörü sonradan repodan kaldırıldığında yeni sayfa bozulmayacak.
+
+Beklenen yerleşim:
+- Sol menüde GKÇ İzleme bölümünde “Salınım Algılayıcı” menü öğesinin hemen altına yeni bir sayfa ekle.
+- Yeni menü etiketi: “Salınım Eğitimi ve Simülasyon”.
+- App state için yeni activeTab değeri kullan: örnek `oscillation_training`.
+- `src/App.tsx` içinde bu activeTab için yeni sayfayı render et.
+- Sayfa, mevcut `OscillationPage` içine gömülü ayrıntı sekmesi gibi değil, uygulama içinde ayrı native sayfa olarak çalışsın.
+
+Önerilen dosya yapısı:
+- Create: `src/features/oscillationTraining/components/OscillationTrainingPage.tsx`
+- Create: `src/features/oscillationTraining/components/OscillationTrainingChart.tsx` veya benzer küçük chart bileşenleri
+- Create: `src/features/oscillationTraining/utils/simulationModels.ts`
+- Create: `src/features/oscillationTraining/assets/...`
+- Modify: `src/App.tsx`
+- Modify: `src/index.css`
+- Modify or add tests under `scripts/` if mevcut test yapısına uyuyorsa
+
+Native uygulama gereksinimleri:
+- HTML dosyasını iframe, raw HTML injection veya `dangerouslySetInnerHTML` ile gömme.
+- Kod React + TypeScript bileşenleri olarak yazılsın.
+- CDN kullanılmasın.
+- Chart.js eklenmesin.
+- Uygulamada zaten `echarts` ve `echarts-for-react` var; grafikler için ECharts tercih edilsin.
+- Eğer bazı eğitim simülasyonları canvas ile daha temiz olacaksa, React canvas bileşeni yazılabilir; yine de script tabanlı eski HTML mantığı doğrudan kopyalanmasın.
+- Tema mevcut uygulama temasıyla uyumlu olsun: `themeMode`, `:root[data-theme="light"]`, CSS değişkenleri ve mevcut `card`, `btn`, `oscillation-*` desenleri dikkate alınsın.
+- Türkçe karakterler kesinlikle bozulmasın. Kaynak dosyaları UTF-8 kaydet.
+
+Referans taslaktan alınacak fikirler:
+- Sekmeli eğitim sayfası yapısı.
+- Salınım modları: Bölgeler arası, Lokal, Zorlanmış, Torsiyon/SSO, IBR.
+- P-Q-V-f simülasyonları: Frekans, Aktif Güç, Gerilim, Reaktif Güç.
+- Sönümleme ve enerji anlatımı.
+- PMU algılama: kayan pencere, FFT, Prony/DMD kavramları.
+- BASTS / FBMSWA çift pencere mantığı.
+- Vaka ve teşhis bölümü.
+- Operatör / karar destek yorumu.
+
+Referans taslaktan kaldırılacak veya yeniden yazılacak metinler:
+- Sayfada geliştirme sürecine, doküman birleştirmeye veya “taslak” üretimine dair metin bırakma.
+- Şu tarz metinler kaldırılacak:
+  “GKÇ İzleme altında kullanılacak bu eğitim sayfası; mevcut salınım dokümanlarındaki iyi fikirleri, README'deki SCADA/PMU analiz akışıyla ve NotebookLM görsellerindeki kavram haritalarıyla tek bir kararlı, sekmeli ve çift temalı HTML sayfada birleştirir.”
+  “NotebookLM görsellerinden işlenen ana kavramlar”
+- Bunların yerine operatöre uygun ürün dili yaz:
+  “Bu eğitim sayfası, PMU tabanlı salınım algılama ekranında görülen mod, frekans, genlik, sönümleme ve karar destek çıktılarının nasıl okunacağını öğretir.”
+  “Görsel kavram haritaları”
+  “Operatör okuma rehberi”
+  “Simülasyon sonuçlarının yorumu”
+- “HTML sayfa”, “README”, “NotebookLM”, “dokümanlardan alınan fikirler”, “taslak”, “kaynak referans” gibi geliştirme içi ifadeler UI’da görünmesin.
+
+Sayfa yapısı:
+- Üst başlık: “Salınım Eğitimi ve Simülasyon”.
+- Alt açıklama kısa ve ürün odaklı olsun.
+- Başlık alanında PDF/Yazdır butonu isteğe bağlı kalabilir; eğer uygulanacaksa mevcut uygulamanın print yaklaşımını bozmasın.
+- Üstteki sabit bilgi kartları kaldırılacak.
+- Konum/Odak/Modlar/Analiz/Uyarı/Tema gibi sabit kartlar artık sayfanın üstünde sürekli görünmeyecek.
+- Gerekli bilgiler ilgili sekmenin içinde, bağlamına uygun küçük bilgi kutusu veya tablo olarak verilecek.
+- Sayfa ilk ekranda gereksiz kart kalabalığı yaratmamalı.
+- Sekmeler yatay kaydırılabilir ve mevcut uygulama tasarımına uygun olmalı.
+
+Sekmeler:
+1. Uygulama Bağlamı
+2. Salınım Modları
+3. P-Q-V-f Simülasyonu
+4. Sönümleme ve Enerji
+5. PMU Algılama
+6. BASTS / FBMSWA
+7. Vaka ve Teşhis
+8. Karar Destek
+
+Görsel asset davranışı:
+- Referans assets klasöründeki gerekli görseller uygulama source/public tarafına kopyalanacak.
+- Docs yoluna runtime import bırakılmayacak.
+- Görseller küçük kalmayacak.
+- Her görsel kartının sağ üstünde büyütme tuşu olsun.
+- Görsele tıklayınca veya büyütme tuşuna basınca modal/lightbox açılsın.
+- Modal içinde görsel büyük boy gösterilsin, başlık/açıklama görünsün, Escape ve kapat butonu ile kapanabilsin.
+- Modal focus trap zorunlu değil, ama erişilebilir `aria-label` ve keyboard close olsun.
+- Görsel oranı korunmalı, taşma olursa modal içinde kaydırma/fit uygulanmalı.
+- Mobilde görsel modal viewport dışına taşmamalı.
+
+Simülasyon yenile butonu:
+- Üst genel başlıkta “Simülasyonları yenile” butonu kalmasın.
+- Yenileme gerekiyorsa yalnız ilgili simülasyon sekmesinin içinde gösterilsin.
+- Her simülasyon kendi kontrol panelinde “Sıfırla” veya “Simülasyonu yenile” aksiyonuna sahip olabilir.
+- Simülasyon olmayan sekmelerde yenile butonu görünmesin.
+
+Simülasyon geliştirme gereksinimleri:
+- `salinim_egitimi_ve_simulasyon.html` içindeki simülasyonlar temel alınabilir.
+- `salinim_egitim_v2.html` içindeki PMU/FFT kayan pencere, damping, teşhis ve P-Q-V-f simülasyonları daha iyiyse ilgili kısımlar ondan modellenebilir.
+- Eski HTML scriptlerini birebir taşımak yerine TypeScript pure fonksiyonlar yaz:
+  - damped oscillation generator
+  - P-Q-V-f scenario generator
+  - sliding window segment selector
+  - simple DFT/FFT amplitude estimator
+  - BASTS/FBMSWA threshold decision generator
+  - mode shape / DEF conceptual data generator
+- Simülasyonlar deterministic olsun; random noise için seedli pseudo-random kullan.
+- Aynı input aynı çıktıyı üretmeli, test edilebilir olmalı.
+
+Kayan pencere simülasyonu:
+- PMU Algılama sekmesinde geliştir.
+- Kontroller:
+  - pencere uzunluğu
+  - adım/pencere konumu
+  - gürültü seviyesi
+  - hedef mod frekansı
+- Grafikler:
+  - ham sinyal zaman grafiği
+  - aktif pencere vurgusu
+  - FFT/DFT spektrum çıktısı
+  - mümkünse spektrogram benzeri zaman-frekans ısı haritası
+- Aktif pencere görsel olarak mavi/yarı saydam alanla belirtilsin.
+- Spektrumda hedef mod frekansı dikey işaret veya marker ile gösterilsin.
+- Altında operatör yorumu üret:
+  “Aktif pencere 0.35 Hz civarında baskın bir bileşen gösteriyor; bu bant bölgeler arası salınım adayıdır.”
+
+P-Q-V-f simülasyonu:
+- Dört metriği birlikte göster:
+  - Frekans f (Hz)
+  - Aktif Güç P (MW)
+  - Gerilim V (kV veya p.u.; seçilen birimi açık yaz)
+  - Reaktif Güç Q (MVAr)
+- Senaryo seçimi:
+  - Bölgeler arası
+  - Lokal
+  - Zorlanmış
+- Şiddet/genlik slider’ı olsun.
+- Olay başlangıcı dikey marker ile gösterilsin.
+- Altında kısa tablo:
+  - baskın frekans
+  - beklenen mod
+  - genlik etkisi
+  - operatör yorumu
+
+Salınım modları sekmesi:
+- Mod seçimi için segmented buttons kullan.
+- Her mod için zaman alanı grafiği ve frekans bandı görselleştirmesi olsun.
+- Modlar:
+  - Interarea / Bölgeler arası: yaklaşık 0.1-0.8 Hz
+  - Local / Yerel: yaklaşık 0.8-2 Hz
+  - Forced / Zorlanmış: frekansı kaynağa bağlı
+  - Torsional / SSO: daha yüksek frekans bandı, uygulamada diagnostik anlatım
+  - IBR kontrol etkileşimi: evirici/PLL/kontrol kaynaklı kavramsal anlatım
+- UI metni operatör dilinde olsun; akademik paragraflar kısa tutulmalı.
+
+Sönümleme ve enerji sekmesi:
+- Damping ratio slider’ı olsun.
+- Negatif, sıfıra yakın, zayıf pozitif ve güvenli damping durumları ayrı yorumlansın.
+- Grafik:
+  - salınım sinyali
+  - üst/alt zarf
+  - enerji göstergesi
+- Kritik durumlarda kırmızı uyarı kutusu göster:
+  “Negatif damping, büyüyen salınım eğilimi anlamına gelir.”
+
+BASTS / FBMSWA sekmesi:
+- Çift pencere mantığını anlat:
+  - kısa pencere: hızlı genlik tespiti
+  - uzun pencere: faz/yön doğrulama
+- Simülasyon kontrolleri:
+  - genlik eşiği
+  - faz açısı
+  - tetikleme/kapanma eşikleri
+- Karar çıktısı:
+  - Normal kip
+  - Bekleme/histerezis
+  - Kapasitif kip
+  - Endüktif kip
+- Canlı sisteme komut gönderiyormuş gibi görünmesin; “eğitim simülasyonu” olduğu açık ama ürün dışı taslak dili olmadan belirtilsin.
+
+Vaka ve teşhis sekmesi:
+- Mode shape ve kaynak lokalizasyonu kavramsal gösterilsin.
+- 6 PMU örneği ile faz/genlik deseni çiz.
+- DEF benzeri bar grafikte kaynak/soğurucu ayrımı yap.
+- Örnek olay yorumu üret:
+  “Karşı fazlı iki PMU grubu ve düşük frekans bandı, bölgeler arası salınım karakterine işaret eder.”
+
+Karar Destek sekmesi:
+- Salınım Algılayıcı rapor ekranındaki karar destek diline uyumlu olsun.
+- Ham log dili kullanma.
+- Tablo + yorum formatı kullan.
+- Örnek açıklamalar:
+  - “0.35 Hz bandındaki bileşen bölgeler arası mod adayıdır.”
+  - “Damping oranı düşükse olay izleme seviyesinde tutulmalıdır.”
+  - “Negatif damping görülürse büyüyen salınım riski vurgulanmalıdır.”
+- Eğitim amaçlı olduğunu söyle, ama “taslak/doküman referansı” dili kullanma.
+
+Stil ve UX:
+- Sayfa SCADA/operasyon arayüzü gibi sakin, yoğun ama okunabilir olsun.
+- Landing page/hero gibi pazarlama düzeni yapma.
+- Kartları yalnız anlamlı içerik blokları için kullan.
+- Kart içinde kart yığma.
+- 8px civarı radius tercih et; mevcut app radius ile uyumlu kal.
+- Light/dark tema mevcut uygulama değişkenleriyle çalışsın.
+- Mobilde sekmeler ve grafikler taşmasın.
+- Grafik yüksekliği stabil olsun; legend veya tooltip layout shift yaratmasın.
+- Türkçe karakterler tüm başlık, tooltip, tablo ve butonlarda doğru görünsün.
+
+Teknik detaylar:
+- ECharts option üretimini test edilebilir helper fonksiyonlarına böl.
+- Ağır hesapları render içinde yapma; `useMemo` kullan.
+- Event handler’ları açık ve küçük tut.
+- Görsel listesi data array’den üretilebilir.
+- Asset importları Vite uyumlu olsun.
+- Eski HTML’deki emoji/bozuk karakterli metinleri temizle.
+- Gerekirse asset dosya adlarını koru; import alias veya explicit imports kullan.
+- Yeni sayfa docs yoluna bağımlı olmamalı.
+
+Test planı:
+- `npm run build`
+- `npm run test:oscillation`
+- Eğer yeni helper testleri eklendiyse ilgili npm script veya node test dosyası çalıştır.
+- Yeni pure simülasyon helper’ları için en az şu testleri ekle:
+  - aynı seed/input ile aynı veri üretiliyor
+  - P-Q-V-f simülasyonu dört seri üretiyor
+  - kayan pencere seçimi doğru başlangıç/bitiş indeksini veriyor
+  - DFT/FFT helper hedef frekans çevresinde maksimum genlik üretiyor
+  - damping negatif olduğunda karar seviyesi kritik oluyor
+  - BASTS/FBMSWA eşik kararları normal/bekleme/kapasitif/endüktif sonuçlarını üretiyor
+- Browser QA:
+  - Sol menüde yeni sayfa Salınım Algılayıcı altında görünüyor.
+  - Sayfa docs klasörü olmadan çalışacak şekilde assetleri app içinden yüklüyor.
+  - Light/dark temada okunabilir.
+  - Görsel büyütme modalı açılıp kapanıyor.
+  - Üst sabit bilgi kartları yok.
+  - Genel üst “Simülasyonları yenile” yok.
+  - Kayan pencere ve P-Q-V-f simülasyonları etkileşimli çalışıyor.
+  - Konsolda hata yok.
+  - 1366px desktop ve mobil genişlikte taşma yok.
+
+README:
+- Bu görev kapsamında README istenmediyse README’ye büyük ekleme yapma.
+- Ancak proje standardı gereği kısa bir “Salınım Eğitimi ve Simülasyon native sayfası” notu eklemek gerekiyorsa mevcut bölüm düzenini bozmadan kısa ve düzgün ekle.
+- Gereksiz satır şişirme, numaralı tek cümle doldurma veya mevcut dokümanı eksiltme yapma.
+
+Teslim notunda belirt:
+- Hangi dosyalar eklendi/değişti.
+- Sayfanın docs klasörüne runtime bağımlılığı olmadığı.
+- Hangi simülasyonların native olarak taşındığı/geliştirildiği.
+- Hangi test/build komutlarının çalıştırıldığı.
+- Browser QA sonucu.
