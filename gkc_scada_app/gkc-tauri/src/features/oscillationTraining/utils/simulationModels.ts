@@ -3,6 +3,9 @@ export type TrainingPqvfScenario = 'interarea' | 'local' | 'forced';
 export type TrainingDampingLevel = 'critical' | 'weak' | 'watch' | 'safe';
 export type FbmswaDecisionStatus = 'normal' | 'hold' | 'capacitive' | 'inductive';
 export type SasPulseDecisionStatus = FbmswaDecisionStatus;
+export type SasInterareaBusId = 'toscelik' | 'icdas' | 'mmk' | 'colakoglu' | 'habas' | 'sincan';
+export type SasInterareaTabId = SasInterareaBusId | 'aggregate';
+export type SasFactsType = 'SVC' | 'STATCOM';
 
 export interface TrainingPoint {
   timeSeconds: number;
@@ -33,6 +36,84 @@ export interface SasPulseDecision {
   command: -1 | 0 | 1;
   label: string;
   comment: string;
+}
+
+export interface SasInterareaBusConfig {
+  id: SasInterareaBusId;
+  tab: string;
+  name: string;
+  shortLabel: string;
+  type: SasFactsType;
+  hvLevel: string;
+  mvLevel: string;
+  factsLabel: string;
+  capacitiveMvar: number;
+  inductiveMvar: number;
+  mwEffect: number;
+  ogVoltageLabel: string;
+  ygVoltageLabel: string;
+  phaseDegrees: number;
+  sensitivity: number;
+  location: string;
+  load: string;
+  note: string;
+  nominalVoltageKv: number;
+}
+
+export interface SasInterareaBusSeries {
+  frequencyHz: number[];
+  rawMhz: number[];
+  filteredMhz: number[];
+  shortAmplitudeMhz: number[];
+  energy: number[];
+  pulseLevel: Array<-1 | 0 | 1>;
+  mvar: number[];
+  mw: number[];
+  modeFrequencyHz: number[];
+  dampingRatioPercent: number[];
+  phaseErrorDegrees: number[];
+  confidencePercent: number[];
+  voltageKv: number[];
+  voltagePu: number[];
+}
+
+export interface SasInterareaBusSimulation {
+  config: SasInterareaBusConfig;
+  series: SasInterareaBusSeries;
+}
+
+export interface SasInterareaAggregateSimulation {
+  series: {
+    totalMw: number[];
+    totalDampingMw: number[];
+    totalMvar: number[];
+    activeBusCount: number[];
+    totalEnergy: number[];
+    frequencyChangeMhz: number[];
+    voltagePu: number[];
+  };
+}
+
+export interface SasInterareaSimulation {
+  times: number[];
+  durationSeconds: number;
+  stepSeconds: number;
+  releaseThresholdMhz: number;
+  tabs: Array<{ id: SasInterareaTabId; label: string; subtitle: string }>;
+  buses: SasInterareaBusSimulation[];
+  aggregate: SasInterareaAggregateSimulation;
+}
+
+export interface SasAggregateChartDescriptor {
+  key: 'all-pulses' | 'total-mw-mvar' | 'total-mw-frequency' | 'mvar-voltage-frequency';
+  title: string;
+  subtitle: string;
+  seriesNames: string[];
+}
+
+export interface SasChartWindow {
+  start: number;
+  end: number;
 }
 
 export const TRAINING_MODE_DEFS: Record<TrainingModeId, {
@@ -90,6 +171,135 @@ export const TRAINING_MODE_DEFS: Record<TrainingModeId, {
     operatorText: 'Evirici kontrol döngüleri, PLL ve şebeke empedansı arasındaki etkileşime odaklanır.',
   },
 };
+
+export const SAS_INTERAREA_BUS_CONFIGS: SasInterareaBusConfig[] = [
+  {
+    id: 'toscelik',
+    tab: 'Tosçelik',
+    name: 'Tosçelik T.M. SVC',
+    shortLabel: 'TOS',
+    type: 'SVC',
+    hvLevel: '380 kV',
+    mvLevel: '34.5 kV',
+    factsLabel: '±45 MVAr SVC',
+    capacitiveMvar: 45,
+    inductiveMvar: -45,
+    mwEffect: 7,
+    ogVoltageLabel: '±0.8 kV',
+    ygVoltageLabel: '±1.2 kV @ 380 kV',
+    phaseDegrees: -25,
+    sensitivity: 1,
+    location: 'Osmaniye / demir-çelik',
+    load: 'Ark ocağı + hadde yükü',
+    note: 'Yüksek SVC modülasyon kapasitesi ile frekans çevrimine belirgin reaktif tepki verir.',
+    nominalVoltageKv: 380,
+  },
+  {
+    id: 'icdas',
+    tab: 'İçdaş',
+    name: 'İçdaş T.M. SVC',
+    shortLabel: 'ICD',
+    type: 'SVC',
+    hvLevel: '380 kV',
+    mvLevel: '34.5 kV',
+    factsLabel: '±27-30 MVAr SVC',
+    capacitiveMvar: 30,
+    inductiveMvar: -30,
+    mwEffect: 8.5,
+    ogVoltageLabel: '±0.8 kV',
+    ygVoltageLabel: '~±1 kV @ 380 kV',
+    phaseDegrees: 10,
+    sensitivity: 1.08,
+    location: 'Çanakkale / ağır sanayi',
+    load: 'EAF barası + SVC kontrol',
+    note: 'MW etkisi yüksek kabul edilir; pulse eğrileri aktif güç değişiminde net görünür.',
+    nominalVoltageKv: 380,
+  },
+  {
+    id: 'mmk',
+    tab: 'MMK',
+    name: 'MMK Metalurji T.M. SVC',
+    shortLabel: 'MMK',
+    type: 'SVC',
+    hvLevel: '380 kV',
+    mvLevel: '34.5 kV',
+    factsLabel: '±45 MVAr SVC',
+    capacitiveMvar: 45,
+    inductiveMvar: -45,
+    mwEffect: 9,
+    ogVoltageLabel: '±1.1 kV',
+    ygVoltageLabel: 'testte ölçüm yok',
+    phaseDegrees: 32,
+    sensitivity: 1.14,
+    location: 'Hatay / metalurji barası',
+    load: 'EAF trafo girişleri',
+    note: 'Genlik hassasiyeti yüksek; kısa pencere tetikleme örneği için iyi bir eğitim barasıdır.',
+    nominalVoltageKv: 380,
+  },
+  {
+    id: 'colakoglu',
+    tab: 'Çolakoğlu',
+    name: 'Çolakoğlu T.M. SVC',
+    shortLabel: 'COL',
+    type: 'SVC',
+    hvLevel: '380 kV',
+    mvLevel: '34.5 kV',
+    factsLabel: '±30 MVAr SVC',
+    capacitiveMvar: 30,
+    inductiveMvar: -30,
+    mwEffect: 4.5,
+    ogVoltageLabel: '±0.5 kV',
+    ygVoltageLabel: 'testte ölçüm yok',
+    phaseDegrees: -48,
+    sensitivity: 0.82,
+    location: 'Kocaeli / demir-çelik',
+    load: 'OG barası + SVC filtreleri',
+    note: 'Daha düşük MW katkısı ile histerezis ve normal bölge davranışını gösterir.',
+    nominalVoltageKv: 380,
+  },
+  {
+    id: 'habas',
+    tab: 'Habaş',
+    name: 'Habaş T.M. SVC',
+    shortLabel: 'HBS',
+    type: 'SVC',
+    hvLevel: '154/380 kV',
+    mvLevel: '34.5 kV',
+    factsLabel: '±24.8 MVAr SVC',
+    capacitiveMvar: 24.8,
+    inductiveMvar: -24.8,
+    mwEffect: 2.6,
+    ogVoltageLabel: '±0.5 kV',
+    ygVoltageLabel: 'saha varsayımı',
+    phaseDegrees: 64,
+    sensitivity: 0.66,
+    location: 'Aliağa / demir-çelik',
+    load: 'SVC + tesis yükleri',
+    note: 'Beşinci SVC barası olarak daha küçük pulse/MW katkısı ile toplam tepkiye katılır.',
+    nominalVoltageKv: 380,
+  },
+  {
+    id: 'sincan',
+    tab: 'Sincan',
+    name: 'Sincan T.M. STATCOM',
+    shortLabel: 'SNC',
+    type: 'STATCOM',
+    hvLevel: '154 kV',
+    mvLevel: '154 kV B bank',
+    factsLabel: '+50 / -30 MVAr STATCOM',
+    capacitiveMvar: 50,
+    inductiveMvar: -30,
+    mwEffect: 2.25,
+    ogVoltageLabel: 'testte ölçüm yok',
+    ygVoltageLabel: '1.15 kV @ 154 kV',
+    phaseDegrees: 88,
+    sensitivity: 0.6,
+    location: 'Ankara Sincan / STATCOM',
+    load: 'VSC + DC link',
+    note: 'Altıncı bara olarak STATCOM davranışını gösterir; kapasitif ve endüktif sınırlar asimetriktir.',
+    nominalVoltageKv: 154,
+  },
+];
 
 const PQVF_SCENARIO_DEFS = {
   interarea: { frequencyHz: 0.35, damping: 0.055, expectedMode: 'Bölgeler arası', comment: 'düşük frekanslı bölgeler arası salınım adayıdır' },
@@ -364,29 +574,45 @@ export function buildSasPulseSimulation({
   }) satisfies SasPulseDecision;
   const timeSeconds: number[] = [];
   const frequencySeries: TrainingPoint[] = [];
+  const normalizedOscillationSeries: TrainingPoint[] = [];
   const shortWindowSeries: TrainingPoint[] = [];
   const longWindowSeries: TrainingPoint[] = [];
+  const actionLevelSeries: TrainingPoint[] = [];
   const commandSeries: TrainingPoint[] = [];
   for (let index = 0; index <= 600; index += 1) {
     const t = index / 2;
     const eventEnvelope = t < 50 ? 0.35 : t < 235 ? 1 : 0.42;
     const angle = 2 * Math.PI * 0.15 * t + phaseDegrees * Math.PI / 180;
+    const normalizedOscillation = eventEnvelope * Math.sin(angle);
     const frequencyDeviationHz = amplitudeMhz / 1000 * eventEnvelope * Math.sin(angle);
     const shortWindowAmplitude = amplitudeMhz * eventEnvelope * (t < 70 ? 0.6 : 1);
     const longWindowPhase = phaseDegrees * (t < 120 ? 0.45 : 1);
-    const isPulseWindow = decision.command !== 0 && t >= 95 && t <= 225;
+    const isEventWindow = t >= 75 && t <= 245;
+    const isPulseWindow = decision.command === 1
+      ? isEventWindow && normalizedOscillation > 0.62
+      : decision.command === -1
+        ? isEventWindow && normalizedOscillation < -0.62
+        : false;
+    const actionLevel = isPulseWindow ? decision.command : 0;
+    const factsPulseMvar = isPulseWindow
+      ? decision.command === 1 ? 50 : -30
+      : 0;
     timeSeconds.push(t);
     frequencySeries.push({ timeSeconds: t, value: 50 + frequencyDeviationHz });
+    normalizedOscillationSeries.push({ timeSeconds: t, value: normalizedOscillation });
     shortWindowSeries.push({ timeSeconds: t, value: shortWindowAmplitude });
     longWindowSeries.push({ timeSeconds: t, value: longWindowPhase });
-    commandSeries.push({ timeSeconds: t, value: isPulseWindow ? decision.command * 50 : 0 });
+    actionLevelSeries.push({ timeSeconds: t, value: actionLevel });
+    commandSeries.push({ timeSeconds: t, value: factsPulseMvar });
   }
   return {
     decision,
     timeSeconds,
     frequencySeries,
+    normalizedOscillationSeries,
     shortWindowSeries,
     longWindowSeries,
+    actionLevelSeries,
     commandSeries,
     thresholdSeries: {
       trigger: timeSeconds.map(timeSeconds => ({ timeSeconds, value: triggerThresholdMhz })),
@@ -404,6 +630,209 @@ export function buildSasPulseSimulation({
       phaseToleranceDegrees: 30,
     },
   };
+}
+
+const sasEnvelopeAt = (timeSeconds: number, amplitudeMhz: number) => {
+  const rise = 1 / (1 + Math.exp(-(timeSeconds - 90) / 18));
+  const fall = 1 / (1 + Math.exp((timeSeconds - 344) / 25));
+  const pulse = 0.18 * Math.exp(-Math.pow((timeSeconds - 226) / 120, 2));
+  return amplitudeMhz * (0.1 + 0.95 * rise * fall + pulse);
+};
+
+const sasSeededNoise = (index: number, busIndex: number) => {
+  const value = Math.sin((index + 1) * (busIndex + 3) * 12.9898) * 43758.5453;
+  return (value - Math.floor(value)) * 2 - 1;
+};
+
+export function buildSasInterareaSimulation({
+  amplitudeMhz,
+  modeFrequencyHz,
+  triggerThresholdMhz,
+  dampingPercent,
+  durationSeconds = 480,
+  stepSeconds = 0.5,
+}: {
+  amplitudeMhz: number;
+  modeFrequencyHz: number;
+  triggerThresholdMhz: number;
+  dampingPercent: number;
+  durationSeconds?: number;
+  stepSeconds?: number;
+}): SasInterareaSimulation {
+  const releaseThresholdMhz = Math.max(3, triggerThresholdMhz - 2);
+  const times = Array.from({ length: Math.round(durationSeconds / stepSeconds) + 1 }, (_unused, index) => Number((index * stepSeconds).toFixed(2)));
+  const inSasBand = modeFrequencyHz >= 0.1 && modeFrequencyHz <= 0.2;
+  const buses = SAS_INTERAREA_BUS_CONFIGS.map((config, busIndex) => {
+    let latch = false;
+    let lastPulse: -1 | 0 | 1 = 0;
+    const series: SasInterareaBusSeries = {
+      frequencyHz: [],
+      rawMhz: [],
+      filteredMhz: [],
+      shortAmplitudeMhz: [],
+      energy: [],
+      pulseLevel: [],
+      mvar: [],
+      mw: [],
+      modeFrequencyHz: [],
+      dampingRatioPercent: [],
+      phaseErrorDegrees: [],
+      confidencePercent: [],
+      voltageKv: [],
+      voltagePu: [],
+    };
+    const phaseRadians = config.phaseDegrees * Math.PI / 180;
+    times.forEach((timeSeconds, index) => {
+      const envelope = sasEnvelopeAt(timeSeconds, amplitudeMhz) * config.sensitivity;
+      const phaseAngle = 2 * Math.PI * modeFrequencyHz * timeSeconds + phaseRadians;
+      const filteredMhz = envelope * Math.sin(phaseAngle);
+      const slowMhz = 2.8 * Math.sin(2 * Math.PI * 0.018 * timeSeconds + busIndex * 0.7);
+      const noiseMhz = sasSeededNoise(index, busIndex) * 0.9 + Math.sin(index * 0.49 + busIndex) * 0.4;
+      const rawMhz = filteredMhz + slowMhz + noiseMhz;
+      const shortAmplitudeMhz = Math.abs(envelope) * (0.86 + 0.08 * Math.sin(timeSeconds / 27 + busIndex)) + Math.abs(noiseMhz) * 0.45;
+      if (inSasBand && shortAmplitudeMhz >= triggerThresholdMhz) latch = true;
+      if (!inSasBand || shortAmplitudeMhz <= releaseThresholdMhz) latch = false;
+      let pulseLevel: -1 | 0 | 1 = 0;
+      if (latch) {
+        pulseLevel = Math.sin(phaseAngle) >= 0 ? 1 : -1;
+        if (Math.abs(Math.sin(phaseAngle)) < 0.08) pulseLevel = lastPulse;
+      }
+      lastPulse = pulseLevel;
+      const mvar = pulseLevel > 0 ? config.capacitiveMvar : pulseLevel < 0 ? config.inductiveMvar : 0;
+      const mw = pulseLevel * config.mwEffect * (0.82 + 0.18 * Math.min(1, shortAmplitudeMhz / Math.max(1, triggerThresholdMhz * 2)));
+      const voltageSwingKv = pulseLevel * (config.type === 'STATCOM' ? 0.55 : 0.32) * config.sensitivity + 0.04 * Math.sin(timeSeconds / 19 + busIndex);
+      const voltageKv = config.nominalVoltageKv + voltageSwingKv;
+      const confidencePercent = clamp((shortAmplitudeMhz - releaseThresholdMhz) / (triggerThresholdMhz * 1.4) * 100 + (latch ? 22 : 0), 0, 100);
+      series.frequencyHz.push(Number((50 + rawMhz / 1000).toFixed(6)));
+      series.rawMhz.push(Number(rawMhz.toFixed(4)));
+      series.filteredMhz.push(Number(filteredMhz.toFixed(4)));
+      series.shortAmplitudeMhz.push(Number(shortAmplitudeMhz.toFixed(4)));
+      series.energy.push(Number((Math.pow(shortAmplitudeMhz, 2) * (0.018 + 0.002 * busIndex)).toFixed(4)));
+      series.pulseLevel.push(pulseLevel);
+      series.mvar.push(Number(mvar.toFixed(3)));
+      series.mw.push(Number(mw.toFixed(4)));
+      series.modeFrequencyHz.push(Number((modeFrequencyHz + 0.004 * Math.sin(timeSeconds / 80 + busIndex) + sasSeededNoise(index + 4, busIndex) * 0.0012).toFixed(5)));
+      series.dampingRatioPercent.push(Number((dampingPercent + (latch ? 1.8 : -0.8) + 1.5 * Math.sin(timeSeconds / 170 + busIndex * 0.3)).toFixed(3)));
+      series.phaseErrorDegrees.push(Number((24 * Math.sin(timeSeconds / 55 + busIndex * 0.6) + sasSeededNoise(index + 8, busIndex) * 2.5).toFixed(3)));
+      series.confidencePercent.push(Number(confidencePercent.toFixed(2)));
+      series.voltageKv.push(Number(voltageKv.toFixed(4)));
+      series.voltagePu.push(Number((voltageKv / config.nominalVoltageKv).toFixed(6)));
+    });
+    return { config, series };
+  });
+  const totalMw = times.map((_time, index) => Number(buses.reduce((total, entry) => total + entry.series.mw[index], 0).toFixed(4)));
+  const aggregateSeries = {
+    totalMw,
+    totalDampingMw: totalMw.map(value => Number((-value).toFixed(4))),
+    totalMvar: times.map((_time, index) => Number(buses.reduce((total, entry) => total + entry.series.mvar[index], 0).toFixed(4))),
+    activeBusCount: times.map((_time, index) => buses.reduce((total, entry) => total + (entry.series.pulseLevel[index] !== 0 ? 1 : 0), 0)),
+    totalEnergy: times.map((_time, index) => Number(buses.reduce((total, entry) => total + entry.series.energy[index], 0).toFixed(4))),
+    frequencyChangeMhz: times.map((_time, index) => Number((buses.reduce((total, entry) => total + entry.series.rawMhz[index], 0) / buses.length).toFixed(4))),
+    voltagePu: times.map((_time, index) => Number((buses.reduce((total, entry) => total + entry.series.voltagePu[index], 0) / buses.length).toFixed(6))),
+  };
+  return {
+    times,
+    durationSeconds,
+    stepSeconds,
+    releaseThresholdMhz,
+    tabs: [
+      ...buses.map((entry, index) => ({
+        id: entry.config.id,
+        label: `${index + 1}. ${entry.config.tab}`,
+        subtitle: `${entry.config.type} · ${entry.config.factsLabel}`,
+      })),
+      { id: 'aggregate', label: '7. Toplam', subtitle: '6 bara ortak tepki' },
+    ],
+    buses,
+    aggregate: { series: aggregateSeries },
+  };
+}
+
+export function buildSasAggregateChartDescriptors(_simulation: SasInterareaSimulation): SasAggregateChartDescriptor[] {
+  return [
+    {
+      key: 'all-pulses',
+      title: '1. Tüm Bara Pulse Tepkileri',
+      subtitle: 'Her bara için offsetli -1 / 0 / +1 pulse çizimi',
+      seriesNames: SAS_INTERAREA_BUS_CONFIGS.map(config => `${config.shortLabel} pulse`),
+    },
+    {
+      key: 'total-mw-mvar',
+      title: '2. Toplam Aktif Güç / Reaktif Komut',
+      subtitle: 'Toplam MW etkisi ve toplam MVAr komutu',
+      seriesNames: ['Toplam MW', 'Toplam MVAr'],
+    },
+    {
+      key: 'total-mw-frequency',
+      title: '3. Toplam MW ve Frekans Değişimi',
+      subtitle: 'Frekans sapmasına ters polaritede MW sönümleme etkisi',
+      seriesNames: ['Toplam MW sönümleme etkisi', 'Frekans değişimi'],
+    },
+    {
+      key: 'mvar-voltage-frequency',
+      title: '4. Toplam MVAr / Gerilim p.u. / Frekans',
+      subtitle: 'Reaktif komut, ortalama gerilim ve frekans değişimi',
+      seriesNames: ['Toplam MVAr', 'Gerilim p.u.', 'Frekans değişimi'],
+    },
+  ];
+}
+
+const normalizeSasWindow = (start: number, end: number, durationSeconds: number): SasChartWindow => {
+  const safeDuration = Math.max(1, durationSeconds);
+  const orderedStart = Math.min(start, end);
+  const orderedEnd = Math.max(start, end);
+  const span = Math.max(1, orderedEnd - orderedStart);
+  const clampedStart = clamp(orderedStart, 0, Math.max(0, safeDuration - span));
+  return {
+    start: Number(clampedStart.toFixed(3)),
+    end: Number(Math.min(safeDuration, clampedStart + span).toFixed(3)),
+  };
+};
+
+export function resolveSasChartWindow({
+  durationSeconds,
+  timeSeconds,
+  viewSeconds,
+  zoomWindow,
+}: {
+  durationSeconds: number;
+  timeSeconds: number;
+  viewSeconds: number;
+  zoomWindow: SasChartWindow | null;
+}): SasChartWindow {
+  if (zoomWindow) return normalizeSasWindow(zoomWindow.start, zoomWindow.end, durationSeconds);
+  if (viewSeconds >= durationSeconds) return { start: 0, end: durationSeconds };
+  const span = Math.max(30, viewSeconds);
+  const start = clamp(timeSeconds - span / 2, 0, durationSeconds - span);
+  return { start: Number(start.toFixed(3)), end: Number((start + span).toFixed(3)) };
+}
+
+export function normalizeSasDataZoomEvent(event: unknown, durationSeconds: number): SasChartWindow | null {
+  if (!event || typeof event !== 'object') return null;
+  const eventRecord = event as Record<string, unknown>;
+  const batch = Array.isArray(eventRecord.batch) ? eventRecord.batch[0] : undefined;
+  const payload = (batch && typeof batch === 'object' ? batch : eventRecord) as Record<string, unknown>;
+  const startValue = Number(payload.startValue);
+  const endValue = Number(payload.endValue);
+  if (Number.isFinite(startValue) && Number.isFinite(endValue)) {
+    return normalizeSasWindow(startValue, endValue, durationSeconds);
+  }
+  const startPercent = Number(payload.start);
+  const endPercent = Number(payload.end);
+  if (Number.isFinite(startPercent) && Number.isFinite(endPercent)) {
+    return normalizeSasWindow(durationSeconds * startPercent / 100, durationSeconds * endPercent / 100, durationSeconds);
+  }
+  return null;
+}
+
+export function buildSasChartZoomConfig(startValue?: number, endValue?: number) {
+  const controlled = Number.isFinite(startValue) && Number.isFinite(endValue)
+    ? { startValue, endValue }
+    : {};
+  return [
+    { type: 'inside', xAxisIndex: 0, filterMode: 'none', zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false, ...controlled },
+    { type: 'slider', xAxisIndex: 0, filterMode: 'none', height: 18, bottom: 8, ...controlled },
+  ];
 }
 
 export function assessDampingRatio(dampingRatioPercent: number): {

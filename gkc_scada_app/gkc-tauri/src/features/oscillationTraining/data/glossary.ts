@@ -72,6 +72,13 @@ export const GLOSSARY_SECTIONS: TrainingGlossarySection[] = [
         sections: ['glossary', 'sas', 'cases'],
       },
       {
+        key: 'sas-c',
+        label: 'SAS-C',
+        shortDefinition: 'FACTS cihazlarıyla yerel çalışan SAS-C eğitim simülasyonu.',
+        definition: 'SAS-C, bu eğitim sayfasında altı bara üzerindeki SVC ve STATCOM cihazlarının 0.12-0.16 Hz bölgeler arası salınıma verdiği lokal pulse tepkisini anlatan native simülasyon modelidir.',
+        sections: ['sas'],
+      },
+      {
         key: 'basts',
         label: 'BASTS',
         shortDefinition: 'Bölgeler Arası Salınım Tanımlayıcı Sistem.',
@@ -138,7 +145,7 @@ export const GLOSSARY_SECTIONS: TrainingGlossarySection[] = [
         label: 'MW',
         shortDefinition: 'Megawatt, aktif güç birimi.',
         definition: 'MW, aktif güç salınımının işletme etkisini gösterir. Forced oscillation vakalarında yerel bir arıza uzak bölgelerde büyük MW dalgalanmaları üretebilir.',
-        sections: ['pqvf', 'cases'],
+        sections: ['pqvf', 'sas', 'cases'],
       },
       {
         key: 'mvar',
@@ -152,7 +159,7 @@ export const GLOSSARY_SECTIONS: TrainingGlossarySection[] = [
         label: 'p.u.',
         shortDefinition: 'Per-unit, normalize edilmiş büyüklük.',
         definition: 'p.u. farklı gerilim seviyelerindeki değerleri ortak ölçeğe getirir. Eğitim grafiklerinde gerilim veya genlik değişimini karşılaştırmayı kolaylaştırmak için kullanılır.',
-        sections: ['pqvf', 'modes'],
+        sections: ['pqvf', 'modes', 'sas'],
       },
       {
         key: 'amplitude',
@@ -194,6 +201,20 @@ export const GLOSSARY_SECTIONS: TrainingGlossarySection[] = [
         shortDefinition: 'Akan veriden sabit uzunlukta analiz kesiti alma yöntemi.',
         definition: 'Kayan pencere, PMU akışını zaman içinde ilerleyen kısa analiz parçalarına böler. Pencere uzunluğu çözünürlüğü, adım değeri ise bulgunun ne kadar sık güncellendiğini belirler.',
         sections: ['detection', 'sas'],
+      },
+      {
+        key: 'short-window',
+        label: 'Kısa pencere',
+        shortDefinition: 'SAS-C içinde hızlı genlik tespiti için kullanılan 20 saniyelik pencere.',
+        definition: 'Kısa pencere, lokal SAS-C mantığında salınım genliğinin tetik eşiğini aşıp aşmadığını hızlı belirler. Eğitim simülasyonunda 20 saniyelik FFT genlik penceresi olarak gösterilir.',
+        sections: ['sas', 'detection'],
+      },
+      {
+        key: 'long-window',
+        label: 'Uzun pencere',
+        shortDefinition: 'SAS-C içinde faz ve yön doğrulaması için kullanılan 100 saniyelik pencere.',
+        definition: 'Uzun pencere, kapasitif veya endüktif pulse yönünün güvenilir belirlenmesi için faz bilgisini kararlı hale getirir. Eğitim simülasyonunda 100 saniyelik doğrulama penceresi olarak gösterilir.',
+        sections: ['sas', 'detection'],
       },
       {
         key: 'fifo',

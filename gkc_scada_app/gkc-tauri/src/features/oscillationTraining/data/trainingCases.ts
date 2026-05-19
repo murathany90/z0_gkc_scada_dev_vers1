@@ -60,7 +60,7 @@ export const TRAINING_CASES: TrainingCase[] = [
       { label: 'Gerilim etkisi', value: 'Sincan 154 kV Bank-B, 2 kV faz-faz', severity: 'watch' },
       { label: 'FACTS çıktısı', value: '+50 / -30 MVAr T-STATCOM', severity: 'info' },
     ],
-    assetNames: ['Resim1.png', 'Resim2.png', 'Resim3.png'],
+    assetNames: ['Resim1.jpg', 'Resim2.jpg', 'Resim3.jpg'],
     color: '#2563eb',
   },
   {
@@ -82,7 +82,7 @@ export const TRAINING_CASES: TrainingCase[] = [
       { label: 'İşletme koşulu', value: 'Ağır yük ve kısıtlı iletim', severity: 'critical' },
       { label: 'Sonuç', value: 'Geniş çaplı blackout', severity: 'critical' },
     ],
-    assetNames: ['Resim4.png', 'Resim5.png'],
+    assetNames: ['Resim4.jpg', 'Resim5.jpg'],
     color: '#dc2626',
   },
   {
@@ -104,7 +104,7 @@ export const TRAINING_CASES: TrainingCase[] = [
       { label: 'Mode shape', value: 'İsviçre - Yunanistan Doğu-Batı modu', severity: 'info' },
       { label: 'Kontrol etkisi', value: 'AGC bloke olacak kadar belirgin', severity: 'watch' },
     ],
-    assetNames: ['Resim6.png', 'Resim7.png', 'Resim8.png'],
+    assetNames: ['Resim6.jpg', 'Resim7.jpg', 'Resim8.jpg'],
     color: '#f59e0b',
   },
   {
@@ -126,7 +126,7 @@ export const TRAINING_CASES: TrainingCase[] = [
       { label: 'Uzak etki', value: '50 MW aktif güç dalgalanması', severity: 'watch' },
       { label: 'Teşhis yöntemi', value: 'DEF kaynak lokalizasyonu', severity: 'info' },
     ],
-    assetNames: ['Resim9.png', 'Resim10.png', 'Resim11.png'],
+    assetNames: ['Resim9.jpg', 'Resim10.jpg', 'Resim11.jpg'],
     color: '#7c3aed',
   },
 ];

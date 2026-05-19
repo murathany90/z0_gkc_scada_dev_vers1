@@ -31,7 +31,6 @@ import bastsBrain from '../assets/grid_pulse_p03_basts_digital_brain.jpg';
 import dualWindow from '../assets/grid_pulse_p06_dual_window_fft.jpg';
 import pipeline from '../assets/grid_pulse_p07_pipeline.jpg';
 import thresholds from '../assets/grid_pulse_p08_thresholds.jpg';
-import syntheticTest from '../assets/grid_pulse_p09_synthetic_test.jpg';
 import frequencyBands from '../assets/stability_p03_frequency_bands.jpg';
 import comparisonMatrix from '../assets/stability_p04_comparison_matrix.jpg';
 import interareaProfile from '../assets/stability_p06_interarea_profile.jpg';
@@ -64,7 +63,7 @@ const TRAINING_TABS: Array<{ id: TrainingTabId; label: string }> = [
   { id: 'detection', label: '6. PMU Algılama' },
   { id: 'sas', label: '7. SAS Çalışması' },
   { id: 'cases', label: '8. Vaka ve Teşhis' },
-  { id: 'decision', label: '9. Karar Destek' },
+  { id: 'decision', label: '9. Salınım Algılama Uygulaması' },
 ];
 
 const FIGURES: Record<TrainingTabId, TrainingFigure[]> = {
@@ -90,10 +89,10 @@ const FIGURES: Record<TrainingTabId, TrainingFigure[]> = {
     { src: pipeline, title: 'İşleme hattı', caption: 'Örnekleme, filtreleme, pencereleme ve spektrum adımları operatör bulgusuna dönüşür.' },
   ],
   sas: [
+    { src: fbmswaActionSignal, title: 'Aksiyon sinyali referansı', caption: 'FBMSWA teşhisi tamamlandığında eğitim sinyali -1, 0 veya +1 aksiyon seviyesi olarak okunur.' },
     { src: dualWindow, title: 'Çift pencere yaklaşımı', caption: 'Kısa pencere genliği hızlı yakalar; uzun pencere faz/yön doğruluğunu güçlendirir.' },
     { src: thresholds, title: 'Eşik ve histerezis', caption: 'Tetikleme ve kapanma eşikleri yalancı kararları azaltmak için ayrı tutulur.' },
     { src: fbmswaArchitecture, title: 'FBMSWA mimarisi', caption: 'Giriş, wash-out, kısa/uzun pencere ve karar sinyali kavramsal akış olarak gösterilir.' },
-    { src: fbmswaActionSignal, title: 'Karar sinyali', caption: 'Eğitim kararı normal, bekleme, kapasitif veya endüktif kip olarak yorumlanır.' },
   ],
   cases: [
     { src: visibleThreat, title: 'Düşük frekanslı tehdit', caption: 'Yavaş salınımlar geniş coğrafyada görünür hale gelmeden önce PMU ile yakalanabilir.' },
@@ -101,7 +100,9 @@ const FIGURES: Record<TrainingTabId, TrainingFigure[]> = {
     { src: fbmswaPhaseBorder, title: 'Faz sınırı', caption: 'Uzun pencere faz bilgisini kararlı hale getirerek yön kararını destekler.' },
   ],
   decision: [
-    { src: syntheticTest, title: 'Sentetik test okuması', caption: 'Eğitim verisi, canlı alarm üretmeden rapor dilini ve yorum adımlarını öğretir.' },
+    { src: bastsBrain, title: 'Algılama ve karar zinciri', caption: 'PMU ölçümü, modal bulgu, karar destek ve operatör aksiyonu tek uygulama akışında birleşir.' },
+    { src: pqvfResponse, title: 'P-Q-V-f analiz kabiliyeti', caption: 'Frekans, aktif güç, reaktif güç ve gerilim aynı olay penceresinde birlikte değerlendirilir.' },
+    { src: fbmswaActionSignal, title: 'SAS-C eğitim simülasyonu', caption: 'Lokal bara pulse mantığı, canlı sisteme komut göndermeden eğitim grafikleriyle gösterilir.' },
   ],
 };
 
@@ -574,10 +575,7 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
           )}
 
           {activeTab === 'sas' && (
-            <>
-              <SasStudyPanel themeMode={themeMode} />
-              <FigureGrid figures={FIGURES.sas} onOpen={setOpenFigure} />
-            </>
+            <SasStudyPanel themeMode={themeMode} figures={FIGURES.sas} onOpenFigure={setOpenFigure} />
           )}
 
           {activeTab === 'cases' && (
@@ -586,34 +584,34 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
 
           {activeTab === 'decision' && (
             <section className="training-panel">
-              <SectionHeader title="Karar destek dili" description="Eğitim çıktısı ham log yerine tablo ve işletme yorumu olarak okunur." />
+              <SectionHeader title="Salınım Algılama Uygulaması" description="PMU tabanlı modal analiz, SAS-C eğitim simülasyonu, rapor ve operatör karar dili aynı WAMPAC arayüzünde birleştirilir." />
               <div className="training-grid two">
                 <div className="training-info-card">
-                  <h3>Örnek bulgu tablosu</h3>
+                  <h3>Uygulama kabiliyetleri</h3>
                   <table className="training-table">
                     <thead>
-                      <tr><th>Alan</th><th>Değer</th></tr>
+                      <tr><th>Modül</th><th>Operasyonel değer</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td>PMU</td><td>KARAMAN 154 kV örnek fider</td></tr>
-                      <tr><td>Zaman</td><td>17:52:00 - 17:54:00</td></tr>
-                      <tr><td>Frekans</td><td>0.35 Hz</td></tr>
-                      <tr><td>Mod</td><td>Bölgeler arası aday</td></tr>
-                      <tr><td>DR</td><td>%2.8, zayıf sönüm</td></tr>
+                      <tr><td>PMU modal analiz</td><td>Frekans, genlik, mod ve DR değerlerini ortak zaman ekseninde çıkarır.</td></tr>
+                      <tr><td>P-Q-V-f birlikte okuma</td><td>Aktif güç, reaktif güç, gerilim ve frekans etkisini aynı olay penceresinde gösterir.</td></tr>
+                      <tr><td>SAS-C eğitimi</td><td>SVC/STATCOM pulse mantığını güvenli eğitim simülasyonu olarak öğretir.</td></tr>
+                      <tr><td>PDF rapor</td><td>Özet, grafik ve metrikleri operatör raporu formatında üretir.</td></tr>
+                      <tr><td>Karar cümlesi</td><td>Ham log yerine işletme yorumu ve risk seviyesini açıklar.</td></tr>
                     </tbody>
                   </table>
                 </div>
                 <div className="training-info-card">
-                  <h3>Simülasyon sonuçlarının yorumu</h3>
+                  <h3>WAMPAC arayüz konumu</h3>
                   <div className="training-decision-list">
-                    <p>0.35 Hz bandındaki bileşen <TrainingTerm term="interarea">bölgeler arası</TrainingTerm> mod adayıdır.</p>
-                    <p><TrainingTerm term="damping-ratio">Damping oranı</TrainingTerm> düşükse olay izleme seviyesinde tutulmalıdır.</p>
-                    <p>Negatif <TrainingTerm term="damping-ratio">damping</TrainingTerm> görülürse büyüyen salınım riski vurgulanmalıdır.</p>
-                    <p><TrainingTerm term="pqvf">P-Q-V-f</TrainingTerm> metrikleri aynı zaman aralığında birlikte değişiyorsa bulgu güveni artar.</p>
+                    <p><TrainingTerm term="pmu">PMU</TrainingTerm> verisiyle gerçek zamanlı salınım işaretleri izlenir.</p>
+                    <p><TrainingTerm term="damping-ratio">DR</TrainingTerm> ve mod sınıflandırması olayın izleme mi kritik mi olduğunu belirler.</p>
+                    <p><TrainingTerm term="sas-c">SAS-C</TrainingTerm> sekmesi lokal bara müdahale mantığını canlı sisteme komut göndermeden gösterir.</p>
+                    <p><TrainingTerm term="wampac">WAMPAC</TrainingTerm> bakışı, izleme, koruma ve kontrol bilgisini tek operatör akışına toplar.</p>
                   </div>
                 </div>
               </div>
-              <div className="training-alert safe"><strong>Karar cümlesi örneği</strong><span>KARAMAN 154 kV fiderinde 17:52:00 - 17:54:00 zaman aralığında yaklaşık 0.35 Hz frekanslı bölgeler arası salınım adayı görülmüştür; sönümleme düşük olduğu için olay izleme seviyesinde takip edilmelidir.</span></div>
+              <div className="training-alert safe"><strong>Operatör odaklı çıktı</strong><span>Uygulama, salınım tespiti yaptığında grafik, tablo, PDF rapor ve açıklanabilir karar cümlesini aynı akışta üretir; eğitim sayfası bu çıktının nasıl okunacağını öğretir.</span></div>
               <FigureGrid figures={FIGURES.decision} onOpen={setOpenFigure} />
             </section>
           )}

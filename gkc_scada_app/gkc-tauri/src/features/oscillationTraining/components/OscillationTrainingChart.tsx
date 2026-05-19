@@ -101,10 +101,12 @@ export function OscillationTrainingChart({
   option,
   themeMode,
   height = 280,
+  onEvents,
 }: {
   option: Record<string, unknown>;
   themeMode: TrainingThemeMode;
   height?: number | string;
+  onEvents?: Record<string, (params: unknown) => void>;
 }) {
   return (
     <ReactECharts
@@ -112,6 +114,7 @@ export function OscillationTrainingChart({
       style={{ height, width: '100%' }}
       notMerge={true}
       lazyUpdate={true}
+      onEvents={onEvents}
     />
   );
 }

@@ -3,17 +3,17 @@ import { buildCaseSimulation, TRAINING_CASES, type TrainingCase, type TrainingCa
 import { OscillationTrainingChart, trainingChartPalette, type TrainingThemeMode } from './OscillationTrainingChart.tsx';
 import { TrainingTerm } from './TrainingTerm.tsx';
 
-import resim1 from '../assets/asset2/Resim1.png';
-import resim2 from '../assets/asset2/Resim2.png';
-import resim3 from '../assets/asset2/Resim3.png';
-import resim4 from '../assets/asset2/Resim4.png';
-import resim5 from '../assets/asset2/Resim5.png';
-import resim6 from '../assets/asset2/Resim6.png';
-import resim7 from '../assets/asset2/Resim7.png';
-import resim8 from '../assets/asset2/Resim8.png';
-import resim9 from '../assets/asset2/Resim9.png';
-import resim10 from '../assets/asset2/Resim10.png';
-import resim11 from '../assets/asset2/Resim11.png';
+import resim1 from '../assets/asset2/Resim1.jpg';
+import resim2 from '../assets/asset2/Resim2.jpg';
+import resim3 from '../assets/asset2/Resim3.jpg';
+import resim4 from '../assets/asset2/Resim4.jpg';
+import resim5 from '../assets/asset2/Resim5.jpg';
+import resim6 from '../assets/asset2/Resim6.jpg';
+import resim7 from '../assets/asset2/Resim7.jpg';
+import resim8 from '../assets/asset2/Resim8.jpg';
+import resim9 from '../assets/asset2/Resim9.jpg';
+import resim10 from '../assets/asset2/Resim10.jpg';
+import resim11 from '../assets/asset2/Resim11.jpg';
 
 interface TrainingFigure {
   src: string;
@@ -22,17 +22,17 @@ interface TrainingFigure {
 }
 
 const assetMap: Record<string, string> = {
-  'Resim1.png': resim1,
-  'Resim2.png': resim2,
-  'Resim3.png': resim3,
-  'Resim4.png': resim4,
-  'Resim5.png': resim5,
-  'Resim6.png': resim6,
-  'Resim7.png': resim7,
-  'Resim8.png': resim8,
-  'Resim9.png': resim9,
-  'Resim10.png': resim10,
-  'Resim11.png': resim11,
+  'Resim1.jpg': resim1,
+  'Resim2.jpg': resim2,
+  'Resim3.jpg': resim3,
+  'Resim4.jpg': resim4,
+  'Resim5.jpg': resim5,
+  'Resim6.jpg': resim6,
+  'Resim7.jpg': resim7,
+  'Resim8.jpg': resim8,
+  'Resim9.jpg': resim9,
+  'Resim10.jpg': resim10,
+  'Resim11.jpg': resim11,
 };
 
 const pointPairs = (points: Array<{ timeSeconds: number; value: number }>) => points.map(point => [point.timeSeconds, point.value]);

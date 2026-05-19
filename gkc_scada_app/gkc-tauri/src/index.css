@@ -1473,6 +1473,181 @@ body {
   color: var(--accent-blue);
 }
 
+.sas-study-panel {
+  gap: 14px;
+}
+
+.sas-tabbar button {
+  min-width: 132px;
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.sas-tabbar button strong {
+  color: inherit;
+  font-size: 12px;
+}
+
+.sas-tabbar button span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 620;
+}
+
+.sas-controls {
+  align-items: center;
+}
+
+.sas-controls label {
+  min-width: 128px;
+}
+
+.sas-controls .btn {
+  min-height: 34px;
+}
+
+.sas-controls select {
+  width: auto;
+  min-width: 84px;
+}
+
+.sas-dashboard-grid .training-chart-card {
+  min-height: 360px;
+}
+
+.sas-chart-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.sas-chart-title {
+  align-items: flex-start;
+}
+
+.sas-chart-title > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.sas-chart-controls {
+  display: grid;
+  grid-template-columns: auto minmax(150px, 220px) auto;
+  gap: 6px;
+  align-items: center;
+  justify-content: end;
+  min-width: min(100%, 430px);
+}
+
+.sas-chart-controls label {
+  display: grid;
+  gap: 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.sas-chart-controls input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent-blue);
+}
+
+.sas-chart-controls .btn {
+  min-height: 28px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.sas-chart-controls .btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sas-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sas-mini-metric {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--table-header-bg);
+}
+
+.sas-mini-metric span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.sas-mini-metric b {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.sas-sld-card svg {
+  width: 100%;
+  min-height: 260px;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.sas-svg-label {
+  fill: var(--text-primary);
+  font: 700 15px Inter, system-ui, sans-serif;
+}
+
+.sas-svg-small {
+  fill: var(--text-secondary);
+  font: 600 12px Inter, system-ui, sans-serif;
+}
+
+.sas-svg-svc {
+  fill: rgba(37, 99, 235, 0.12);
+  stroke: #2563eb;
+  stroke-width: 2;
+}
+
+.sas-svg-statcom {
+  fill: rgba(124, 58, 237, 0.12);
+  stroke: #7c3aed;
+  stroke-width: 2;
+}
+
+.sas-svg-controller {
+  fill: rgba(16, 185, 129, 0.12);
+  stroke: #10b981;
+  stroke-width: 2;
+}
+
+.sas-svg-breaker,
+.sas-svg-pmu {
+  fill: rgba(6, 182, 212, 0.12);
+  stroke: #0891b2;
+  stroke-width: 2;
+}
+
+.sas-svg-signal {
+  fill: none;
+  stroke: #ef4444;
+  stroke-width: 3;
+  stroke-dasharray: 7 5;
+}
+
+.sas-svg-blue-line {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 3;
+}
+
 .training-table {
   width: 100%;
   border-collapse: collapse;
@@ -1826,6 +2001,17 @@ body {
   .training-controls label {
     min-width: min(100%, 220px);
     flex: 1 1 180px;
+  }
+
+  .sas-chart-title {
+    display: grid;
+  }
+
+  .sas-chart-controls {
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    width: 100%;
+    min-width: 0;
   }
 
   .training-lightbox {
