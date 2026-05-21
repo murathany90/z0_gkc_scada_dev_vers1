@@ -21,6 +21,7 @@ import {
 } from '../src/features/oscillationTraining/utils/simulationModels.ts';
 import { buildGlossaryLookup, GLOSSARY_SECTIONS } from '../src/features/oscillationTraining/data/glossary.ts';
 import { buildCaseSimulation, TRAINING_CASES } from '../src/features/oscillationTraining/data/trainingCases.ts';
+import { buildTrainingPrintDocumentModel } from '../src/features/oscillationTraining/utils/trainingPrintDocument.ts';
 
 const firstRun = buildSlidingWindowSimulation({
   durationSeconds: 40,
@@ -241,3 +242,16 @@ for (const trainingCase of TRAINING_CASES) {
   assert.ok(simulation.modeShape.nodes.length >= 6, `${trainingCase.id} should include a visual mode-shape simulation`);
   assert.ok(simulation.operatorSummary.includes(trainingCase.shortLabel), `${trainingCase.id} should generate an operator summary`);
 }
+
+const trainingPrintModel = buildTrainingPrintDocumentModel();
+assert.equal(trainingPrintModel.title, 'Salınım Eğitimi ve Simülasyon Eğitim Dokümanı');
+assert.ok(trainingPrintModel.toc.length >= 9, 'training print document should include every main training tab in the table of contents');
+assert.deepEqual(
+  trainingPrintModel.toc.find(entry => entry.id === 'sas')?.children.map(child => child.headingNumber),
+  ['7.1', '7.2', '7.3', '7.4', '7.5', '7.6', '7.7'],
+  'training print document should number all seven SAS sub-tabs in the table of contents',
+);
+assert.ok(trainingPrintModel.pages.some(page => page.id === 'cover' && page.kind === 'cover'), 'training print document should include a cover and contents page');
+assert.ok(trainingPrintModel.pages.some(page => page.id === 'sas' && page.chartCount >= 28), 'SAS print section should include four charts for each of seven sub-tabs');
+assert.ok(trainingPrintModel.pages.some(page => page.id === 'cases' && page.figureCount >= 11), 'case print section should include all optimized case visuals');
+assert.ok(trainingPrintModel.pages.every(page => page.headingNumber === 'Kapak' || /^\d+(\.\d+)?/.test(page.headingNumber)), 'print page headings should be numbered');

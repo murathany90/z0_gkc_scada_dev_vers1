@@ -410,6 +410,41 @@ body {
   gap: 6px;
 }
 
+.oscillation-signal-filter {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, minmax(32px, 1fr));
+  gap: 6px;
+}
+
+.oscillation-signal-chip {
+  min-height: 30px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.oscillation-signal-chip:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.oscillation-signal-chip.active {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  color: var(--accent-primary);
+}
+
+.oscillation-signal-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .oscillation-threshold-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -671,7 +706,7 @@ body {
 
 .oscillation-filter-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(170px, 0.65fr) minmax(360px, 1.35fr) minmax(290px, 0.92fr);
+  grid-template-columns: minmax(170px, 0.58fr) minmax(220px, 0.72fr) minmax(360px, 1.3fr) minmax(290px, 0.92fr);
   gap: 8px;
   align-items: end;
 }
@@ -1033,7 +1068,8 @@ body {
 }
 
 .oscillation-print-summary-grid,
-.oscillation-print-metric-summary {
+.oscillation-print-metric-summary,
+.oscillation-print-info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
@@ -1056,18 +1092,28 @@ body {
 }
 
 .oscillation-print-page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+  display: grid;
+  gap: 4px;
   border-bottom: 1px solid #cbd5e1;
   padding-bottom: 5px;
 }
 
+.oscillation-print-page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.oscillation-print-page-meta span,
 .oscillation-print-page-header span {
   color: #334155;
   font-size: 11px;
   font-weight: 700;
+}
+
+.oscillation-print-chart-stack {
+  display: grid;
+  gap: 8px;
 }
 
 .oscillation-print-chart-main,
@@ -1079,7 +1125,7 @@ body {
 }
 
 .oscillation-print-chart-main {
-  height: 250px;
+  height: 154px;
 }
 
 .oscillation-print-chart-row {
@@ -1125,6 +1171,330 @@ body {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.training-header-actions {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.training-header-actions span {
+  max-width: 260px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.training-print-document {
+  position: fixed;
+  top: 0;
+  left: -12000px;
+  width: 1120px;
+  min-height: 780px;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: #ffffff;
+  color: #111827;
+  font-family: Arial, sans-serif;
+}
+
+.training-print-page {
+  width: 1120px;
+  min-height: 780px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 22px;
+  background: #ffffff;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.training-print-page h1,
+.training-print-page h2,
+.training-print-page h3,
+.training-print-page p {
+  color: #111827;
+}
+
+.training-print-cover {
+  gap: 14px;
+}
+
+.training-print-kicker,
+.training-print-date {
+  margin: 0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.training-print-cover h1 {
+  margin: 4px 0 6px;
+  font-size: 27px;
+  letter-spacing: 0;
+}
+
+.training-print-cover > div > p {
+  max-width: 900px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.training-print-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.training-print-summary p,
+.training-print-text-card {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #f8fafc;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.training-print-toc {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.training-print-toc h2 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 15px;
+}
+
+.training-print-toc-entry {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #ffffff;
+}
+
+.training-print-toc-entry > span {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.training-print-toc-entry strong {
+  color: #111827;
+  font-size: 12px;
+}
+
+.training-print-toc-entry p {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  color: #475569;
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.training-print-toc-entry p span {
+  min-width: 24px;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.training-print-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 6px;
+}
+
+.training-print-page-header span {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.training-print-page-header h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+}
+
+.training-print-page-header p {
+  max-width: 560px;
+  margin: 0;
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.training-print-two-column,
+.training-print-chart-grid.four {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.training-print-chart {
+  min-width: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.training-print-chart-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px 0;
+}
+
+.training-print-chart-title strong {
+  color: #111827;
+  font-size: 11px;
+}
+
+.training-print-chart-title span {
+  color: #475569;
+  font-size: 9px;
+}
+
+.training-print-svg-chart {
+  width: 100%;
+  display: block;
+  background: #ffffff;
+}
+
+.training-print-svg-chart text {
+  fill: #334155;
+  font-family: Arial, sans-serif;
+  font-size: 8px;
+}
+
+.training-print-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #111827;
+  font-size: 10px;
+}
+
+.training-print-table th,
+.training-print-table td {
+  padding: 5px 6px;
+  border: 1px solid #d1d5db;
+  vertical-align: top;
+  text-align: left;
+}
+
+.training-print-table th {
+  width: 32%;
+  background: #eef2ff;
+  font-weight: 800;
+}
+
+.training-print-table.compact th,
+.training-print-table.compact td {
+  padding: 4px 5px;
+  font-size: 9px;
+}
+
+.training-print-text-card h3 {
+  margin: 0 0 5px;
+  font-size: 12px;
+}
+
+.training-print-text-card p {
+  margin: 0 0 4px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.training-print-glossary {
+  column-count: 3;
+  column-gap: 8px;
+}
+
+.training-print-glossary article {
+  break-inside: avoid;
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding: 6px 7px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #f8fafc;
+}
+
+.training-print-glossary article span {
+  color: #64748b;
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.training-print-glossary article strong {
+  color: #111827;
+  font-size: 10px;
+}
+
+.training-print-glossary article p {
+  margin: 0;
+  color: #334155;
+  font-size: 8.5px;
+  line-height: 1.25;
+}
+
+.training-print-figure-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.training-print-figure-row figure {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.training-print-figure-row img {
+  width: 100%;
+  height: 52px;
+  display: block;
+  object-fit: contain;
+  background: #f8fafc;
+}
+
+.training-print-figure-row figcaption {
+  display: grid;
+  gap: 2px;
+  padding: 5px 6px;
+}
+
+.training-print-figure-row figcaption strong {
+  color: #111827;
+  font-size: 9px;
+}
+
+.training-print-figure-row figcaption span {
+  color: #475569;
+  font-size: 8px;
+  line-height: 1.25;
 }
 
 .training-tabs {
@@ -2066,11 +2436,14 @@ body {
   }
 
   .oscillation-print-report,
-  .oscillation-print-report * {
+  .oscillation-print-report *,
+  .training-print-document,
+  .training-print-document * {
     visibility: visible;
   }
 
-  .oscillation-print-report {
+  .oscillation-print-report,
+  .training-print-document {
     position: absolute;
     inset: 0 auto auto 0;
     display: block;
@@ -2083,7 +2456,8 @@ body {
     color: #111827;
   }
 
-  .oscillation-print-page {
+  .oscillation-print-page,
+  .training-print-page {
     width: 100%;
     min-height: 188mm;
     page-break-after: always;
@@ -2095,24 +2469,28 @@ body {
     font-family: Arial, sans-serif;
   }
 
-  .oscillation-print-page:last-child {
+  .oscillation-print-page:last-child,
+  .training-print-page:last-child {
     page-break-after: auto;
     break-after: auto;
   }
 
-  .oscillation-print-page h1 {
+  .oscillation-print-page h1,
+  .training-print-page h1 {
     margin: 0 0 4px;
     font-size: 18px;
     color: #111827;
   }
 
-  .oscillation-print-page h2 {
+  .oscillation-print-page h2,
+  .training-print-page h2 {
     margin: 6px 0 2px;
     font-size: 13px;
     color: #1f2937;
   }
 
-  .oscillation-print-page p {
+  .oscillation-print-page p,
+  .training-print-page p {
     margin: 0;
     font-size: 11px;
     line-height: 1.35;
@@ -2123,8 +2501,27 @@ body {
     padding-bottom: 2mm;
   }
 
+  .oscillation-print-metric-page {
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 2mm;
+  }
+
+  .oscillation-print-page-meta {
+    gap: 1.5mm 4mm;
+  }
+
+  .oscillation-print-page-meta span {
+    font-size: 10px;
+  }
+
+  .oscillation-print-chart-stack {
+    display: grid;
+    grid-template-rows: repeat(3, 39mm);
+    gap: 2mm;
+  }
+
   .oscillation-print-chart-main {
-    height: 62mm;
+    height: 39mm;
   }
 
   .oscillation-print-chart-row {
@@ -2135,14 +2532,103 @@ body {
     height: 43mm;
   }
 
+  .oscillation-print-info-grid,
   .oscillation-print-metric-summary {
-    grid-template-columns: 0.9fr 1.25fr;
+    grid-template-columns: 0.95fr 1.15fr;
     gap: 3mm;
+    min-height: 0;
   }
 
   .oscillation-print-summary-grid {
     grid-template-columns: 1fr 1fr;
     gap: 3mm;
+  }
+
+  .training-print-cover h1 {
+    font-size: 18px;
+  }
+
+  .training-print-summary {
+    gap: 2mm;
+  }
+
+  .training-print-summary p {
+    padding: 2mm;
+    font-size: 9px;
+  }
+
+  .training-print-toc {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2mm;
+  }
+
+  .training-print-toc-entry {
+    padding: 2mm;
+  }
+
+  .training-print-page-header {
+    padding-bottom: 1.5mm;
+  }
+
+  .training-print-page-header h2 {
+    margin: 0;
+    font-size: 13px;
+  }
+
+  .training-print-page-header p {
+    font-size: 9px;
+  }
+
+  .training-print-chart-grid.four,
+  .training-print-two-column {
+    gap: 2mm;
+  }
+
+  .training-print-chart-title {
+    padding: 1.5mm 2mm 0;
+  }
+
+  .training-print-chart-title strong {
+    font-size: 9px;
+  }
+
+  .training-print-chart-title span {
+    font-size: 8px;
+  }
+
+  .training-print-table {
+    font-size: 8.5px;
+  }
+
+  .training-print-table th,
+  .training-print-table td {
+    padding: 1.4mm 1.6mm;
+  }
+
+  .training-print-text-card {
+    padding: 2mm;
+  }
+
+  .training-print-text-card p {
+    font-size: 8.5px;
+  }
+
+  .training-print-glossary {
+    column-count: 3;
+    column-gap: 2mm;
+  }
+
+  .training-print-glossary article {
+    margin-bottom: 1.5mm;
+    padding: 1.5mm;
+  }
+
+  .training-print-figure-row {
+    gap: 2mm;
+  }
+
+  .training-print-figure-row img {
+    height: 18mm;
   }
 
   .oscillation-table {

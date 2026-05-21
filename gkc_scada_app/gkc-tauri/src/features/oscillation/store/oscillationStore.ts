@@ -317,7 +317,14 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
     ...clearAnalysisFields(),
     error: null,
   }),
-  setSelectedSignals: signals => set({ selectedSignals: signals.length ? signals : ['frequency'], ...clearAnalysisFields() }),
+  setSelectedSignals: signals => set(state => {
+    const selectedSignals: PmuSignalKey[] = signals.length ? signals : ['frequency'];
+    return {
+      selectedSignals,
+      activeSignalTab: selectedSignals.includes(state.activeSignalTab) ? state.activeSignalTab : selectedSignals[0],
+      ...clearAnalysisFields(),
+    };
+  }),
   setAmplitudeThreshold: (key, value) => set(state => ({
     amplitudeThresholds: {
       ...state.amplitudeThresholds,

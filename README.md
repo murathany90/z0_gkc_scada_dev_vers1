@@ -275,6 +275,11 @@ Analiz ve grafik davranışı:
 - 4.5-5.0 Hz Nyquist tampon bandı pasiftir.
 - 5-14 Hz torsiyonel band desteklenmez.
 - Frekans, gerilim, aktif güç ve reaktif güç sinyalleri için aynı bantlar kullanılır; metrikler ayrı hesaplanır.
+- Filtre barındaki `Tümü`, `F`, `P`, `Q`, `V` seçimleriyle analiz kapsamı daraltılabilir; varsayılan durumda tüm sinyaller seçilidir.
+- Aktif güç eşik hesabında yüzde tabanlı değerin yanında minimum `10 MW`, reaktif güç eşik hesabında minimum `5 MVAr` tabanı uygulanır.
+- Sönümleme oranı hesabı mutlak tepe / yarım periyot yaklaşımıyla uyumlu hale getirilmiştir; bilinen `%5` sönümlü sentetik sinüs testi yaklaşık `%5` sonucu doğrular.
+- Çoklu PMU koherens hesabı Pearson korelasyon karesi yerine dominant frekansta segmentli magnitude-squared coherence yaklaşımıyla yapılır.
+- Örtüşen analiz pencerelerinde durum önceliği negatif DR, pozitif DR, yok sırasıyla uygulanır; Grafik 1 renklendirmesi ve Grafik 2 mod gölgelemesi aynı pencere seçim mantığını kullanır.
 - Büyük veri analizleri Web Worker üzerinden çalışır.
 - Ham PMU grafiklerinde 100 ms zaman hassasiyeti korunur; `.000`, `.100`, `.900` gibi milisaniye değerleri x-ekseni ve tooltipte görünür.
 - Grafiklerde ECharts LTTB sampling, progressive render, zoom ve grafik dışa aktarma desteklenir.
@@ -405,8 +410,8 @@ Uygulama dört PMU ölçüm metriğini aynı modal analiz mantığıyla ele alı
 | --- | --- | --- | --- | --- | --- |
 | F | Frekans | Hz | 10 mHz | Frekans (Hz) | Frekans metrik sayfası |
 | V | Gerilim | kV veya p.u. | %5 | Gerilim (kV) veya Gerilim (p.u.) | Gerilim metrik sayfası |
-| P | Aktif Güç | MW | %5 | Aktif Güç (MW) | Aktif Güç metrik sayfası |
-| Q | Reaktif Güç | MVAr | %5 | Reaktif Güç (MVAr) | Reaktif Güç metrik sayfası |
+| P | Aktif Güç | MW | %5 ve en az 10 MW | Aktif Güç (MW) | Aktif Güç metrik sayfası |
+| Q | Reaktif Güç | MVAr | %5 ve en az 5 MVAr | Reaktif Güç (MVAr) | Reaktif Güç metrik sayfası |
 
 Frekans metriği, özellikle interarea salınım tespiti için temel göstergedir. Frekans grafiğinde ham PMU verisi ve filtrelenmiş sinyal birlikte gösterilir. Eşik mHz cinsinden tanımlanır; raporda ise kullanıcıya Hz cinsinden okunabilir değerler ve baskın salınım frekansı verilir.
 
@@ -426,8 +431,8 @@ Eşik mantığı, tek bir örnek değerine bakmak yerine kayan pencere sonucunda
 | --- | --- | --- | --- |
 | Frekans | Mutlak genlik | 10 mHz | Frekans salınım genliği eşik üstüne çıkarsa aktif bulgu adayıdır. |
 | Gerilim | Yüzdesel değişim | %5 | Pencere ortalamasına göre normalize edilen gerilim salınımı izlenir. |
-| Aktif Güç | Yüzdesel değişim | %5 | MW değerindeki periyodik değişim pencere ortalamasına göre değerlendirilir. |
-| Reaktif Güç | Yüzdesel değişim | %5 | MVAr davranışındaki modal enerji ve genlik birlikte yorumlanır. |
+| Aktif Güç | Yüzdesel değişim + mutlak taban | %5 ve en az 10 MW | MW değerindeki periyodik değişim pencere ortalamasına göre değerlendirilir; sıfıra yakın ortalamada eşik 10 MW altına düşmez. |
+| Reaktif Güç | Yüzdesel değişim + mutlak taban | %5 ve en az 5 MVAr | MVAr davranışındaki modal enerji ve genlik birlikte yorumlanır; sıfıra yakın ortalamada eşik 5 MVAr altına düşmez. |
 
 Pencere ortalaması sıfıra yakın olduğunda yüzdesel hesaplama güvenli moda alınır. Bu koruma özellikle P ve Q sinyallerinde düşük yük veya sıfıra yakın reaktif güç durumlarında yanlış yüksek yüzde üretimini engellemek için gereklidir.
 
@@ -489,7 +494,7 @@ Grafik alanı üç tamamlayıcı grafikten oluşur. Bu grafikler hem ekranda hem
 | Grafik 2 | Mod sınıfı, DR (%) ve aktif mod markerları | Salınım hangi bantta ve damping eğilimi nasıl? |
 | Grafik 3 | Bant enerjisi ve salınım genliği | Olay ne kadar baskın ve hangi aralıkta güçleniyor? |
 
-Grafik 1 üzerinde kırmızı ve yeşil tespit katmanları, önceki sparse-null çizgi yaklaşımı yerine sürekli olay segmentleri olarak üretilir. Bu değişiklik, dataZoom yakınlaştırması yapıldığında olay çizimlerinin kaybolmasını önler. Segmentler olay başlangıç ve bitiş zamanına bağlıdır; bu nedenle görünür alan daralsa bile olayın ilgili kısmı korunur.
+Grafik 1 üzerinde kırmızı ve yeşil tespit katmanları, önceki sparse-null çizgi yaklaşımı yerine sürekli olay segmentleri olarak üretilir. Bu değişiklik, dataZoom yakınlaştırması yapıldığında olay çizimlerinin kaybolmasını önler. Segmentler olay başlangıç ve bitiş zamanına bağlıdır; bu nedenle görünür alan daralsa bile olayın ilgili kısmı korunur. Örtüşen pencerelerde negatif DR pozitif DR'ye göre öncelikli seçilir; aynı zaman aralığı Grafik 2'de mod alanı olarak da aynı öncelikle gölgelenir.
 
 Grafik 2 sol eksende modal sınıfı, sağ eksende damping ratio değerini gösterir. Sol eksen kategorileri Salınım yok, Bölgeler Arası, Yerel, Zorlanmış ve Torsiyonel bant şeklinde okunur. Sağ eksen DR (%) olarak adlandırılır ve yüzde 5 referans seviyesiyle birlikte yorumlanır.
 
@@ -510,8 +515,11 @@ Tooltip alanları, grafik üzerindeki kısa temas anında operatöre olay bağla
 | Salınım frekansı | Baskın modal frekansı Türkçe karakter sorunu olmadan gösterir. |
 | Salınım zamanı | Olay başlangıç ve bitiş zamanını birlikte verir. |
 | Salınım süresi | Olayın saniye veya dakika/saniye cinsinden süresini belirtir. |
+| Merkez zamanı | Hesaplanan pencerenin merkez zamanını gösterir. |
 | Mod | Bölgeler Arası, Yerel, Zorlanmış, Torsiyonel veya Salınım yok olarak yazılır. |
 | Damping Ratio | DR değerini yüzde cinsinden gösterir ve kritik durumla ilişkilendirir. |
+| Genlik / Eşik | Salınım genliği ile o pencere için kullanılan eşik değerini birlikte verir. |
+| RMS / Enerji | Kayan pencere için hesaplanan RMS/enerji göstergesini gösterir. |
 | Pencere / Adım | Analizde kullanılan pencere ve adım süresini açıklar. |
 
 Türkçe karakter düzeltmesi özellikle "Salınım frekansı" ifadesi için yapılmıştır. Aynı kontrol; rapor başlıkları, eksen adları, tooltip satırları ve PDF çıktısındaki metinler için de geçerlidir. Kaynak dosyalar UTF-8 kabul edilir ve HTML dili Türkçe olarak tanımlanır.
@@ -530,16 +538,17 @@ Karar destek cümlesi şu bilgileri birleştirir:
 - Baskın salınım frekansı.
 - Modal bant etiketi.
 - Damping ratio değeri.
+- Salınımın hangi ölçümde görüldüğü: Frekans, Gerilim, Aktif Güç veya Reaktif Güç.
 - Negatif damping varsa büyüme eğilimi uyarısı.
 - İlgili sinyal metriği ve ölçüm birimi.
 
 Örnek karar destek cümlesi:
 
-`KARAMAN 154 kV fiderinde 17:52:00 - 17:54:00 zaman aralığında frekansı 0.101 Hz olan Bölgeler Arası salınım tespit edilmiştir. Salınımın sönümleme oranı %-0.01 olduğu için sistemde büyüme eğilimi gösteren kararsızlık riski izlenmelidir.`
+`KARAMAN 154 kV fiderinde Frekans ölçümünde 17:52:00 - 17:54:00 zaman aralığında, süresi 2 dk olan, frekansı 0.101 Hz Bölgeler Arası salınım aday bulgusu üretilmiştir. Salınımın sönümleme oranı %-0.01 olduğu için büyüme eğilimi açısından operatör incelemesi önerilir.`
 
 Bu cümle alarm yerine geçmez; operatöre ve mühendise inceleme önceliği sağlar. Alarm üretimi ayrı iş kurallarına bağlıdır. Salınım Algılayıcı raporu, PMU modal analiz sonuçlarını anlaşılır bir değerlendirme olarak sunar.
 
-Bulgular tablosu; metrik, mod, olay zamanı, süre, salınım frekansı, RMS, genlik ve damping bilgilerini içerir. Negatif damping veya kritik olay satırları kırmızı vurgulanır. Salınım yok durumları nötr gösterilir ve ham teknik kodlar kullanıcıya gösterilmez.
+Bulgular tablosu; metrik, mod, olay zamanı, süre, salınım frekansı, RMS, genlik ve damping bilgilerini içerir. Negatif damping veya kritik olay satırları kırmızı vurgulanır. Salınım yok durumları nötr gösterilir ve ham teknik kodlar kullanıcıya gösterilmez. Olay satırlarındaki `Veriler / Ayrıntılar` aksiyonu seçili olayın zaman aralığındaki ham PMU satırlarını ve hesaplama pencerelerini aynı ekranda gösterir.
 
 Veri kalitesi tablosu, raporun güvenilirliğini anlamak için kullanılır. Örnek sayısı, zaman aralığı, örnekleme frekansı, eksik veri oranı ve kullanılan pencere/adım bilgisi bu tabloda yer alır. Bu bölüm, karar destek cümlelerinin hangi veri kapsamına dayandığını şeffaflaştırır.
 
@@ -629,7 +638,9 @@ Doğrulama iki katmanda yapılır: otomatik testler ve tarayıcı/PDF kalite kon
 | `npm run test:scada-query-chunks` | SCADA sorgu chunk davranışının bozulmaması |
 | `npm run build` | TypeScript ve Vite üretim derlemesinin başarılı olması |
 
-Tarayıcı QA sırasında demo veri yüklenmeli, analiz çalıştırılmalı ve metrik sekmeleri tek tek gezilmelidir. Grafiklerde zoom yapıldığında kırmızı/yeşil olay katmanlarının kaybolmadığı kontrol edilmelidir. Tooltip üzerinde "Salınım frekansı", olay zamanı, süre, pencere ve adım bilgisi görünmelidir.
+Son salınım düzeltmelerinden sonra `npm run test:oscillation` kapsamı DR formülü, MW/MVAr minimum eşikleri, seçili sinyal analizi, ölçüm adı içeren karar destek cümleleri, olay ayrıntı helper'ı, örtüşen pencere önceliği ve dominant frekansta magnitude-squared coherence hesabını da doğrular.
+
+Tarayıcı QA sırasında demo veri yüklenmeli, analiz çalıştırılmalı ve metrik sekmeleri tek tek gezilmelidir. Grafiklerde zoom yapıldığında kırmızı/yeşil olay katmanlarının kaybolmadığı kontrol edilmelidir. Tooltip üzerinde "Salınım frekansı", olay zamanı, merkez zamanı, süre, genlik, eşik, RMS/enerji, pencere ve adım bilgisi görünmelidir.
 
 PDF QA sırasında PDF RAPOR butonunun CSV Dışa Aktar yanında bulunduğu doğrulanmalıdır. Print preview içinde uygulama menüsü, sidebar ve filtre kartları görünmemelidir. İlk sayfa yönetici özeti, sonraki sayfalar Frekans, Gerilim, Aktif Güç ve Reaktif Güç olarak ayrılmalıdır.
 
@@ -660,3 +671,144 @@ Karar Destek Sistemi metinleri genişletilirken alarm dili ile analiz yorumu ayr
 Türkçe karakter sorunları tekrar görülürse ilk kontrol noktaları kaynak dosya kodlaması, HTML `lang` ayarı, PDF/print font zinciri ve dışa aktarılan metinlerin encode edilme biçimidir. README ve arayüz metinleri UTF-8 olarak tutulmalıdır.
 
 Bu bölüm, ileride yapılacak değişikliklerde "kolay görünen ama rapor kalitesini bozan" kısayolları önlemek için yazılmıştır. Salınım Algılayıcı sayfası artık yalnız bir grafik ekranı değil, ölçüm, tespit, yorum ve rapor üretiminden oluşan bütünlüklü bir WAMPAC operatör yardımcısı olarak ele alınmalıdır.
+
+### 11.16. Salınım Eğitimi ve Simülasyon - SAS Çalışması Güncellemesi
+
+Salınım Eğitimi ve Simülasyon sayfasındaki SAS Çalışması sekmesi, lokal bara tabanlı salınım algılayıcı sistemlerin çalışma mantığını daha ayrıntılı gösterecek şekilde genişletilmiştir. Bu sayfa, docs referans dosyalarından runtime sırasında çalışmaz; referans HTML ve görseller yalnız geliştirme sırasında incelenmiş, uygulama tarafında native React bileşenleri, TypeScript simülasyon yardımcıları ve uygulama içine alınmış asset dosyaları kullanılmıştır.
+
+SAS Çalışması sekmesi artık yedi alt sekmeden oluşur:
+
+| Alt Sekme | İçerik | FACTS / Kontrol Bağlamı |
+| --- | --- | --- |
+| 1. Tosçelik | Tosçelik barası için lokal SVC tepkisi | ±45 MVAr SVC |
+| 2. İçdaş | İçdaş barası için lokal SVC tepkisi | ±27-30 MVAr SVC |
+| 3. MMK | MMK barası için lokal SVC tepkisi | ±45 MVAr SVC |
+| 4. Çolakoğlu | Çolakoğlu barası için lokal SVC tepkisi | ±30 MVAr SVC |
+| 5. Habaş | Habaş barası için lokal SVC tepkisi | ±24.8 MVAr SVC |
+| 6. Sincan | Sincan barası için STATCOM tepkisi | +50 / -30 MVAr STATCOM |
+| 7. Toplam | Altı baranın ortak salınım sönümleme etkisi | Toplam MW, MVAr, gerilim p.u. ve frekans |
+
+Her alt sekmede dört ana grafik kartı yer alır. Tekil bara sekmelerinde bu grafikler ham frekans ve kayan FFT pencereleri, tespit edilen genlik ve enerji, frekans eğrisi ile FACTS pulse davranışı, mod frekansı ile sönümleme/güven bilgilerini gösterir. Toplam sekmesinde ise grafikler tüm bara pulse tepkileri, toplam aktif güç ve reaktif komut, toplam MW ile frekans değişimi, toplam MVAr ile gerilim p.u. ve frekans değişimi olarak düzenlenir.
+
+Grafik kartlarının her birinin başlığı içinde ayrı kontrol alanı bulunur. Bu kontrol alanında Oynat/Durdur butonu, zaman slider'ı ve Zoom sıfırla butonu vardır. Böylece kullanıcı yalnız üstteki genel kontrol çubuğuna bağlı kalmadan, incelediği grafik kartının üzerinden simülasyonu başlatabilir, durdurabilir veya zaman konumunu değiştirebilir.
+
+Zoom davranışı özellikle SAS eğitimi için güncellenmiştir. Kullanıcı bir grafikte mouse wheel, trackpad veya ECharts slider ile zoom yaptığında aynı görünür zaman penceresi aynı alt sekmedeki dört grafiğe birlikte uygulanır. Play çalışırken zaman işaretçisi ilerlemeye devam eder, fakat manuel zoom penceresi eski haline dönmez. Bu davranış, referans eğitim panelindeki grafik başı hızlı oynatma fikrini native uygulama içindeki ECharts davranışıyla uyumlu hale getirir.
+
+Toplam sekmesindeki MW ve frekans grafiği polarite açısından ayrıca netleştirilmiştir. Simülasyon modelinde iki ayrı seri tutulur:
+
+| Seri | Anlamı | Grafik Kullanımı |
+| --- | --- | --- |
+| Toplam MW | Altı baranın anlık aktif güç katkılarının doğrudan toplamı | 2. grafikte reaktif komut ile birlikte gösterilir |
+| Toplam MW sönümleme etkisi | Toplam MW katkısının frekans sapmasına karşı ters polariteyle yorumlanan kontrol etkisi | 3. grafikte frekans değişimiyle birlikte gösterilir |
+
+Bu ayrım önemlidir. Yük veya aktif güç katkısının işareti ile salınımı sönümlemek için beklenen kontrol etkisinin işareti aynı kavram değildir. Bu nedenle 3. grafikte operatörün kontrol etkisini daha doğru okuyabilmesi için "Toplam MW sönümleme etkisi" serisi frekans sapmasına ters polaritede çizilir. 2. grafik ise ham toplam MW etkisini korur.
+
+SAS Çalışması içindeki tek hat ve eğitim görselleri de alt sekmelerin altında korunur. Tekil bara sekmelerinde ilgili SVC veya STATCOM tek hat şeması gösterilir. Toplam sekmesinde altı SAS-C barasının ortak sönümleme etkisini anlatan birleşik şema yer alır. Aksiyon sinyali referansı, çift pencere yaklaşımı, eşik/histerezis ve FBMSWA mimarisi gibi görseller büyütülebilir görsel sistemiyle açılabilir.
+
+Terimler Sözlüğü ile SAS sekmesi arasındaki bağlantı korunmuştur. SAS-C, FBMSWA, kısa pencere, uzun pencere, MVAr, MW, p.u., kapasitif kip ve endüktif kip gibi teknik ifadeler sözlükte açıklanır. Bu sayede eğitim ekranı yalnız grafik göstermeyen, aynı zamanda kullanılan teknik terimi bağlamıyla açıklayan bir operatör rehberi olarak çalışır.
+
+SAS simülasyon modelinde kullanılan temel kavramlar şunlardır:
+
+| Kavram | Açıklama |
+| --- | --- |
+| 0.12-0.16 Hz hedef bant | Bölgeler arası salınım eğitimi için kullanılan SAS gözlem bandı |
+| Kısa pencere | Genliği hızlı yakalayan 20 saniyelik eğitim penceresi |
+| Uzun pencere | Faz ve yön doğrulamasını kararlı hale getiren 100 saniyelik eğitim penceresi |
+| Tetik eşiği | Pulse kararının başlayacağı mHz seviyesi |
+| Kapanma eşiği | Histerezis için tetik eşiğinin altında tutulan bırakma seviyesi |
+| Kapasitif pulse | Pozitif reaktif güç yönlü FACTS eğitim komutu |
+| Endüktif pulse | Negatif reaktif güç yönlü FACTS eğitim komutu |
+
+Bu geliştirme için `src/features/oscillationTraining/utils/simulationModels.ts` içine SAS-C model yardımcıları eklenmiştir. `buildSasInterareaSimulation` altı fiziksel bara konfigürasyonu ve bir toplam sekme üretir. `buildSasChartZoomConfig`, `resolveSasChartWindow` ve `normalizeSasDataZoomEvent` yardımcıları ECharts zoom penceresini kontrollü ve senkron çalıştırmak için kullanılır.
+
+`src/features/oscillationTraining/components/SasStudyPanel.tsx` bileşeni SAS Çalışması ekranının ana native bileşenidir. Bu bileşen alt sekmeleri, grafik kartı içi kontrolleri, ortak zoom durumunu, play/stop zaman akışını, tek hat şemasını ve görsel şeridini yönetir. Grafikler `OscillationTrainingChart` üzerinden ECharts ile çizilir; iframe, raw HTML injection veya docs klasörü runtime bağımlılığı kullanılmaz.
+
+Doğrulama kapsamında `scripts/oscillationTraining.test.ts` genişletilmiştir. Testler altı bara ve yedinci toplam sekmenin üretildiğini, Sincan STATCOM değerlerinin korunduğunu, toplam MW/MVAr serilerinin hizalı olduğunu, toplam MW sönümleme etkisinin ters polaritede üretildiğini ve SAS zoom helper'larının beklenen pencereyi koruduğunu denetler.
+
+Bu geliştirmeden sonra önerilen doğrulama komutları:
+
+| Komut | Doğruladığı Alan |
+| --- | --- |
+| `npm run test:oscillation-training` | SAS-C simülasyon modeli, sözlük, zoom helper'ları ve eğitim sayfası kontratı |
+| `npm run test:oscillation` | Salınım Algılayıcı analiz kontratının korunması |
+| `npx tsc --noEmit` | TypeScript tip kontrolü |
+| `npm run build` | Vite üretim derlemesi |
+| `npm run build:portable` | Tauri release derlemesi ve portable EXE kopyası |
+
+Son portable EXE çıktısı `gkc_scada_app/gkc-tauri/portable-builds/gkc-scada-test_v260519_vers1.exe` altında üretilmiştir. Bu derleme sonunda portable EXE boyutu yaklaşık 18.58 MB olarak ölçülmüştür. Vite büyük chunk uyarısı derleme hatası değildir; ileride eğitim sayfası ve ağır grafik bileşenleri dynamic import ile ayrılırsa ilk yükleme paketi daha küçük hale getirilebilir.
+
+Tarayıcı QA sırasında kontrol edilen hedef akış şudur:
+
+- Uygulama `http://127.0.0.1:1420/` adresinde açılır.
+- Sol menüden Salınım Eğitimi ve Simülasyon sayfası seçilir.
+- 7. SAS Çalışması sekmesi açılır.
+- 7. Toplam alt sekmesine geçilir.
+- Dört grafik canvas olarak render edilir.
+- Her grafik kartında Oynat/Durdur, Zaman slider ve Zoom sıfırla kontrolleri görünür.
+- 3. grafikte "Frekans sapmasına ters polaritede MW sönümleme etkisi" açıklaması yer alır.
+- Konsolda hata veya uyarı görülmez.
+
+Bakım notu olarak, SAS Çalışması sekmesi ileride genişletilirken üç ayrım korunmalıdır. Birincisi, docs içindeki HTML referans dosyaları runtime kaynak gibi kullanılmamalıdır. İkincisi, toplam MW katkısı ile MW sönümleme etkisi aynı seri gibi ele alınmamalıdır. Üçüncüsü, grafik zoom penceresi play sırasında sıfırlanmamalı ve aynı alt sekmedeki grafiklerde senkron kalmalıdır.
+
+---
+
+## 12. Salınım Algılama Son Güncellemesi - DR, Eşik, Koherens ve Ayrıntı Ekranı
+
+Bu bölüm, Salınım Algılayıcı sayfasında yapılan en son düzeltme ve geliştirme turunun güncel durumunu özetler. Ayrıntılı teknik inceleme ve kapsam dışı bırakılan maddeler repo kökündeki `salınım_algılama_rapor.md` dosyasında ayrıca tutulur.
+
+### 12.1. Uygulanan Algoritma Düzeltmeleri
+
+- **Sönümleme oranı (DR):** `estimateDampingRatio` mutlak değer tepe aramasıyla yarım periyot tepe dizisi çıkardığı için log decrement formülü yarım periyotla uyumlu hale getirildi. Bilinen `%5` sönümlü sentetik sinüs testi artık yaklaşık `%5` sonuç üretir.
+- **MW / MVAr minimum eşikleri:** Aktif güç için eşik `max(abs(windowMean) * activePowerPercent / 100, 10 MW)`, reaktif güç için eşik `max(abs(windowMean) * reactivePowerPercent / 100, 5 MVAr)` olarak uygulanır. Frekans ve gerilim eşik davranışı korunur.
+- **Örtüşen pencere önceliği:** Aynı zaman damgasını kapsayan analiz pencerelerinde durum seçimi `negatif DR > pozitif DR > yok` sırasıyla yapılır. Bu seçim Grafik 1 filtreli çizgi renklendirmesi ile Grafik 2 mod alan gölgelemesinde ortak kullanılır.
+- **Koherens:** Çoklu PMU analizinde Pearson korelasyon karesi yerine dominant frekansta segmentli magnitude-squared coherence hesabı kullanılır. Mode shape içindeki `coherenceAverage` değeri de bu gerçek koherens matrisinden beslenir.
+
+### 12.2. Güncellenen Kullanıcı Arayüzü
+
+- Filtre barına `Tümü`, `F`, `P`, `Q`, `V` ölçüm seçimi eklendi. Varsayılan olarak tüm sinyaller seçilidir.
+- Kullanıcı sinyal seçimini değiştirdiğinde mevcut analiz temizlenir. Aktif sekme seçili sinyallerden çıkarılmışsa ilk seçili sinyale düşer.
+- Sinyal sekmeleri yalnız seçili ölçümler için gösterilir; analiz kapsamı ile ekran sekmeleri aynı kalır.
+- Grafik tooltipleri pencere başlangıcı/bitişi, süre, merkez zamanı, dominant frekans, genlik, eşik, RMS/enerji ve DR bilgilerini gösterir.
+- Grafik 2 üzerinde mod çizgisi, Grafik 1 ile aynı pencere önceliğini kullanan kırmızı/yeşil aralık gölgelemesiyle desteklenir.
+
+### 12.3. Karar Destek ve Ayrıntılar
+
+- Karar destek cümleleri artık salınımın hangi ölçümde görüldüğünü açık yazar: Frekans, Gerilim, Aktif Güç veya Reaktif Güç.
+- Kesin alarm dili yerine "salınım aday bulgusu" dili kullanılır. Uygulama karar destek ve analiz asistanıdır; doğrudan koruma veya işletme eylemi komutu üretmez.
+- Olay satırlarına `Veriler / Ayrıntılar` aksiyonu eklendi.
+- Ayrıntılar sekmesi seçili olay aralığındaki ham PMU satırlarını ve hesaplama pencerelerini gösterir: zaman, ölçüm değeri, mod, dominant frekans, genlik, eşik, RMS/enerji ve DR.
+
+### 12.4. Korunan Davranışlar
+
+Kullanıcı notları doğrultusunda aşağıdaki alanlar bilinçli olarak değiştirilmedi:
+
+- YTBS PMU verisi 10 Hz kabul edildi; gap/resampling kapısı eklenmedi.
+- Grafik 3'teki mevcut enerji/RMS davranışı korundu.
+- DR scatter legend'ının varsayılan kapalı başlaması korundu.
+- Torsiyon bandının pasif diagnostik davranışı korundu.
+
+### 12.5. Bundle ve Lazy Load Durumu
+
+- `OscillationPage` ve `OscillationTrainingPage` route seviyesinde lazy-load edildi.
+- ECharts bağımlılığı `vendor-echarts` chunk'ına ayrıldı.
+- `npm run build` başarılıdır; ancak Vite'ın 500 kB büyük chunk uyarısı tamamen kalkmamıştır. Son build çıktısında salınım sayfası ayrı chunk olarak yaklaşık 51 kB, eğitim sayfası yaklaşık 123 kB, `vendor-echarts` yaklaşık 1.15 MB ve ana `index` yaklaşık 3.50 MB minified kalmıştır.
+- Kalan uyarı salınım sayfasının lazy-load edilmesine rağmen ana uygulamadaki genel ECharts kullanımı ve büyük uygulama kodundan kaynaklanır. İleride YTBS grafik ekranları, SCADA raporları ve ağır statik veri/listeler route bazlı bölünerek ana chunk daha da küçültülebilir.
+
+### 12.6. Son Doğrulama Komutları
+
+Son güncelleme sonrası çalıştırılan doğrulamalar:
+
+```powershell
+cd c:\yazilim_projeler\z0_gkc_scada_dev_vers1\gkc_scada_app\gkc-tauri
+
+npm run test:oscillation
+npm run test:ytbs-pmu
+npm run build
+```
+
+Beklenen durum:
+
+- `npm run test:oscillation` geçer.
+- `npm run test:ytbs-pmu` geçer.
+- `npm run build` geçer.
+- Build sırasında büyük chunk uyarısı görülebilir; bu uyarı tek başına derleme hatası değildir ve mevcut raporda kalan performans iyileştirme konusu olarak izlenir.

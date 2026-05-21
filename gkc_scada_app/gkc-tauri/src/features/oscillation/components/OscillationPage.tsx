@@ -25,7 +25,7 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
           <div className="card-body" style={{ color: 'var(--accent-red)', fontSize: 12 }}>{store.error}</div>
         </div>
       )}
-      <OscillationSignalTabs activeSignal={store.activeSignalTab} onChange={store.setActiveSignalTab} />
+      <OscillationSignalTabs activeSignal={store.activeSignalTab} signals={store.selectedSignals} onChange={store.setActiveSignalTab} />
       <div className="oscillation-signal-chart-stack">
         <RawDataCharts
           samplesByPmu={store.samplesByPmu}

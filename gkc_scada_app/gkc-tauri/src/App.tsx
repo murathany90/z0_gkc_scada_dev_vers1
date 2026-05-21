@@ -1,7 +1,7 @@
 // GKÇ İstemci - Ana Uygulama Bileşeni
 // Modern SCADA dashboard arayüzü — YTBS GKÇ Ölçüm Verileri entegrasyonlu
 
-import { useEffect, useState, useMemo } from 'react';
+import { lazy, Suspense, useEffect, useState, useMemo } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useRmsStore } from './stores/rmsStore';
 import { useLogStore } from './stores/logStore';
@@ -45,11 +45,16 @@ import {
   isGkcQueryMetaCurrent,
   toGkcQueryFazId,
 } from './utils/gkcHealth';
-import { OscillationPage } from './features/oscillation/components/OscillationPage';
-import { OscillationTrainingPage } from './features/oscillationTraining/components/OscillationTrainingPage';
 import { useOscillationStore } from './features/oscillation/store/oscillationStore';
 import ReactECharts from 'echarts-for-react';
 import './index.css';
+
+const OscillationPage = lazy(() =>
+  import('./features/oscillation/components/OscillationPage').then(module => ({ default: module.OscillationPage }))
+);
+const OscillationTrainingPage = lazy(() =>
+  import('./features/oscillationTraining/components/OscillationTrainingPage').then(module => ({ default: module.OscillationTrainingPage }))
+);
 
 const APP_HEADER_TITLE = 'GKÇ-SCADA Veri Analiz v2.0';
 const THEME_STORAGE_KEY = 'gkc_theme_mode';
@@ -1321,12 +1326,16 @@ function App() {
           )}
 
           {activeTab === 'oscillation' && (
-            <OscillationPage themeMode={themeMode} />
+            <Suspense fallback={<div className="card"><div className="card-body">Salınım algılama yükleniyor...</div></div>}>
+              <OscillationPage themeMode={themeMode} />
+            </Suspense>
           )}
 
           {/* YTBS SCADA Veri — Tarih Aralığı Sorgusu */}
           {activeTab === 'oscillation_training' && (
-            <OscillationTrainingPage themeMode={themeMode} />
+            <Suspense fallback={<div className="card"><div className="card-body">Eğitim ekranı yükleniyor...</div></div>}>
+              <OscillationTrainingPage themeMode={themeMode} />
+            </Suspense>
           )}
 
           {activeTab === 'ytbs_scada' && (

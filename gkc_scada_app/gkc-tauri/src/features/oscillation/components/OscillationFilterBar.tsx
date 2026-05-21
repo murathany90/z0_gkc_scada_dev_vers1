@@ -1,6 +1,6 @@
 import { OSCILLATION_BANDS } from '../utils/bands.ts';
 import { PMU_FIDERS, useOscillationStore, type OscillationDataSourceMode } from '../store/oscillationStore.ts';
-import type { OscillationAmplitudeThresholds } from '../types/oscillationTypes.ts';
+import type { OscillationAmplitudeThresholds, PmuSignalKey } from '../types/oscillationTypes.ts';
 import { formatPmuDisplayName } from './chartHelpers.ts';
 import { PmuSelectionControl } from './PmuSelectionControl.tsx';
 
@@ -22,6 +22,14 @@ const THRESHOLD_FIELDS: Array<{
   { key: 'voltagePercent', shortLabel: 'Ger', inputLabel: 'Gerilim genlik eşiği yüzde', unit: '%', max: 100, step: 0.1 },
   { key: 'activePowerPercent', shortLabel: 'MW', inputLabel: 'Aktif güç genlik eşiği yüzde', unit: '%', max: 100, step: 0.1 },
   { key: 'reactivePowerPercent', shortLabel: 'MVAr', inputLabel: 'Reaktif güç genlik eşiği yüzde', unit: '%', max: 100, step: 0.1 },
+];
+
+const SIGNAL_ORDER: PmuSignalKey[] = ['frequency', 'activePower', 'reactivePower', 'voltage'];
+const SIGNAL_FILTER_OPTIONS: Array<{ key: PmuSignalKey; label: string; title: string }> = [
+  { key: 'frequency', label: 'F', title: 'Frekans' },
+  { key: 'activePower', label: 'P', title: 'Aktif Güç' },
+  { key: 'reactivePower', label: 'Q', title: 'Reaktif Güç' },
+  { key: 'voltage', label: 'V', title: 'Gerilim' },
 ];
 
 const numericOptions = (values: number[]) => values.map(value => <option key={value} value={value}>{value} sn</option>);
@@ -57,6 +65,18 @@ export function OscillationFilterBar({ onPrintReport }: { onPrintReport?: () => 
   };
   const hasRawData = store.rawSamples.length > 0 || store.pmuQueryResults.length > 0 || Object.keys(store.samplesByPmu).length > 0;
   const hasAnalysisData = Boolean(store.analysisResult || store.reportMarkdown);
+  const allSignalsSelected = SIGNAL_FILTER_OPTIONS.every(option => store.selectedSignals.includes(option.key));
+  const setAllSignals = () => store.setSelectedSignals(SIGNAL_ORDER);
+  const toggleSignal = (signal: PmuSignalKey) => {
+    const selected = new Set(store.selectedSignals);
+    if (selected.has(signal)) {
+      if (selected.size === 1) return;
+      selected.delete(signal);
+    } else {
+      selected.add(signal);
+    }
+    store.setSelectedSignals(SIGNAL_ORDER.filter(key => selected.has(key)));
+  };
 
   const handleClearRawData = () => {
     if (window.confirm('Ham PMU verisi, sorgu sonucu ve bağlı analiz temizlensin mi?')) {
@@ -200,6 +220,38 @@ export function OscillationFilterBar({ onPrintReport }: { onPrintReport?: () => 
               >
                 {numericOptions([10, 30, 60])}
               </select>
+            </div>
+          </div>
+
+          <div className="oscillation-field">
+            <span className="oscillation-field-label">Ölçümler</span>
+            <div className="oscillation-signal-filter" role="group" aria-label="Analize dahil edilecek ölçümler">
+              <button
+                type="button"
+                className={`oscillation-signal-chip${allSignalsSelected ? ' active' : ''}`}
+                aria-pressed={allSignalsSelected}
+                disabled={store.loading || store.analyzing}
+                onClick={setAllSignals}
+                title="Tüm ölçümleri seç"
+              >
+                Tümü
+              </button>
+              {SIGNAL_FILTER_OPTIONS.map(option => {
+                const selected = store.selectedSignals.includes(option.key);
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={`oscillation-signal-chip${selected ? ' active' : ''}`}
+                    aria-pressed={selected}
+                    disabled={store.loading || store.analyzing}
+                    onClick={() => toggleSignal(option.key)}
+                    title={option.title}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { getSignalValue } from '../utils/pmuSamples.ts';
 export {
   buildDampingTooltipPayload,
   buildFilteredLineSegments,
+  buildWindowStatusIntervals,
   convertRawSignalValue,
   formatPmuDisplayName,
   getFilteredLineColor,
@@ -13,6 +14,8 @@ export {
   getRawSignalUnit,
   movingAverageTimeSeries,
   normalizeSmoothingWindowSize,
+  selectDominantWindowMetric,
+  statusForWindowMetric,
 } from '../utils/visualization.ts';
 
 export type OscillationThemeMode = 'dark' | 'light';
@@ -70,6 +73,56 @@ export const PMU_COLORS = ['#22c55e', '#38bdf8', '#f97316', '#a78bfa', '#f43f5e'
 export const OSCILLATION_TIME_CHART_GROUP = 'oscillation-time-axis-lock';
 
 const connectedGroups = new Set<string>();
+const registeredTooltipCharts = new WeakSet<EChartsType>();
+const tooltipChartsByGroup = new Map<string, Set<EChartsType>>();
+let syncingTooltip = false;
+
+export const extractAxisPointerTimestamp = (params: unknown): number | null => {
+  const axesInfo = (params as { axesInfo?: Array<{ axisDim?: string; value?: unknown }> } | null)?.axesInfo;
+  const xAxis = axesInfo?.find(axis => axis.axisDim === 'x' && Number.isFinite(Number(axis.value)));
+  return xAxis ? Number(xAxis.value) : null;
+};
+
+const hideTooltipAcrossGroup = (source: EChartsType, groupId: string): void => {
+  const charts = tooltipChartsByGroup.get(groupId);
+  if (!charts) return;
+
+  charts.forEach(chart => {
+    if (chart === source || chart.isDisposed()) return;
+    const previousGroup = chart.group;
+    chart.group = '';
+    try {
+      chart.dispatchAction({ type: 'hideTip' });
+    } finally {
+      chart.group = previousGroup;
+    }
+  });
+};
+
+const showTooltipAcrossGroup = (source: EChartsType, groupId: string, timestampMs: number): void => {
+  const charts = tooltipChartsByGroup.get(groupId);
+  if (!charts || syncingTooltip) return;
+
+  syncingTooltip = true;
+  try {
+    charts.forEach(chart => {
+      if (chart === source || chart.isDisposed()) return;
+      const x = chart.convertToPixel({ xAxisIndex: 0 }, timestampMs);
+      if (!Number.isFinite(x)) return;
+      const y = Math.max(24, Math.min(chart.getHeight() / 2, chart.getHeight() - 24));
+      const previousGroup = chart.group;
+      chart.group = '';
+      try {
+        chart.dispatchAction({ type: 'updateAxisPointer', x, y });
+        chart.dispatchAction({ type: 'showTip', x, y });
+      } finally {
+        chart.group = previousGroup;
+      }
+    });
+  } finally {
+    syncingTooltip = false;
+  }
+};
 
 export const connectOscillationTimeChart = (
   chart: EChartsType,
@@ -79,6 +132,20 @@ export const connectOscillationTimeChart = (
   if (!connectedGroups.has(groupId)) {
     echarts.connect(groupId);
     connectedGroups.add(groupId);
+  }
+
+  const charts = tooltipChartsByGroup.get(groupId) ?? new Set<EChartsType>();
+  charts.add(chart);
+  tooltipChartsByGroup.set(groupId, charts);
+
+  if (!registeredTooltipCharts.has(chart)) {
+    registeredTooltipCharts.add(chart);
+    chart.on('updateAxisPointer', params => {
+      const timestampMs = extractAxisPointerTimestamp(params);
+      if (timestampMs === null) return;
+      showTooltipAcrossGroup(chart, groupId, timestampMs);
+    });
+    chart.getZr().on('globalout', () => hideTooltipAcrossGroup(chart, groupId));
   }
 };
 

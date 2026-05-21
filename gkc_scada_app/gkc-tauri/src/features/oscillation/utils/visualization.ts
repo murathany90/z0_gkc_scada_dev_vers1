@@ -36,6 +36,10 @@ export interface DampingTooltipPayload {
   frequencyText: string;
   timeRangeText: string;
   durationText: string;
+  centerTimeText: string;
+  amplitudeText: string;
+  thresholdText: string;
+  energyText: string;
   windowText: string;
   stepText: string;
 }
@@ -141,9 +145,18 @@ export const getRawSignalUnit = (
 export const getFilteredLineColor = (themeMode: 'dark' | 'light'): string =>
   themeMode === 'light' ? '#000000' : '#ffffff';
 
-const statusForMetric = (metric: OscillationWindowMetric | undefined): 'negativeDamping' | 'positiveDamping' | null => {
+export type WindowMetricStatus = 'negativeDamping' | 'positiveDamping' | null;
+
+export const statusForWindowMetric = (metric: OscillationWindowMetric | undefined): WindowMetricStatus => {
   if (!metric || metric.mode <= 0 || metric.dampingRatioPercent === null) return null;
   return metric.dampingRatioPercent < 0 ? 'negativeDamping' : 'positiveDamping';
+};
+
+const statusPriority = (metric: OscillationWindowMetric | undefined): number => {
+  const status = statusForWindowMetric(metric);
+  if (status === 'negativeDamping') return 3;
+  if (status === 'positiveDamping') return 2;
+  return metric && metric.mode > 0 ? 1 : 0;
 };
 
 const pad = (value: number, size = 2): string => String(value).padStart(size, '0');
@@ -161,11 +174,71 @@ const formatDurationSeconds = (seconds: number): string => {
   return rest ? `${minutes} dk ${rest} sn` : `${minutes} dk`;
 };
 
+const formatMetricValue = (value: number | null | undefined, digits = 3): string =>
+  Number.isFinite(value) ? Number(value).toLocaleString('tr-TR', { maximumFractionDigits: digits }) : '-';
+
 const metricStartMs = (metric: OscillationWindowMetric): number =>
   Number.isFinite(metric.windowStartMs) ? metric.windowStartMs : metric.timestampMs;
 
 const metricEndMs = (metric: OscillationWindowMetric): number =>
   Number.isFinite(metric.windowEndMs) ? metric.windowEndMs : metric.timestampMs;
+
+export const selectDominantWindowMetric = (
+  metrics: OscillationWindowMetric[] | undefined,
+  timestampMs: number,
+  signal?: PmuSignalKey,
+  pmuId?: string,
+): OscillationWindowMetric | undefined => (metrics ?? [])
+  .filter(metric =>
+    (signal === undefined || metric.signal === signal)
+    && (pmuId === undefined || metric.pmuId === pmuId)
+    && metricStartMs(metric) <= timestampMs
+    && metricEndMs(metric) >= timestampMs
+  )
+  .sort((left, right) =>
+    statusPriority(right) - statusPriority(left)
+    || (right.energyRms ?? 0) - (left.energyRms ?? 0)
+    || metricStartMs(right) - metricStartMs(left)
+  )[0];
+
+export interface WindowStatusInterval {
+  startMs: number;
+  endMs: number;
+  status: Exclude<WindowMetricStatus, null>;
+}
+
+export const buildWindowStatusIntervals = (
+  metrics: OscillationWindowMetric[] | undefined,
+  signal?: PmuSignalKey,
+  pmuId?: string,
+): WindowStatusInterval[] => {
+  const filtered = (metrics ?? []).filter(metric =>
+    (signal === undefined || metric.signal === signal)
+    && (pmuId === undefined || metric.pmuId === pmuId)
+  );
+  const boundaries = [...new Set(filtered.flatMap(metric => [metricStartMs(metric), metricEndMs(metric)]))]
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right);
+  const intervals: WindowStatusInterval[] = [];
+
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const startMs = boundaries[index];
+    const endMs = boundaries[index + 1];
+    if (endMs <= startMs) continue;
+    const metric = selectDominantWindowMetric(filtered, startMs + (endMs - startMs) / 2, signal, pmuId);
+    const status = statusForWindowMetric(metric);
+    if (!status) continue;
+
+    const previous = intervals[intervals.length - 1];
+    if (previous && previous.status === status && previous.endMs === startMs) {
+      previous.endMs = endMs;
+    } else {
+      intervals.push({ startMs, endMs, status });
+    }
+  }
+
+  return intervals;
+};
 
 export const buildFilteredLineSegments = (
   series: Array<[number, number]>,
@@ -174,25 +247,10 @@ export const buildFilteredLineSegments = (
   pmuId: string,
   themeMode: 'dark' | 'light',
 ): FilteredLineSegment[] => {
-  const filteredMetrics = (metrics ?? [])
-    .filter(metric => metric.pmuId === pmuId && metric.signal === signal)
-    .sort((left, right) => metricStartMs(left) - metricStartMs(right));
-  const statuses: Array<'negativeDamping' | 'positiveDamping' | null> = [];
-  let metricIndex = 0;
-
-  series.forEach(([timestampMs]) => {
-    while (
-      metricIndex < filteredMetrics.length
-      && metricEndMs(filteredMetrics[metricIndex]) < timestampMs
-    ) {
-      metricIndex += 1;
-    }
-    const metric = filteredMetrics[metricIndex];
-    const inWindow = metric
-      && metricStartMs(metric) <= timestampMs
-      && metricEndMs(metric) >= timestampMs;
-    statuses.push(inWindow ? statusForMetric(metric) : null);
-  });
+  const filteredMetrics = (metrics ?? []).filter(metric => metric.pmuId === pmuId && metric.signal === signal);
+  const statuses = series.map(([timestampMs]) =>
+    statusForWindowMetric(selectDominantWindowMetric(filteredMetrics, timestampMs, signal, pmuId))
+  );
 
   const makeSegments = (kind: 'negativeDamping' | 'positiveDamping'): FilteredLineSegment[] => {
     const segments: FilteredLineSegment[] = [];
@@ -275,6 +333,10 @@ export const buildDampingTooltipPayload = ({
       : `Salınım frekansı: ${frequencyHz.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} Hz`,
     timeRangeText: `Salınım zamanı: ${formatClock(startMs)} - ${formatClock(endMs)}`,
     durationText: `Salınım süresi: ${formatDurationSeconds(durationSeconds)}`,
+    centerTimeText: `Merkez zamanı: ${formatClock(metric.timestampMs)}`,
+    amplitudeText: `Genlik: ${formatMetricValue(metric.amplitude)}`,
+    thresholdText: `Eşik: ${formatMetricValue(metric.thresholdValue)}`,
+    energyText: `RMS/Enerji: ${formatMetricValue(metric.energyRms)}`,
     windowText: `Pencere: ${Number.isFinite(windowSeconds) ? `${windowSeconds} sn` : '-'}`,
     stepText: `Adım: ${Number.isFinite(stepSeconds) ? `${stepSeconds} sn` : '-'}`,
   };

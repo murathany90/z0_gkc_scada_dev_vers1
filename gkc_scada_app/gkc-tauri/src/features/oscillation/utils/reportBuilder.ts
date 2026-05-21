@@ -4,6 +4,7 @@ import type {
   OscillationBandId,
   OscillationClassification,
   OscillationEvent,
+  OscillationWindowMetric,
   PmuFider,
   PmuSample,
   PmuSignalKey,
@@ -65,6 +66,60 @@ export const humanizeBand = (bandId: OscillationBandId | null | undefined): stri
 
 export const signalLabel = (signal: PmuSignalKey): string => SIGNAL_LABELS[signal];
 
+const sampleValueForSignal = (sample: PmuSample, signal: PmuSignalKey): number | null => {
+  const value = sample[signal];
+  return Number.isFinite(value) ? Number(value) : null;
+};
+
+const metricStartMs = (metric: OscillationWindowMetric): number =>
+  Number.isFinite(metric.windowStartMs) ? metric.windowStartMs : metric.timestampMs;
+
+const metricEndMs = (metric: OscillationWindowMetric): number =>
+  Number.isFinite(metric.windowEndMs) ? metric.windowEndMs : metric.timestampMs;
+
+export interface OscillationEventDetails {
+  rawRows: Array<{
+    timestamp: string;
+    timestampMs: number;
+    pmuId: string;
+    signal: PmuSignalKey;
+    value: number | null;
+    sample: PmuSample;
+  }>;
+  windowRows: OscillationWindowMetric[];
+}
+
+export const buildOscillationEventDetails = ({
+  event,
+  samples,
+  windowMetrics,
+}: {
+  event: OscillationEvent;
+  samples: PmuSample[];
+  windowMetrics: OscillationWindowMetric[];
+}): OscillationEventDetails => ({
+  rawRows: samples
+    .filter(sample => sample.pmuId === event.pmuId && sample.timestampMs >= event.startMs && sample.timestampMs <= event.endMs)
+    .sort((left, right) => left.timestampMs - right.timestampMs)
+    .map(sample => ({
+      timestamp: sample.sourceZaman ?? sample.timestamp,
+      timestampMs: sample.timestampMs,
+      pmuId: sample.pmuId,
+      signal: event.signal,
+      value: sampleValueForSignal(sample, event.signal),
+      sample,
+    })),
+  windowRows: windowMetrics
+    .filter(metric =>
+      metric.pmuId === event.pmuId
+      && metric.signal === event.signal
+      && metric.mode === event.mode
+      && metricStartMs(metric) <= event.endMs
+      && metricEndMs(metric) >= event.startMs
+    )
+    .sort((left, right) => metricStartMs(left) - metricStartMs(right)),
+});
+
 export const buildDecisionSupportSentences = ({
   result,
   pmuDevices,
@@ -90,13 +145,14 @@ export const buildDecisionSupportSentences = ({
 export const describeOscillationEvent = (event: OscillationEvent, pmuDevices: PmuFider[]): string => {
   const pmuName = pmuNameFrom(pmuDevices, event.pmuId);
   const band = humanizeBand(event.bandId);
+  const signal = signalLabel(event.signal);
   const frequency = formatNumber(event.dominantFrequencyHz, 3);
   const damping = formatNumber(event.minDampingRatioPercent ?? event.averageDampingRatioPercent, 2);
   const trend = event.hasNegativeDamping
-    ? `Salınımın sönümleme oranı (% ${damping}) negatif olduğu için sistemde büyüme eğilimi gösteren kararsızlık riski bulunmaktadır.`
+    ? `Salınımın sönümleme oranı (% ${damping}) negatif olduğu için büyüme eğilimi açısından operatör incelemesi önerilir.`
     : `Salınımın sönümleme oranı (% ${damping}) negatif değildir; olay sönümlenme eğilimiyle izlenmelidir.`;
 
-  return `${pmuName} fiderinde ${formatTime(event.startMs)} - ${formatTime(event.endMs)} zaman aralığında, süresi ${formatDuration(event.durationSeconds)} olan, frekansı ${frequency} Hz ${band} salınım tespit edilmiştir. ${trend}`;
+  return `${pmuName} fiderinde ${signal} ölçümünde ${formatTime(event.startMs)} - ${formatTime(event.endMs)} zaman aralığında, süresi ${formatDuration(event.durationSeconds)} olan, frekansı ${frequency} Hz ${band} salınım aday bulgusu üretilmiştir. ${trend}`;
 };
 
 export const buildSummaryText = (result: OscillationAnalysisResult | null, pmuDevices: PmuFider[]): string => {

@@ -222,6 +222,93 @@ mod scada_parser_tests {
     }
 
     #[test]
+    fn build_mgkp_measurement_filter_change_params_matches_primefaces_payload() {
+        let params = YtbsClient::build_mgkp_filter_change_params(
+            "form:olcumTipi",
+            "form:cihaz",
+            "valueChange",
+            "GERILIM_400KV",
+            "3",
+            "PQ",
+            "view-state-1",
+        );
+
+        assert!(params.contains(&("jakarta.faces.partial.ajax".to_string(), "true".to_string())));
+        assert!(params.contains(&(
+            "jakarta.faces.source".to_string(),
+            "form:olcumTipi".to_string()
+        )));
+        assert!(params.contains(&(
+            "jakarta.faces.partial.execute".to_string(),
+            "form:olcumTipi".to_string()
+        )));
+        assert!(params.contains(&(
+            "jakarta.faces.partial.render".to_string(),
+            "form:cihaz".to_string()
+        )));
+        assert!(params.contains(&(
+            "jakarta.faces.behavior.event".to_string(),
+            "valueChange".to_string()
+        )));
+        assert!(params.contains(&(
+            "jakarta.faces.partial.event".to_string(),
+            "change".to_string()
+        )));
+        assert!(params.contains(&(
+            "form:gerilim_input".to_string(),
+            "GERILIM_400KV".to_string()
+        )));
+        assert!(params.contains(&("form:fazId_input".to_string(), "3".to_string())));
+        assert!(params.contains(&("form:olcumTipi_input".to_string(), "PQ".to_string())));
+        assert!(params.contains(&("form:cihaz_input".to_string(), "-1".to_string())));
+        assert!(params.contains(&(
+            "jakarta.faces.ViewState".to_string(),
+            "view-state-1".to_string()
+        )));
+    }
+
+    #[test]
+    fn detects_mgkp_response_measurement_type_from_graph_schema() {
+        let pmu_response = r#"
+            <script>
+            var grafik_yapisi_json = {"zamanCozunurlugu":"millisecond","sorguListesi":[{"yDegerAlani":"y14"},{"yDegerAlani":"y15"},{"yDegerAlani":"y16"}],"baslik":"Guc"};
+            </script>
+        "#;
+        let pq_response = r#"
+            <script>
+            var grafik_yapisi_json = {"zamanCozunurlugu":"second","sorguListesi":[{"yDegerAlani":"y11"},{"yDegerAlani":"y12"},{"yDegerAlani":"y13"}],"baslik":"Guc"};
+            </script>
+        "#;
+
+        assert_eq!(
+            YtbsClient::detect_mgkp_response_measurement_type(pmu_response),
+            Some("PMU")
+        );
+        assert_eq!(
+            YtbsClient::detect_mgkp_response_measurement_type(pq_response),
+            Some("PQ")
+        );
+    }
+
+    #[test]
+    fn rejects_pmu_graph_schema_for_pq_request() {
+        let response = r#"
+            <partial-response><changes><update id="form"><![CDATA[
+            <script>
+            var grafik_yapisi_json = {"zamanCozunurlugu":"millisecond","sorguListesi":[{"yDegerAlani":"y14"},{"yDegerAlani":"y15"},{"yDegerAlani":"y16"}],"baslik":"Guc"};
+            var grafik_verisi_json = [{"zaman":"16.05.2026 22:00:02.100","y14":-368.12,"y15":-66.01,"y16":374.11}];
+            </script>
+            ]]></update></changes></partial-response>
+        "#;
+
+        let error = YtbsClient::validate_mgkp_response_measurement_type(response, "PQ")
+            .expect_err("PMU schema must not be accepted for a PQ request");
+
+        assert!(error.contains("PMU"));
+        assert!(error.contains("PQ"));
+    }
+
+    #[test]
     fn session_expired_detection_ignores_primefaces_login_error_page_config() {
         let logged_in_page = r#"
             <script>
@@ -827,6 +914,90 @@ impl YtbsClient {
         Ok(Self::parse_scada_options_from_response(&response_text))
     }
 
+    async fn apply_mgkp_filter_state(
+        &mut self,
+        measurement_type: &str,
+        gerilim: &str,
+        faz_id: &str,
+    ) -> Result<(), String> {
+        self.post_mgkp_filter_change(
+            "form:olcumTipi",
+            "form:cihaz",
+            "valueChange",
+            gerilim,
+            faz_id,
+            measurement_type,
+        )
+        .await?;
+
+        self.post_mgkp_filter_change(
+            "form:gerilim",
+            "form:cihaz",
+            "change",
+            gerilim,
+            faz_id,
+            measurement_type,
+        )
+        .await
+    }
+
+    async fn post_mgkp_filter_change(
+        &mut self,
+        source: &str,
+        render: &str,
+        behavior_event: &str,
+        gerilim: &str,
+        faz_id: &str,
+        measurement_type: &str,
+    ) -> Result<(), String> {
+        let view_state = self.view_state.clone().ok_or("ViewState bulunamadı")?;
+        let params = Self::build_mgkp_filter_change_params(
+            source,
+            render,
+            behavior_event,
+            gerilim,
+            faz_id,
+            measurement_type,
+            &view_state,
+        );
+
+        let response = self
+            .client
+            .post(YTBS_MAIN_URL)
+            .header(
+                "Content-Type",
+                "application/x-www-form-urlencoded; charset=UTF-8",
+            )
+            .header("Faces-Request", "partial/ajax")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("MGKP filtre senkronizasyon isteği başarısız: {}", e))?;
+
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| format!("MGKP filtre senkronizasyon yanıtı okunamadı: {}", e))?;
+
+        if let Some(vs) = Self::extract_view_state(&response_text) {
+            self.view_state = Some(vs);
+        }
+
+        if let Some(btn_id) = Self::extract_goster_button_id(&response_text) {
+            self.goster_button_id = Some(btn_id);
+        }
+
+        if Self::is_session_expired_response(&response_text) {
+            self.status = YtbsSessionStatus::SessionExpired;
+            self.is_on_mgkp_page = false;
+            return Err("Oturum süresi dolmuş".into());
+        }
+
+        self.last_activity = Some(chrono::Utc::now());
+        Ok(())
+    }
+
     fn build_scada_filter_change_params(
         source: &str,
         render: &str,
@@ -867,6 +1038,50 @@ impl YtbsClient {
         ]
     }
 
+    fn build_mgkp_filter_change_params(
+        source: &str,
+        render: &str,
+        behavior_event: &str,
+        gerilim: &str,
+        faz_id: &str,
+        measurement_type: &str,
+        view_state: &str,
+    ) -> Vec<(String, String)> {
+        vec![
+            ("jakarta.faces.partial.ajax".to_string(), "true".to_string()),
+            ("jakarta.faces.source".to_string(), source.to_string()),
+            (
+                "jakarta.faces.partial.execute".to_string(),
+                source.to_string(),
+            ),
+            (
+                "jakarta.faces.partial.render".to_string(),
+                render.to_string(),
+            ),
+            (
+                "jakarta.faces.behavior.event".to_string(),
+                behavior_event.to_string(),
+            ),
+            (
+                "jakarta.faces.partial.event".to_string(),
+                "change".to_string(),
+            ),
+            (source.to_string(), source.to_string()),
+            ("form".to_string(), "form".to_string()),
+            ("form:gerilim_input".to_string(), gerilim.to_string()),
+            ("form:fazId_input".to_string(), faz_id.to_string()),
+            (
+                "form:olcumTipi_input".to_string(),
+                measurement_type.to_string(),
+            ),
+            ("form:cihaz_input".to_string(), "-1".to_string()),
+            (
+                "jakarta.faces.ViewState".to_string(),
+                view_state.to_string(),
+            ),
+        ]
+    }
+
     /// Belirli bir cihazdan tarih aralığına göre ölçüm verisi sorgula.
     /// PrimeFaces AJAX POST ile "GÖSTER" butonunu simüle eder.
     pub async fn query_device(
@@ -882,10 +1097,19 @@ impl YtbsClient {
             return Err("YTBS'ye bağlı değil".into());
         }
 
+        let measurement_type = if measurement_type.trim().eq_ignore_ascii_case("PMU") {
+            "PMU"
+        } else {
+            "PQ"
+        };
+
         // MGKP sayfasında değilsek önce navigasyon yap
         if !self.is_on_mgkp_page {
             self.navigate_to_mgkp().await?;
         }
+
+        self.apply_mgkp_filter_state(measurement_type, gerilim, faz_id)
+            .await?;
 
         let view_state = self.view_state.as_ref().ok_or("ViewState bulunamadı")?;
 
@@ -954,6 +1178,8 @@ impl YtbsClient {
             self.is_on_mgkp_page = false;
             return Err("Oturum süresi dolmuş".into());
         }
+
+        Self::validate_mgkp_response_measurement_type(&response_text, measurement_type)?;
 
         // Yanıttan grafik verisi JSON'ını çıkar
         let (grafik_verileri, raw_json) = Self::parse_grafik_verisi(&response_text)?;
@@ -1320,6 +1546,82 @@ impl YtbsClient {
             data,
             raw_json,
         })
+    }
+
+    fn detect_mgkp_response_measurement_type(response: &str) -> Option<&'static str> {
+        let clean_response = Self::clean_jsf_response(response);
+        let graph_re = Regex::new(r#"(?s)var grafik_yapisi_json\s*=\s*(\{.*?\});"#).ok()?;
+        let mut has_pq_schema = false;
+
+        for caps in graph_re.captures_iter(&clean_response) {
+            let Some(graph_json) = caps.get(1).map(|item| item.as_str()) else {
+                continue;
+            };
+            let Ok(graph) = serde_json::from_str::<serde_json::Value>(graph_json) else {
+                continue;
+            };
+
+            if graph
+                .get("zamanCozunurlugu")
+                .and_then(|value| value.as_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case("millisecond"))
+            {
+                return Some("PMU");
+            }
+
+            let fields: Vec<&str> = graph
+                .get("sorguListesi")
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.get("yDegerAlani").and_then(|value| value.as_str()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if fields
+                .iter()
+                .any(|field| matches!(*field, "y14" | "y15" | "y16"))
+            {
+                return Some("PMU");
+            }
+
+            if fields.iter().any(|field| {
+                matches!(
+                    *field,
+                    "y3" | "y4" | "y5" | "y7" | "y8" | "y9" | "y11" | "y12" | "y13"
+                )
+            }) {
+                has_pq_schema = true;
+            }
+        }
+
+        has_pq_schema.then_some("PQ")
+    }
+
+    fn validate_mgkp_response_measurement_type(
+        response: &str,
+        requested_measurement_type: &str,
+    ) -> Result<(), String> {
+        let requested = if requested_measurement_type.eq_ignore_ascii_case("PMU") {
+            "PMU"
+        } else {
+            "PQ"
+        };
+
+        let Some(actual) = Self::detect_mgkp_response_measurement_type(response) else {
+            return Ok(());
+        };
+
+        if actual == requested {
+            Ok(())
+        } else {
+            Err(format!(
+                "YTBS {} grafik şeması döndürdü ancak istek {} modundaydı. Grafiklerin karışmaması için sonuç çizilmedi; lütfen sorguyu tekrar deneyin.",
+                actual, requested
+            ))
+        }
     }
 
     fn parse_scada_options_from_response(response: &str) -> YtbsScadaOptions {

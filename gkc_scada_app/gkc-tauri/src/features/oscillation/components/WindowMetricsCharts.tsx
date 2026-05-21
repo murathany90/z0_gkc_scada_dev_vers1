@@ -3,6 +3,7 @@ import type { OscillationWindowMetric, PmuSignalKey } from '../types/oscillation
 import {
   buildDampingScatterData,
   buildDampingTooltipPayload,
+  buildWindowStatusIntervals,
   chartBase,
   connectOscillationTimeChart,
   formatMetricNumber,
@@ -183,6 +184,8 @@ export function ModeDampingChart({
             if (payload) {
               rows.push(`<div style="color:${palette.muted};">${payload.frequencyText}</div>`);
               rows.push(`<div style="color:${palette.muted};">${payload.timeRangeText}</div>`);
+              rows.push(`<div style="color:${palette.muted};">${payload.centerTimeText}</div>`);
+              rows.push(`<div style="color:${palette.muted};">${payload.amplitudeText} · ${payload.thresholdText} · ${payload.energyText}</div>`);
               rows.push(`<div style="color:${palette.muted};">${payload.durationText} · ${payload.windowText} · ${payload.stepText}</div>`);
             }
           }
@@ -234,6 +237,7 @@ export function ModeDampingChart({
     ],
     series: groups.flatMap((group, index) => {
       const groupMetrics = signalMetrics.filter(metric => seriesKey(metric) === seriesKey(group));
+      const statusIntervals = buildWindowStatusIntervals(groupMetrics, signal, group.pmuId);
       const color = PMU_COLORS[index % PMU_COLORS.length];
       return [
         {
@@ -246,6 +250,19 @@ export function ModeDampingChart({
           data: groupMetrics.map(metric => [metric.timestampMs, metric.mode]),
           lineStyle: { width: 1.4, color },
           itemStyle: { color },
+          markArea: statusIntervals.length
+            ? {
+              silent: true,
+              itemStyle: { opacity: 0.12 },
+              data: statusIntervals.map(interval => [
+                {
+                  xAxis: interval.startMs,
+                  itemStyle: { color: interval.status === 'negativeDamping' ? palette.danger : palette.success },
+                },
+                { xAxis: interval.endMs },
+              ]),
+            }
+            : undefined,
           markPoint: {
             symbolSize: 13,
             label: { show: false },
@@ -266,6 +283,8 @@ export function ModeDampingChart({
                   `DR: ${formatMetricNumber(payload.dampingRatioPercent, 2)}%`,
                   payload.frequencyText,
                   payload.timeRangeText,
+                  payload.centerTimeText,
+                  `${payload.amplitudeText} · ${payload.thresholdText} · ${payload.energyText}`,
                   payload.durationText,
                   `${payload.windowText} · ${payload.stepText}`,
                   `<span style="color:${payload.statusColor};">${payload.statusText}</span>`,

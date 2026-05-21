@@ -75,7 +75,10 @@ const thresholdForSignal = (
 
   const finiteValues = values.filter(Number.isFinite);
   const windowMean = finiteValues.length ? mean(finiteValues) : 0;
-  return Math.abs(windowMean) * Math.max(0, thresholdPercentForSignal(signal, thresholds)) / 100;
+  const percentThreshold = Math.abs(windowMean) * Math.max(0, thresholdPercentForSignal(signal, thresholds)) / 100;
+  if (signal === 'activePower') return Math.max(percentThreshold, 10);
+  if (signal === 'reactivePower') return Math.max(percentThreshold, 5);
+  return percentThreshold;
 };
 
 const classifyMetric = (
@@ -323,6 +326,61 @@ const calculateWindowMetricsForSeries = ({
   });
 };
 
+const promotedWindowForMetric = (
+  metric: SignalBandMetric,
+  windowMetrics: OscillationWindowMetric[],
+): OscillationWindowMetric | undefined =>
+  windowMetrics
+    .filter(windowMetric =>
+      windowMetric.pmuId === metric.pmuId
+      && windowMetric.signal === metric.signal
+      && windowMetric.bandId === metric.bandId
+      && windowMetric.mode > 0
+      && !windowMetric.passiveTorsion
+      && windowMetric.amplitude !== null
+      && windowMetric.amplitude > windowMetric.thresholdValue,
+    )
+    .sort((left, right) => {
+      const leftRatio = (left.amplitude ?? 0) / Math.max(left.thresholdValue, Number.EPSILON);
+      const rightRatio = (right.amplitude ?? 0) / Math.max(right.thresholdValue, Number.EPSILON);
+      return rightRatio - leftRatio
+        || (right.energyRms ?? 0) - (left.energyRms ?? 0)
+        || left.timestampMs - right.timestampMs;
+    })[0];
+
+const reconcileMetricsWithWindowModes = (
+  metrics: SignalBandMetric[],
+  windowMetrics: OscillationWindowMetric[],
+  pmuCount: number,
+): SignalBandMetric[] =>
+  metrics.map(metric => {
+    if (metric.classificationLabel !== 'MOD_YOK') return metric;
+
+    const promotedWindow = promotedWindowForMetric(metric, windowMetrics);
+    const band = OSCILLATION_BANDS.find(item => item.id === metric.bandId);
+    if (!promotedWindow || !band) return metric;
+
+    const classificationLabel = classifyMetric(
+      band,
+      promotedWindow.dominantFrequencyHz,
+      promotedWindow.amplitude,
+      promotedWindow.thresholdValue,
+      promotedWindow.dampingRatioPercent,
+      pmuCount,
+      metric.dataQualityScore,
+    );
+
+    if (classificationLabel === 'MOD_YOK') return metric;
+
+    return {
+      ...metric,
+      dominantFrequencyHz: promotedWindow.dominantFrequencyHz ?? metric.dominantFrequencyHz,
+      peakAmplitude: maxNullable([metric.peakAmplitude, promotedWindow.amplitude]),
+      dampingRatioPercent: promotedWindow.dampingRatioPercent ?? metric.dampingRatioPercent,
+      classificationLabel,
+    };
+  });
+
 const finiteOrNull = (value: number | null | undefined): number | null =>
   Number.isFinite(value) ? Number(value) : null;
 
@@ -497,7 +555,7 @@ export const calculateOscillationAnalysis = ({
   const qualities = pmuIds.map(pmuId => calculatePmuQuality(pmuId, samplesByPmu.get(pmuId) ?? [], expectedSamples));
   const qualityByPmu = new Map(qualities.map(quality => [quality.pmuId, quality]));
   const bands = getEnabledBands();
-  const metrics = pmuIds.flatMap(pmuId =>
+  const baseMetrics = pmuIds.flatMap(pmuId =>
     selectedSignals.flatMap(signal =>
       bands.map(band => {
         const quality = qualityByPmu.get(pmuId);
@@ -527,6 +585,7 @@ export const calculateOscillationAnalysis = ({
       })
     )
   );
+  const metrics = reconcileMetricsWithWindowModes(baseMetrics, windowMetrics, pmuIds.length);
   const events = buildOscillationEvents(windowMetrics, windowSeconds, stepSeconds);
   const totalSamples = pmuIds.reduce((sum, pmuId) => sum + (samplesByPmu.get(pmuId)?.length ?? 0), 0);
   const missingSampleRatio = qualities.length
@@ -536,7 +595,7 @@ export const calculateOscillationAnalysis = ({
   const dominantCommonMode = commonModes[0];
   const dominantSignal = dominantCommonMode?.dominantSignal ?? selectedSignals[0] ?? 'frequency';
   const coherenceMatrix = pmuIds.length > 1
-    ? buildCoherenceMatrix(samplesByPmu, pmuIds, dominantSignal)
+    ? buildCoherenceMatrix(samplesByPmu, pmuIds, dominantSignal, dominantCommonMode?.frequencyHz ?? null, samplingRateHz)
     : undefined;
   const modeShape = pmuIds.length > 1
     ? calculateModeShape({

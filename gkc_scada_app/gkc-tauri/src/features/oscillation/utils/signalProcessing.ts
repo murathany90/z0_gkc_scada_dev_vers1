@@ -209,7 +209,8 @@ export const estimateDampingRatio = (
   }
 
   const decrement = Math.log(first / last) / (peaks.length - 1);
-  const zetaPercent = (decrement / Math.sqrt(TWO_PI * TWO_PI + decrement * decrement)) * 100;
+  const halfCycleRadians = Math.PI;
+  const zetaPercent = (decrement / Math.sqrt(halfCycleRadians * halfCycleRadians + decrement * decrement)) * 100;
   const elapsedSeconds = (peaks[peaks.length - 1].index - peaks[0].index) / samplingRateHz;
   const sigma = elapsedSeconds > 0 ? Math.log(last / first) / elapsedSeconds : null;
   return {

@@ -1,8 +1,14 @@
+import { useMemo, useState } from 'react';
 import type { OscillationAnalysisResult, PmuFider, PmuSample } from '../types/oscillationTypes.ts';
 import type { OscillationDetailsTab } from '../store/oscillationStore.ts';
 import { formatMetricNumber, formatPmuDisplayName, SIGNAL_LABELS } from './chartHelpers.ts';
 import { OscillationReportPanel } from './OscillationReportPanel.tsx';
-import { humanizeBand, humanizeClassification, signalLabel } from '../utils/reportBuilder.ts';
+import {
+  buildOscillationEventDetails,
+  humanizeBand,
+  humanizeClassification,
+  signalLabel,
+} from '../utils/reportBuilder.ts';
 
 const tabs: Array<{ id: OscillationDetailsTab; label: string }> = [
   { id: 'summary', label: 'Analiz Özeti' },
@@ -27,9 +33,21 @@ export function OscillationDetailsTabs({
   pmuDevices: PmuFider[];
   reportMarkdown: string;
 }) {
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const pmuName = (pmuId: string): string =>
     formatPmuDisplayName(pmuDevices.find(device => device.id === pmuId) ?? pmuId);
   const formatEventTime = (timestampMs: number): string => new Date(timestampMs).toLocaleTimeString('tr-TR');
+  const selectedEvent = useMemo(() =>
+    result?.events.find(event => event.id === selectedEventId) ?? result?.events[0] ?? null,
+  [result, selectedEventId]);
+  const selectedEventDetails = useMemo(() => selectedEvent
+    ? buildOscillationEventDetails({
+      event: selectedEvent,
+      samples,
+      windowMetrics: result?.windowMetrics ?? [],
+    })
+    : null,
+  [result?.windowMetrics, samples, selectedEvent]);
 
   return (
     <div className="card">
@@ -54,7 +72,7 @@ export function OscillationDetailsTabs({
                 <table className="oscillation-table">
                   <thead>
                     <tr>
-                      <th>PMU</th><th>Sinyal</th><th>Mod</th><th>Zaman</th><th>Süre</th><th>Frekans</th><th>DR</th><th>Durum</th>
+                      <th>PMU</th><th>Sinyal</th><th>Mod</th><th>Zaman</th><th>Süre</th><th>Frekans</th><th>DR</th><th>Durum</th><th>Aksiyon</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -68,6 +86,18 @@ export function OscillationDetailsTabs({
                         <td style={{ textAlign: 'right' }}>{formatMetricNumber(event.dominantFrequencyHz)} Hz</td>
                         <td style={{ textAlign: 'right' }}>{formatMetricNumber(event.minDampingRatioPercent ?? event.averageDampingRatioPercent, 2)}%</td>
                         <td>{event.hasNegativeDamping ? 'Büyüyen salınım riski' : 'Sönümlenen/izlenen salınım'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-compact"
+                            onClick={() => {
+                              setSelectedEventId(event.id);
+                              onTabChange('data');
+                            }}
+                          >
+                            Veriler / Ayrıntılar
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -142,27 +172,69 @@ export function OscillationDetailsTabs({
         )}
 
         {activeTab === 'data' && (
-          <div style={{ overflowX: 'auto', maxHeight: 420, overflowY: 'auto' }}>
-            <table className="oscillation-table" style={{ minWidth: 760 }}>
-              <thead>
-                <tr style={{ color: 'var(--text-muted)', background: 'var(--table-header-bg)' }}>
-                  <th style={{ padding: 6, textAlign: 'left' }}>Timestamp</th><th style={{ padding: 6 }}>PMU</th><th style={{ padding: 6, textAlign: 'right' }}>Frekans</th><th style={{ padding: 6, textAlign: 'right' }}>Gerilim</th><th style={{ padding: 6, textAlign: 'right' }}>MW</th><th style={{ padding: 6, textAlign: 'right' }}>MVAr</th>
-                </tr>
-              </thead>
-              <tbody>
-                {samples.slice(0, 500).map(sample => (
-                  <tr key={`${sample.pmuId}-${sample.timestampMs}`} style={{ borderTop: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: 6 }}>{sample.sourceZaman ?? sample.timestamp}</td>
-                    <td style={{ padding: 6 }}>{pmuName(sample.pmuId)}</td>
-                    <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(sample.frequency)}</td>
-                    <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(sample.voltage)}</td>
-                    <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(sample.activePower)}</td>
-                    <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(sample.reactivePower)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {samples.length > 500 && <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 8 }}>İlk 500 satır gösteriliyor. Tam veri için CSV dışa aktarımı kullanın.</div>}
+          <div style={{ display: 'grid', gap: 12, maxHeight: 520, overflowY: 'auto' }}>
+            {selectedEvent && selectedEventDetails ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 8, fontSize: 12 }}>
+                  <div><strong>Olay</strong><br />{pmuName(selectedEvent.pmuId)}</div>
+                  <div><strong>Ölçüm</strong><br />{signalLabel(selectedEvent.signal)}</div>
+                  <div><strong>Zaman</strong><br />{formatEventTime(selectedEvent.startMs)} - {formatEventTime(selectedEvent.endMs)}</div>
+                  <div><strong>Mod</strong><br />{humanizeBand(selectedEvent.bandId)}</div>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="oscillation-table" style={{ minWidth: 860 }}>
+                    <thead>
+                      <tr>
+                        <th>Pencere Başlangıç</th><th>Pencere Bitiş</th><th>Süre</th><th>Mod</th><th>Hz</th><th>Genlik</th><th>Eşik</th><th>RMS/Enerji</th><th>DR</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedEventDetails.windowRows.map(metric => (
+                        <tr key={`${metric.pmuId}-${metric.signal}-${metric.timestampMs}`}>
+                          <td>{formatEventTime(metric.windowStartMs)}</td>
+                          <td>{formatEventTime(metric.windowEndMs)}</td>
+                          <td>{formatMetricNumber(metric.durationSeconds, 0)} sn</td>
+                          <td>{humanizeBand(metric.bandId)}</td>
+                          <td style={{ textAlign: 'right' }}>{formatMetricNumber(metric.dominantFrequencyHz)} Hz</td>
+                          <td style={{ textAlign: 'right' }}>{formatMetricNumber(metric.amplitude)}</td>
+                          <td style={{ textAlign: 'right' }}>{formatMetricNumber(metric.thresholdValue)}</td>
+                          <td style={{ textAlign: 'right' }}>{formatMetricNumber(metric.energyRms)}</td>
+                          <td style={{ textAlign: 'right' }}>{formatMetricNumber(metric.dampingRatioPercent, 2)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="oscillation-table" style={{ minWidth: 760 }}>
+                    <thead>
+                      <tr style={{ color: 'var(--text-muted)', background: 'var(--table-header-bg)' }}>
+                        <th style={{ padding: 6, textAlign: 'left' }}>Timestamp</th><th style={{ padding: 6 }}>PMU</th><th style={{ padding: 6 }}>Ölçüm</th><th style={{ padding: 6, textAlign: 'right' }}>Değer</th><th style={{ padding: 6, textAlign: 'right' }}>Frekans</th><th style={{ padding: 6, textAlign: 'right' }}>Gerilim</th><th style={{ padding: 6, textAlign: 'right' }}>MW</th><th style={{ padding: 6, textAlign: 'right' }}>MVAr</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedEventDetails.rawRows.slice(0, 500).map(row => (
+                        <tr key={`${row.pmuId}-${row.timestampMs}`} style={{ borderTop: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: 6 }}>{row.timestamp}</td>
+                          <td style={{ padding: 6 }}>{pmuName(row.pmuId)}</td>
+                          <td style={{ padding: 6 }}>{signalLabel(row.signal)}</td>
+                          <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(row.value)}</td>
+                          <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(row.sample.frequency)}</td>
+                          <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(row.sample.voltage)}</td>
+                          <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(row.sample.activePower)}</td>
+                          <td style={{ padding: 6, textAlign: 'right' }}>{formatMetricNumber(row.sample.reactivePower)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {selectedEventDetails.rawRows.length > 500 && <div style={{ color: 'var(--text-muted)', fontSize: 11, marginTop: 8 }}>Seçili olay için ilk 500 satır gösteriliyor.</div>}
+                </div>
+              </>
+            ) : (
+              <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Ayrıntı görüntülemek için olay satırından Veriler / Ayrıntılar aksiyonunu seçin.</div>
+            )}
           </div>
         )}
 

@@ -4,14 +4,16 @@ import { SIGNAL_LABELS } from './chartHelpers.ts';
 
 export function OscillationSignalTabs({
   activeSignal,
+  signals = OSCILLATION_SIGNAL_TABS,
   onChange,
 }: {
   activeSignal: PmuSignalKey;
+  signals?: PmuSignalKey[];
   onChange: (signal: PmuSignalKey) => void;
 }) {
   return (
     <div className="oscillation-signal-tabs" role="tablist" aria-label="Salınım sinyal sekmeleri">
-      {OSCILLATION_SIGNAL_TABS.map(signal => (
+      {signals.map(signal => (
         <button
           key={signal}
           type="button"

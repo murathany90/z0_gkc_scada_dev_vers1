@@ -10,15 +10,17 @@ import type {
 import {
   buildDecisionSupportSentences,
   buildSummaryText,
-  describeOscillationEvent,
   humanizeBand,
   humanizeClassification,
   signalLabel,
 } from '../utils/reportBuilder.ts';
 import {
+  buildPrintDampingScatterSeries,
   buildPrintReportSections,
+  describePrintEvent,
   PRINT_REPORT_TITLE,
   summarizePrintSection,
+  type PrintReportSection,
 } from '../utils/printReport.ts';
 import {
   buildFilteredLineSegments,
@@ -52,15 +54,19 @@ const signalUnit = (signal: PmuSignalKey): string =>
 const pmuNameFrom = (pmuDevices: PmuFider[], pmuId: string): string =>
   formatPmuDisplayName(pmuDevices.find(device => device.id === pmuId) ?? pmuId);
 
-const uniqueMetricGroups = (metrics: OscillationWindowMetric[]): OscillationWindowMetric[] => {
-  const seen = new Set<string>();
-  return metrics.filter(metric => {
-    const key = `${metric.pmuId}-${metric.signal}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+const filterTimeSeries = (
+  series: Array<[number, number]>,
+  intervalStartMs: number,
+  intervalEndMs: number,
+): Array<[number, number]> =>
+  series.filter(([timestampMs]) => timestampMs >= intervalStartMs && timestampMs <= intervalEndMs);
+
+const filterWindowMetrics = (
+  metrics: OscillationWindowMetric[],
+  intervalStartMs: number,
+  intervalEndMs: number,
+): OscillationWindowMetric[] =>
+  metrics.filter(metric => metric.timestampMs >= intervalStartMs && metric.timestampMs <= intervalEndMs);
 
 const printChartBase = () => {
   const palette = paletteFor('light');
@@ -70,82 +76,95 @@ const printChartBase = () => {
     animation: false,
     toolbox: { show: false },
     dataZoom: [],
-    legend: { type: 'scroll', top: 0, right: 8, width: '54%', textStyle: { color: palette.muted, fontSize: 9 } },
+    legend: {
+      type: 'plain',
+      top: 0,
+      right: 8,
+      textStyle: { color: palette.muted, fontSize: 9 },
+    },
   };
 };
 
 const buildPrintRawOption = ({
   samplesByPmu,
-  selectedPmuIds,
-  pmuDevices,
-  signal,
-  metrics,
+  section,
   smoothingSettings,
 }: {
   samplesByPmu: Record<string, PmuSample[]>;
-  selectedPmuIds: string[];
-  pmuDevices: PmuFider[];
-  signal: PmuSignalKey;
-  metrics: OscillationWindowMetric[];
+  section: PrintReportSection;
   smoothingSettings: OscillationSmoothingSettings;
 }) => {
   const palette = paletteFor('light');
-  const unit = SIGNAL_UNITS[signal];
-  const rawSeries = selectedPmuIds.map((pmuId, pmuIndex) => {
-    const pmu = pmuDevices.find(item => item.id === pmuId) ?? pmuId;
-    const color = PMU_COLORS[pmuIndex % PMU_COLORS.length];
-    return {
-      id: `print-raw-${pmuId}-${signal}`,
-      name: `${formatPmuDisplayName(pmu)} ${signalLabel(signal)} (${unit})`,
-      type: 'line',
-      showSymbol: false,
-      sampling: 'lttb',
-      data: toTimeSeries(samplesByPmu[pmuId] ?? [], signal),
-      lineStyle: { width: 1.1, color },
-      itemStyle: { color },
-      connectNulls: false,
-    };
-  });
+  const unit = SIGNAL_UNITS[section.signal];
+  const rawData = filterTimeSeries(
+    toTimeSeries(samplesByPmu[section.pmuId] ?? [], section.signal),
+    section.intervalStartMs,
+    section.intervalEndMs,
+  );
+  const color = PMU_COLORS[0];
+  const rawSeries = [{
+    id: `print-raw-${section.pageKey}`,
+    name: 'Ham',
+    type: 'line',
+    showSymbol: false,
+    sampling: 'lttb',
+    data: rawData,
+    lineStyle: { width: 1.1, color },
+    itemStyle: { color },
+    connectNulls: false,
+  }];
 
   const overlaySeries = smoothingSettings.enabled
-    ? selectedPmuIds.flatMap((pmuId) => {
-      const pmu = pmuDevices.find(item => item.id === pmuId) ?? pmuId;
-      const filteredData = movingAverageTimeSeries(toTimeSeries(samplesByPmu[pmuId] ?? [], signal), smoothingSettings.windowSize);
-      return buildFilteredLineSegments(filteredData, metrics, signal, pmuId, 'light').map((segment, segmentIndex) => ({
-        id: `print-filtered-${pmuId}-${signal}-${segment.kind}-${segmentIndex}`,
-        name: `${formatPmuDisplayName(pmu)} Filtrelenmiş ${signalLabel(signal)} (${unit})`,
-        type: 'line',
-        showSymbol: false,
-        data: segment.data,
-        lineStyle: { ...segment.lineStyle, color: segment.color, opacity: segment.kind === 'base' ? 0.9 : 1 },
-        itemStyle: { color: segment.color },
-        connectNulls: false,
-        z: segment.z,
-      }));
-    })
+    ? buildFilteredLineSegments(
+      filterTimeSeries(
+        movingAverageTimeSeries(toTimeSeries(samplesByPmu[section.pmuId] ?? [], section.signal), smoothingSettings.windowSize),
+        section.intervalStartMs,
+        section.intervalEndMs,
+      ),
+      section.windowMetrics,
+      section.signal,
+      section.pmuId,
+      'light',
+    ).map((segment, segmentIndex) => ({
+      id: `print-filtered-${section.pageKey}-${segment.kind}-${segmentIndex}`,
+      name: segment.kind === 'base'
+        ? 'Filtrelenmiş'
+        : segment.kind === 'negativeDamping'
+          ? 'Negatif DR'
+          : 'Pozitif DR',
+      type: 'line',
+      showSymbol: false,
+      data: segment.data,
+      lineStyle: { ...segment.lineStyle, color: segment.color, opacity: segment.kind === 'base' ? 0.9 : 1 },
+      itemStyle: { color: segment.color },
+      connectNulls: false,
+      z: segment.z,
+    }))
     : [];
 
   return {
     ...printChartBase(),
     title: {
-      text: `Grafik 1 - ${signalLabel(signal)} Ham PMU Verisi`,
-      subtext: `${signalLabel(signal)} (${unit}) - ortak zaman ekseni`,
+      text: `Grafik 1 - ${section.signalLabel} Ham PMU Verisi`,
+      subtext: `${section.signalLabel} (${unit}) - ${section.intervalLabel}`,
       textStyle: { color: palette.text, fontSize: 12 },
       subtextStyle: { color: palette.muted, fontSize: 9 },
     },
-    grid: { top: 42, left: 54, right: 26, bottom: 30 },
+    grid: { top: 42, left: 54, right: 26, bottom: 24 },
     xAxis: {
       type: 'time',
       name: 'Zaman',
+      min: section.intervalStartMs,
+      max: section.intervalEndMs,
       axisLabel: { color: palette.muted, fontSize: 9, hideOverlap: true, formatter: (value: number) => formatPmuAxisTime(value) },
       axisLine: { lineStyle: { color: palette.axisLine } },
     },
     yAxis: {
       type: 'value',
-      name: `${signalLabel(signal)} (${unit})`,
+      name: `${section.signalLabel} (${unit})`,
       scale: true,
       axisLabel: { color: palette.muted, fontSize: 9 },
-      axisLine: { show: true, lineStyle: { color: PMU_COLORS[0] } },
+      axisLine: { show: true, lineStyle: { color } },
       splitLine: { lineStyle: { color: palette.splitLine } },
     },
     series: [...rawSeries, ...overlaySeries],
@@ -153,32 +172,33 @@ const buildPrintRawOption = ({
 };
 
 const buildPrintModeOption = ({
-  metrics,
-  signal,
+  section,
   windowSeconds,
   stepSeconds,
 }: {
-  metrics: OscillationWindowMetric[];
-  signal: PmuSignalKey;
+  section: PrintReportSection;
   windowSeconds: number;
   stepSeconds: number;
 }) => {
-  const signalMetrics = metrics.filter(metric => metric.signal === signal);
-  const groups = uniqueMetricGroups(signalMetrics);
   const palette = paletteFor('light');
+  const metrics = filterWindowMetrics(section.windowMetrics, section.intervalStartMs, section.intervalEndMs);
+  const color = PMU_COLORS[0];
+  const dampingSeries = buildPrintDampingScatterSeries(metrics, section.signal, section.pmuId);
 
   return {
     ...printChartBase(),
     title: {
-      text: `Grafik 2 - ${signalLabel(signal)} Mod + DR`,
+      text: `Grafik 2 - ${section.signalLabel} Mod + DR`,
       subtext: `Pencere ${windowSeconds} sn / Adım ${stepSeconds} sn`,
       textStyle: { color: palette.text, fontSize: 11 },
       subtextStyle: { color: palette.muted, fontSize: 9 },
     },
-    grid: { top: 40, left: 42, right: 46, bottom: 28 },
+    grid: { top: 40, left: 46, right: 48, bottom: 24 },
     xAxis: {
       type: 'time',
       name: 'Zaman',
+      min: section.intervalStartMs,
+      max: section.intervalEndMs,
       axisLabel: { color: palette.muted, fontSize: 9, hideOverlap: true, formatter: (value: number) => formatPmuAxisTime(value) },
       axisLine: { lineStyle: { color: palette.axisLine } },
     },
@@ -200,75 +220,56 @@ const buildPrintModeOption = ({
         splitLine: { show: false },
       },
     ],
-    series: groups.flatMap((group, index) => {
-      const groupMetrics = signalMetrics.filter(metric => metric.pmuId === group.pmuId && metric.signal === group.signal);
-      const color = PMU_COLORS[index % PMU_COLORS.length];
-      const displayName = `${formatPmuDisplayName(group.pmuId)} ${signalLabel(group.signal)}`;
-      return [
-        {
-          id: `print-mode-${group.pmuId}-${group.signal}`,
-          name: `${displayName} Mod`,
-          type: 'line',
-          yAxisIndex: 0,
-          step: 'end',
-          showSymbol: false,
-          data: groupMetrics.map(metric => [metric.timestampMs, metric.mode]),
-          lineStyle: { width: 1.35, color },
-          itemStyle: { color },
-          markPoint: {
-            symbolSize: 12,
-            label: { show: false },
-            data: groupMetrics
-              .filter(metric => metric.dampingRatioPercent !== null)
-              .map(metric => {
-                const damping = metric.dampingRatioPercent as number;
-                return {
-                  coord: [metric.timestampMs, metric.mode],
-                  symbol: 'triangle',
-                  symbolRotate: damping < 0 ? 0 : 180,
-                  itemStyle: { color: damping < 0 ? palette.danger : palette.success },
-                };
-              }),
-          },
+    series: [
+      {
+        id: `print-mode-${section.pageKey}`,
+        name: 'Mod',
+        type: 'line',
+        yAxisIndex: 0,
+        step: 'end',
+        showSymbol: false,
+        data: metrics.map(metric => [metric.timestampMs, metric.mode]),
+        lineStyle: { width: 1.35, color },
+        itemStyle: { color },
+        markPoint: {
+          symbolSize: 12,
+          label: { show: false },
+          data: metrics
+            .filter(metric => metric.dampingRatioPercent !== null)
+            .map(metric => {
+              const damping = metric.dampingRatioPercent as number;
+              return {
+                coord: [metric.timestampMs, metric.mode],
+                symbol: 'triangle',
+                symbolRotate: damping < 0 ? 0 : 180,
+                itemStyle: { color: damping < 0 ? palette.danger : palette.success },
+              };
+            }),
         },
-        {
-          id: `print-damping-${group.pmuId}-${group.signal}`,
-          name: `${displayName} DR (%)`,
-          type: 'line',
-          yAxisIndex: 1,
-          showSymbol: false,
-          data: groupMetrics.map(metric => [metric.timestampMs, metric.dampingRatioPercent]),
-          lineStyle: { width: 1.1, color, type: 'dashed' },
-          itemStyle: { color },
-          connectNulls: false,
-        },
-      ];
-    }),
+      },
+      dampingSeries,
+    ],
   };
 };
 
-const buildPrintEnergyOption = ({
-  metrics,
-  signal,
-}: {
-  metrics: OscillationWindowMetric[];
-  signal: PmuSignalKey;
-}) => {
-  const signalMetrics = metrics.filter(metric => metric.signal === signal);
-  const groups = uniqueMetricGroups(signalMetrics);
+const buildPrintEnergyOption = ({ section }: { section: PrintReportSection }) => {
   const palette = paletteFor('light');
-  const unit = signalUnit(signal);
+  const metrics = filterWindowMetrics(section.windowMetrics, section.intervalStartMs, section.intervalEndMs);
+  const unit = signalUnit(section.signal);
+  const color = PMU_COLORS[0];
 
   return {
     ...printChartBase(),
     title: {
-      text: `Grafik 3 - ${signalLabel(signal)} Enerji + Genlik`,
+      text: `Grafik 3 - ${section.signalLabel} Enerji + Genlik`,
       textStyle: { color: palette.text, fontSize: 11 },
     },
-    grid: { top: 38, left: 52, right: 50, bottom: 28 },
+    grid: { top: 38, left: 54, right: 50, bottom: 24 },
     xAxis: {
       type: 'time',
       name: 'Zaman',
+      min: section.intervalStartMs,
+      max: section.intervalEndMs,
       axisLabel: { color: palette.muted, fontSize: 9, hideOverlap: true, formatter: (value: number) => formatPmuAxisTime(value) },
       axisLine: { lineStyle: { color: palette.axisLine } },
     },
@@ -288,33 +289,29 @@ const buildPrintEnergyOption = ({
         splitLine: { show: false },
       },
     ],
-    series: groups.flatMap((group, index) => {
-      const groupMetrics = signalMetrics.filter(metric => metric.pmuId === group.pmuId && metric.signal === group.signal);
-      const color = PMU_COLORS[index % PMU_COLORS.length];
-      return [
-        {
-          id: `print-amplitude-${group.pmuId}-${group.signal}`,
-          name: `${formatPmuDisplayName(group.pmuId)} Genlik (${unit})`,
-          type: 'line',
-          yAxisIndex: 0,
-          showSymbol: false,
-          data: groupMetrics.map(metric => [metric.timestampMs, displayMetricValue(signal, metric.amplitude)]),
-          lineStyle: { width: 1.2, color },
-          itemStyle: { color },
-        },
-        {
-          id: `print-energy-${group.pmuId}-${group.signal}`,
-          name: `${formatPmuDisplayName(group.pmuId)} Enerji (${unit})`,
-          type: 'line',
-          yAxisIndex: 1,
-          showSymbol: false,
-          areaStyle: { opacity: 0.08 },
-          data: groupMetrics.map(metric => [metric.timestampMs, displayMetricValue(signal, metric.energyRms)]),
-          lineStyle: { width: 1.05, type: 'dashed', color },
-          itemStyle: { color },
-        },
-      ];
-    }),
+    series: [
+      {
+        id: `print-amplitude-${section.pageKey}`,
+        name: `Genlik (${unit})`,
+        type: 'line',
+        yAxisIndex: 0,
+        showSymbol: false,
+        data: metrics.map(metric => [metric.timestampMs, displayMetricValue(section.signal, metric.amplitude)]),
+        lineStyle: { width: 1.2, color },
+        itemStyle: { color },
+      },
+      {
+        id: `print-energy-${section.pageKey}`,
+        name: `Enerji (${unit})`,
+        type: 'line',
+        yAxisIndex: 1,
+        showSymbol: false,
+        areaStyle: { opacity: 0.08 },
+        data: metrics.map(metric => [metric.timestampMs, displayMetricValue(section.signal, metric.energyRms)]),
+        lineStyle: { width: 1.05, type: 'dashed', color },
+        itemStyle: { color },
+      },
+    ],
   };
 };
 
@@ -338,12 +335,13 @@ export function OscillationPrintReport({
   if (!result) return null;
 
   const decisionSentences = buildDecisionSupportSentences({ result, pmuDevices });
-  const sections = buildPrintReportSections(result, pmuDevices);
+  const sections = buildPrintReportSections(result, pmuDevices)
+    .filter(section => selectedPmuIds.length === 0 || selectedPmuIds.includes(section.pmuId));
   const thresholdSummary = [
-    ['Frekans', `${result.query.amplitudeThresholds.frequencyMhz} mHz`],
-    ['Gerilim', `%${result.query.amplitudeThresholds.voltagePercent}`],
-    ['Aktif Güç', `%${result.query.amplitudeThresholds.activePowerPercent}`],
-    ['Reaktif Güç', `%${result.query.amplitudeThresholds.reactivePowerPercent}`],
+    [signalLabel('frequency'), `${result.query.amplitudeThresholds.frequencyMhz} mHz`],
+    [signalLabel('voltage'), `%${result.query.amplitudeThresholds.voltagePercent}`],
+    [signalLabel('activePower'), `%${result.query.amplitudeThresholds.activePowerPercent} ve en az 10 MW`],
+    [signalLabel('reactivePower'), `%${result.query.amplitudeThresholds.reactivePowerPercent} ve en az 5 MVAr`],
   ];
 
   return (
@@ -396,65 +394,59 @@ export function OscillationPrintReport({
       </section>
 
       {sections.map(section => (
-        <section key={section.signal} className="oscillation-print-page oscillation-print-metric-page">
+        <section key={section.pageKey} className="oscillation-print-page oscillation-print-metric-page">
           <header className="oscillation-print-page-header">
-            <h1>{section.title}</h1>
-            <span>Eşik: {section.thresholdLabel} · Birim: {section.unitLabel}</span>
+            <div>
+              <h1>{section.pmuName}</h1>
+              <div className="oscillation-print-page-meta">
+                <span>{section.signalLabel} Ölçümü</span>
+                <span>{section.intervalLabel}</span>
+                <span>Eşik: {section.thresholdLabel}</span>
+                <span>Birim: {section.unitLabel}</span>
+              </div>
+            </div>
           </header>
-          <div className="oscillation-print-chart-main" data-oscillation-print-chart={`${section.signal}-raw`}>
-            <ReactECharts
-              option={buildPrintRawOption({
-                samplesByPmu,
-                selectedPmuIds,
-                pmuDevices,
-                signal: section.signal,
-                metrics: result.windowMetrics,
-                smoothingSettings,
-              })}
-              style={{ height: '100%', width: '100%' }}
-              notMerge={true}
-              lazyUpdate={true}
-            />
-          </div>
-          <div className="oscillation-print-chart-row">
-            <div className="oscillation-print-chart-secondary" data-oscillation-print-chart={`${section.signal}-mode-damping`}>
+
+          <div className="oscillation-print-chart-stack">
+            <div className="oscillation-print-chart-main" data-oscillation-print-chart={`${section.pageKey}-raw`}>
               <ReactECharts
-                option={buildPrintModeOption({
-                  metrics: result.windowMetrics,
-                  signal: section.signal,
-                  windowSeconds,
-                  stepSeconds,
-                })}
+                option={buildPrintRawOption({ samplesByPmu, section, smoothingSettings })}
                 style={{ height: '100%', width: '100%' }}
                 notMerge={true}
                 lazyUpdate={true}
               />
             </div>
-            <div className="oscillation-print-chart-secondary" data-oscillation-print-chart={`${section.signal}-energy-amplitude`}>
+            <div className="oscillation-print-chart-main" data-oscillation-print-chart={`${section.pageKey}-mode-damping`}>
               <ReactECharts
-                option={buildPrintEnergyOption({ metrics: result.windowMetrics, signal: section.signal })}
+                option={buildPrintModeOption({ section, windowSeconds, stepSeconds })}
+                style={{ height: '100%', width: '100%' }}
+                notMerge={true}
+                lazyUpdate={true}
+              />
+            </div>
+            <div className="oscillation-print-chart-main" data-oscillation-print-chart={`${section.pageKey}-energy-amplitude`}>
+              <ReactECharts
+                option={buildPrintEnergyOption({ section })}
                 style={{ height: '100%', width: '100%' }}
                 notMerge={true}
                 lazyUpdate={true}
               />
             </div>
           </div>
-          <div className="oscillation-print-metric-summary">
+
+          <div className="oscillation-print-info-grid">
             <section>
               <h2>Özet Bilgi</h2>
               <p>{summarizePrintSection(section)}</p>
-              {section.events.length
-                ? section.events.slice(0, 3).map(event => <p key={event.id}>{describeOscillationEvent(event, pmuDevices)}</p>)
-                : <p>Bu ölçüm metriği için raporlanan eşik üstü salınım olayı yoktur.</p>}
+              {section.events.slice(0, 4).map(event => <p key={event.id}>{describePrintEvent(section, event)}</p>)}
             </section>
             <section>
               <h2>Bant Metrikleri</h2>
               <table className="oscillation-table">
-                <thead><tr><th>PMU</th><th>Bant</th><th>Frekans</th><th>RMS</th><th>Damping</th><th>Sınıflandırma</th></tr></thead>
+                <thead><tr><th>Bant</th><th>Frekans</th><th>RMS</th><th>Damping</th><th>Sınıflandırma</th></tr></thead>
                 <tbody>
                   {section.metrics.map(metric => (
                     <tr key={`${metric.pmuId}-${metric.signal}-${metric.bandId}`} className={metric.classificationLabel !== 'MOD_YOK' ? 'oscillation-detected-row' : undefined}>
-                      <td>{pmuNameFrom(pmuDevices, metric.pmuId)}</td>
                       <td>{humanizeBand(metric.bandId)}</td>
                       <td>{formatMetricNumber(metric.dominantFrequencyHz)} Hz</td>
                       <td>{formatMetricNumber(metric.bandRms)}</td>

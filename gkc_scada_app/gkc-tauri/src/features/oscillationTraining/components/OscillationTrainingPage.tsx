@@ -16,6 +16,7 @@ import {
 } from './OscillationTrainingChart.tsx';
 import { CasesPanel } from './CasesPanel.tsx';
 import { GlossaryPanel } from './GlossaryPanel.tsx';
+import { OscillationTrainingPrintDocument } from './OscillationTrainingPrintDocument.tsx';
 import { SasStudyPanel } from './SasStudyPanel.tsx';
 import { TrainingTerm } from './TrainingTerm.tsx';
 
@@ -166,6 +167,8 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
   const [detectionNoise, setDetectionNoise] = useState(0.03);
   const [detectionFrequency, setDetectionFrequency] = useState(0.35);
   const [openFigure, setOpenFigure] = useState<TrainingFigure | null>(null);
+  const [printDocumentMounted, setPrintDocumentMounted] = useState(false);
+  const [printStatus, setPrintStatus] = useState('');
   const palette = trainingChartPalette(themeMode);
 
   useEffect(() => {
@@ -176,6 +179,22 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [openFigure]);
+
+  useEffect(() => {
+    if (!printDocumentMounted) return undefined;
+    const clearStatus = () => setPrintStatus('');
+    window.addEventListener('afterprint', clearStatus);
+    return () => window.removeEventListener('afterprint', clearStatus);
+  }, [printDocumentMounted]);
+
+  const handlePrintTrainingDocument = () => {
+    setPrintDocumentMounted(true);
+    setPrintStatus('PDF çıktısı hazırlanıyor...');
+    window.setTimeout(() => {
+      window.print();
+      setPrintStatus('Yazdırma penceresi açıldı. Hedef olarak PDF kaydet seçilebilir.');
+    }, 850);
+  };
 
   const modeData = useMemo(() => {
     const mode = TRAINING_MODE_DEFS[selectedMode];
@@ -379,6 +398,12 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
           <div>
             <h1>Salınım Eğitimi ve Simülasyon</h1>
             <p>Bu eğitim sayfası, PMU tabanlı salınım algılama ekranında görülen mod, frekans, genlik, sönümleme ve karar destek çıktılarının nasıl okunacağını öğretir.</p>
+          </div>
+          <div className="training-header-actions">
+            <button type="button" className="btn btn-primary btn-compact" onClick={handlePrintTrainingDocument}>
+              PDF ÇIKTI
+            </button>
+            {printStatus && <span>{printStatus}</span>}
           </div>
         </div>
 
@@ -633,6 +658,8 @@ export function OscillationTrainingPage({ themeMode }: { themeMode: TrainingThem
           </div>
         </div>
       )}
+
+      {printDocumentMounted && <OscillationTrainingPrintDocument />}
     </div>
   );
 }
