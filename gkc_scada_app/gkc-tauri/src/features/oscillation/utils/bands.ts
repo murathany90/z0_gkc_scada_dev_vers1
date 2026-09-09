@@ -5,7 +5,7 @@ export const NYQUIST_HZ = 5;
 export const SAMPLING_RATE_HZ = 10;
 
 export const DEFAULT_AMPLITUDE_THRESHOLDS: OscillationAmplitudeThresholds = {
-  frequencyMhz: 10,
+  frequencyMhz: 6,
   voltagePercent: 5,
   activePowerPercent: 5,
   reactivePowerPercent: 5,

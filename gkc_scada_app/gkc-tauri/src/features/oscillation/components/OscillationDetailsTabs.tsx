@@ -18,7 +18,7 @@ const tabs: Array<{ id: OscillationDetailsTab; label: string }> = [
   { id: 'modal', label: 'Modal Analiz' },
   { id: 'data', label: 'Veriler / Ayrıntılar' },
   { id: 'report', label: 'Rapor' },
-  { id: 'benchmark', label: 'Karşılaştırma / Benchmark' },
+  { id: 'benchmark', label: 'SAS-Cihaz Karşılaştırma' },
 ];
 
 export function OscillationDetailsTabs({

@@ -81,12 +81,14 @@ assert.equal(OSCILLATION_BANDS.find(band => band.id === 'INTERAREA')?.fMin, 0.1)
 assert.equal(OSCILLATION_BANDS.find(band => band.id === 'INTERAREA')?.fMax, 0.4);
 assert.equal(OSCILLATION_BANDS.find(band => band.id === 'TORSION_PASSIVE')?.passive, true);
 assert.deepEqual(DEFAULT_AMPLITUDE_THRESHOLDS, {
-  frequencyMhz: 10,
+  frequencyMhz: 6,
   voltagePercent: 5,
   activePowerPercent: 5,
   reactivePowerPercent: 5,
 });
 assert.equal(useOscillationStore.getState().activeSignalTab, 'frequency');
+assert.equal(useOscillationStore.getState().windowSeconds, 60, 'default analysis window should be 60 seconds');
+assert.equal(useOscillationStore.getState().stepSeconds, 10, 'default analysis step should be 10 seconds');
 useOscillationStore.getState().setActiveSignalTab('activePower');
 assert.equal(useOscillationStore.getState().activeSignalTab, 'activePower');
 useOscillationStore.getState().setSelectedSignals(['frequency']);
@@ -811,7 +813,7 @@ assert.ok(frequencyInterarea.windowMetrics.some(metric =>
   && metric.bandId === 'INTERAREA'
   && metric.amplitude !== null
   && metric.amplitude > metric.thresholdValue
-), '12 mHz frequency oscillation should exceed 10 mHz threshold as interarea mode');
+), '12 mHz frequency oscillation should exceed the default 6 mHz threshold as interarea mode');
 assert.equal(frequencyInterarea.metrics.every(metric => metric.signal === 'frequency'), true, 'analysis should only produce metrics for selected signals');
 assert.equal(frequencyInterarea.windowMetrics.every(metric => metric.signal === 'frequency'), true, 'window analysis should only produce selected signal metrics');
 
@@ -887,7 +889,7 @@ assert.ok(belowThreshold.windowMetrics.some(metric =>
   && metric.bandId === null
   && metric.amplitude !== null
   && metric.amplitude < metric.thresholdValue
-), '5 mHz frequency oscillation should stay below 10 mHz threshold');
+), '5 mHz frequency oscillation should stay below the default 6 mHz threshold');
 
 const passiveTorsion = analyzeSynthetic(
   makeSyntheticSamples({ pmuId: 'TORSION', signal: 'frequency', base: 50, amplitude: 0.02, oscillationHz: 4.7 }),

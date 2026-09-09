@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { EChartsType } from 'echarts';
 import ReactECharts from 'echarts-for-react';
 import { buildOscillationBenchmarkResult, nearestPmuSampleInSorted, sasRawMatchToleranceMs, sortPmuSamplesByTimestamp } from '../benchmark/benchmarkEngine.ts';
@@ -8,16 +9,29 @@ import { benchmarkTimeZoneLabel, formatBenchmarkTimestamp } from '../benchmark/b
 import type { BenchmarkMode, BenchmarkTimeZone, OscillationBenchmarkResult, SasImportResult } from '../benchmark/sasTypes.ts';
 import type { OscillationAmplitudeThresholds, OscillationAnalysisResult, PmuFider, PmuSample, PmuSignalKey } from '../types/oscillationTypes.ts';
 import { runAnalysisInWorker } from '../utils/runAnalysisWorker.ts';
-import { OscillationBenchmarkPrintReport } from './OscillationBenchmarkPrintReport.tsx';
+import { OscillationBenchmarkPrintReport, type BenchmarkPrintChartImages } from './OscillationBenchmarkPrintReport.tsx';
 import { connectOscillationTimeChart, formatMetricNumber, paletteFor, type OscillationThemeMode } from './chartHelpers.ts';
 
 const BENCHMARK_CHART_GROUP = 'oscillation-benchmark-time-axis';
+type BenchmarkChartKey = 'frequency' | 'magnitude' | 'damping' | 'state';
+const BENCHMARK_CHART_KEYS: BenchmarkChartKey[] = ['frequency', 'magnitude', 'damping', 'state'];
+
+const BENCHMARK_COLORS = {
+  gkc: '#22c55e',
+  sas: '#38bdf8',
+  sasAlgorithm: '#0ea5e9',
+  threshold: '#f97316',
+  difference: '#a78bfa',
+  negative: '#ef4444',
+} as const;
 
 const formatSigned = (value: number | null, digits = 2): string => value === null || !Number.isFinite(value)
   ? '—'
-  : `${value >= 0 ? '+' : ''}${formatMetricNumber(value, digits)}`;
+  : `${value >= 0 ? '+' : ''}${Number(value).toLocaleString('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
 const mhz = (value: number | null | undefined): number | null => Number.isFinite(value) ? Number(value) * 1000 : null;
-const formatHz = (value: number | null | undefined, digits = 3): string => Number.isFinite(value) ? `${formatMetricNumber(value, digits)} Hz` : '—';
+const formatHz = (value: number | null | undefined, digits = 3): string => Number.isFinite(value)
+  ? `${Number(value).toLocaleString('tr-TR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} Hz`
+  : '—';
 const formatPercent = (value: number | null | undefined): string => Number.isFinite(value) ? `${formatMetricNumber(value, 2)}%` : '—';
 const statusText: Record<OscillationBenchmarkResult['comparisons'][number]['status'], string> = {
   match: 'MATCH',
@@ -39,6 +53,15 @@ const stateSpans = (rows: SasImportResult['algoRows']) => rows.reduce<Array<{ st
   return spans;
 }, []);
 
+const robustAxisRange = (values: number[]): { min: number; max: number } => {
+  const sorted = values.filter(Number.isFinite).sort((left, right) => left - right);
+  if (!sorted.length) return { min: -10, max: 10 };
+  const low = sorted[Math.floor((sorted.length - 1) * 0.02)] ?? sorted[0];
+  const high = sorted[Math.ceil((sorted.length - 1) * 0.98)] ?? sorted[sorted.length - 1];
+  const padding = Math.max(1, (high - low) * 0.16);
+  return { min: low - padding, max: high + padding };
+};
+
 const baseTimeOption = (themeMode: OscillationThemeMode, timeZone: BenchmarkTimeZone, unit: string) => {
   const palette = paletteFor(themeMode);
   return {
@@ -57,7 +80,7 @@ const baseTimeOption = (themeMode: OscillationThemeMode, timeZone: BenchmarkTime
         points.forEach(point => {
           const item = point as { marker?: string; seriesName?: string; value?: [number, number | string | null] };
           const value = item.value?.[1];
-          rows.push(`<div>${item.marker ?? ''}${item.seriesName ?? ''}: <strong>${typeof value === 'number' ? formatMetricNumber(value, 4) : value ?? '—'}</strong></div>`);
+          rows.push(`<div>${item.marker ?? ''}${item.seriesName ?? ''}: <strong>${typeof value === 'number' ? Number(value).toLocaleString('tr-TR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : value ?? '—'}</strong></div>`);
         });
         return rows.join('');
       },
@@ -71,7 +94,7 @@ const baseTimeOption = (themeMode: OscillationThemeMode, timeZone: BenchmarkTime
       type: 'time', axisLine: { lineStyle: { color: palette.axisLine } }, axisTick: { show: false },
       axisLabel: { color: palette.muted, formatter: (value: number) => formatBenchmarkTimestamp(value, timeZone, false) }, splitLine: { show: false },
     },
-    yAxis: { name: unit, nameGap: 42, type: 'value', axisLabel: { color: palette.muted }, axisLine: { lineStyle: { color: palette.axisLine } }, splitLine: { lineStyle: { color: palette.splitLine } } },
+    yAxis: { name: unit, nameGap: 46, type: 'value', axisLabel: { color: palette.muted, formatter: (value: number) => Number(value).toLocaleString('tr-TR', { maximumFractionDigits: 3 }) }, axisLine: { lineStyle: { color: palette.axisLine } }, splitLine: { lineStyle: { color: palette.splitLine } } },
   };
 };
 
@@ -86,21 +109,29 @@ const activeAreas = (result: OscillationBenchmarkResult) => stateSpans(result.im
   .map(span => [{ xAxis: span.start, itemStyle: { color: 'rgba(239,68,68,0.12)' } }, { xAxis: span.end }]);
 
 const frequencyChart = (result: OscillationBenchmarkResult, themeMode: OscillationThemeMode, timeZone: BenchmarkTimeZone) => {
+  const sasToleranceMs = sasRawMatchToleranceMs(result.imported.pmuSamples);
+  const gkcMinusSas = result.gkcInputSamples.map(sample => {
+    const sas = nearestPmuSampleInSorted(result.imported.pmuSamples, sample.timestampMs, sasToleranceMs).sample;
+    return Number.isFinite(sample.frequency) && Number.isFinite(sas?.frequency)
+      ? [sample.timestampMs, (sample.frequency as number - (sas?.frequency as number)) * 1000] as [number, number]
+      : null;
+  }).filter((point): point is [number, number] => point !== null);
   const values = [
     ...result.imported.pmuSamples.map(sample => mhz((sample.frequency ?? NaN) - 50)),
     ...result.imported.algoRows.map(row => mhz((row.frequencyHz ?? NaN) - 50)),
     ...result.gkcInputSamples.map(sample => mhz((sample.frequency ?? NaN) - 50)),
+    ...gkcMinusSas.map(([, value]) => value),
   ].filter((value): value is number => value !== null);
-  const min = values.length ? Math.min(...values) : -100;
-  const max = values.length ? Math.max(...values) : 100;
-  const padding = Math.max(2, (max - min) * 0.12);
+  const range = robustAxisRange(values);
+  const base = baseTimeOption(themeMode, timeZone, 'mHz');
   return {
-    ...baseTimeOption(themeMode, timeZone, 'Δf (mHz)'),
-    yAxis: { ...(baseTimeOption(themeMode, timeZone, 'Δf (mHz)').yAxis), min: min - padding, max: max + padding },
+    ...base,
+    yAxis: { ...base.yAxis, min: range.min, max: range.max },
     series: [
-      { name: 'SAS raw PMU', type: 'line', showSymbol: false, lineStyle: { width: 1, color: '#38bdf8' }, data: result.imported.pmuSamples.map(sample => [sample.timestampMs, mhz((sample.frequency ?? NaN) - 50)]) },
-      { name: 'SAS algo', type: 'line', showSymbol: false, lineStyle: { width: 1, color: '#f97316' }, data: result.imported.algoRows.map(row => [row.timestampMs, mhz((row.frequencyHz ?? NaN) - 50)]) },
-      { name: result.mode === 'ytbs' ? 'YTBS / GKÇ PMU' : 'GKÇ input (FIR → 10 Hz)', type: 'line', showSymbol: false, lineStyle: { width: 1.2, color: '#a78bfa' }, data: result.gkcInputSamples.map(sample => [sample.timestampMs, mhz((sample.frequency ?? NaN) - 50)]) },
+      { name: 'SAS PMU 50 Hz (50 Hz farkı)', type: 'line', showSymbol: false, lineStyle: { width: 1, color: BENCHMARK_COLORS.sas }, data: result.imported.pmuSamples.map(sample => [sample.timestampMs, mhz((sample.frequency ?? NaN) - 50)]) },
+      { name: 'SAS algoritma frekansı (50 Hz farkı)', type: 'line', showSymbol: false, lineStyle: { width: 1, type: 'dashed', color: BENCHMARK_COLORS.sasAlgorithm }, data: result.imported.algoRows.map(row => [row.timestampMs, mhz((row.frequencyHz ?? NaN) - 50)]) },
+      { name: result.mode === 'ytbs' ? 'GKÇ / YTBS PMU (50 Hz farkı)' : 'GKÇ FIR girişi 10 Hz (50 Hz farkı)', type: 'line', showSymbol: false, lineStyle: { width: 1.35, color: BENCHMARK_COLORS.gkc }, data: result.gkcInputSamples.map(sample => [sample.timestampMs, mhz((sample.frequency ?? NaN) - 50)]) },
+      { name: 'GKÇ − SAS PMU 50 Hz', type: 'line', showSymbol: false, lineStyle: { width: 1.1, color: BENCHMARK_COLORS.difference }, data: gkcMinusSas },
     ],
   };
 };
@@ -111,10 +142,10 @@ const magnitudeChart = (result: OscillationBenchmarkResult, themeMode: Oscillati
   return {
     ...baseTimeOption(themeMode, timeZone, 'mHz'),
     series: [
-      { name: 'SAS magnitude', type: 'line', showSymbol: false, lineStyle: { color: '#38bdf8' }, data: result.imported.algoRows.map(row => [row.timestampMs, mhz(row.magnitudeHz)]) , markArea: { silent: true, data: activeAreas(result) } },
-      { name: 'SAS threshold', type: 'line', showSymbol: false, lineStyle: { type: 'dashed', color: '#f97316' }, data: result.imported.algoRows.map(row => [row.timestampMs, mhz(row.startThresholdHz)]) },
-      { name: 'GKÇ amplitude', type: 'line', showSymbol: true, symbolSize: 4, lineStyle: { color: '#a78bfa' }, data: windows.map(metric => [metric.timestampMs, mhz(metric.amplitude)]) , markPoint: { symbolSize: 5, data: windows.filter(metric => (mhz(metric.amplitude) ?? 0) >= gkcThreshold).map(metric => ({ coord: [metric.timestampMs, mhz(metric.amplitude)] })) } },
-      { name: `GKÇ threshold (${formatMetricNumber(gkcThreshold, 2)} mHz)`, type: 'line', showSymbol: false, lineStyle: { type: 'dashed', color: '#ec4899' }, data: windows.map(metric => [metric.timestampMs, gkcThreshold]) },
+      { name: 'SAS genlik', type: 'line', showSymbol: false, lineStyle: { color: BENCHMARK_COLORS.sas }, data: result.imported.algoRows.map(row => [row.timestampMs, mhz(row.magnitudeHz)]) , markArea: { silent: true, data: activeAreas(result) } },
+      { name: 'SAS eşik', type: 'line', showSymbol: false, lineStyle: { type: 'dashed', color: BENCHMARK_COLORS.threshold }, data: result.imported.algoRows.map(row => [row.timestampMs, mhz(row.startThresholdHz)]) },
+      { name: 'GKÇ genlik', type: 'line', showSymbol: true, symbolSize: 4, lineStyle: { color: BENCHMARK_COLORS.gkc }, data: windows.map(metric => [metric.timestampMs, mhz(metric.amplitude)]) , markPoint: { symbolSize: 5, data: windows.filter(metric => (mhz(metric.amplitude) ?? 0) >= gkcThreshold).map(metric => ({ coord: [metric.timestampMs, mhz(metric.amplitude)] })) } },
+      { name: `GKÇ eşik (${Number(gkcThreshold).toFixed(3)} mHz)`, type: 'line', showSymbol: false, lineStyle: { type: 'dashed', color: BENCHMARK_COLORS.threshold }, data: windows.map(metric => [metric.timestampMs, gkcThreshold]) },
     ],
   };
 };
@@ -124,8 +155,8 @@ const dampingChart = (result: OscillationBenchmarkResult, themeMode: Oscillation
   return {
     ...baseTimeOption(themeMode, timeZone, 'DR (%)'),
     series: [
-      { name: 'SAS damping', type: 'line', showSymbol: false, lineStyle: { color: '#38bdf8' }, data: result.imported.algoRows.map(row => [row.timestampMs, row.dampingRatio === null ? null : row.dampingRatio * 100]), markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0, lineStyle: { color: '#ef4444', type: 'dashed' } }] } },
-      { name: 'GKÇ damping', type: 'line', showSymbol: true, symbolSize: 4, lineStyle: { color: '#a78bfa' }, data: windows.map(metric => [metric.timestampMs, metric.dampingRatioPercent]) },
+      { name: 'SAS DR', type: 'line', showSymbol: false, lineStyle: { color: BENCHMARK_COLORS.sas }, data: result.imported.algoRows.map(row => [row.timestampMs, row.dampingRatio === null ? null : row.dampingRatio * 100]), markLine: { silent: true, symbol: 'none', data: [{ yAxis: 0, lineStyle: { color: BENCHMARK_COLORS.negative, type: 'dashed' } }] } },
+      { name: 'GKÇ pencere DR', type: 'line', showSymbol: true, symbolSize: 4, lineStyle: { color: BENCHMARK_COLORS.gkc }, data: windows.map(metric => [metric.timestampMs, metric.dampingRatioPercent]) },
     ],
   };
 };
@@ -141,9 +172,9 @@ const stateChart = (result: OscillationBenchmarkResult, themeMode: OscillationTh
       axisLine: { lineStyle: { color: palette.axisLine } }, splitLine: { lineStyle: { color: palette.splitLine } },
     },
     series: [
-      { name: 'SAS state', type: 'line', step: 'end', showSymbol: false, lineStyle: { color: '#22c55e', width: 2 }, data: result.imported.algoRows.map(row => [row.timestampMs, stateNumber[row.controlState] ?? null]) },
-      { name: 'SAS ctrl_value', type: 'line', step: 'end', showSymbol: false, lineStyle: { color: '#f97316', width: 1.4 }, data: result.imported.algoRows.map(row => [row.timestampMs, row.controlValue]) },
-      { name: 'GKÇ Tespit Penceresi', type: 'line', showSymbol: false, lineStyle: { opacity: 0 }, data: [], markArea: { silent: true, data: gkcEvents(result).map(event => [{ xAxis: event.startMs, itemStyle: { color: 'rgba(167,139,250,0.26)' } }, { xAxis: event.endMs }]) } },
+      { name: 'SAS durum', type: 'line', step: 'end', showSymbol: false, lineStyle: { color: BENCHMARK_COLORS.sas, width: 2 }, data: result.imported.algoRows.map(row => [row.timestampMs, stateNumber[row.controlState] ?? null]) },
+      { name: 'SAS kontrol çıktısı', type: 'line', step: 'end', showSymbol: false, lineStyle: { color: BENCHMARK_COLORS.threshold, width: 1.4 }, data: result.imported.algoRows.map(row => [row.timestampMs, row.controlValue]) },
+      { name: 'GKÇ tespit penceresi', type: 'line', showSymbol: false, lineStyle: { opacity: 0 }, data: [], markArea: { silent: true, data: gkcEvents(result).map(event => [{ xAxis: event.startMs, itemStyle: { color: 'rgba(34,197,94,0.20)' } }, { xAxis: event.endMs }]) } },
     ],
   };
 };
@@ -201,6 +232,8 @@ export function OscillationBenchmarkPanel({
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [expandedComparisonId, setExpandedComparisonId] = useState<string | null>(null);
+  const [printChartImages, setPrintChartImages] = useState<BenchmarkPrintChartImages>({});
+  const chartRefs = useRef<Partial<Record<BenchmarkChartKey, ReactECharts | null>>>({});
   const availablePmuIds = analysisResult?.query.pmuIds.filter(id => Boolean(samplesByPmu[id]?.length)) ?? selectedPmuIds.filter(id => Boolean(samplesByPmu[id]?.length));
   const effectivePmuId = selectedPmuId && availablePmuIds.includes(selectedPmuId) ? selectedPmuId : availablePmuIds[0] ?? referencePmuId;
   const analysisConfig = {
@@ -277,11 +310,30 @@ export function OscillationBenchmarkPanel({
   };
 
   const chartReady = (chart: EChartsType): void => connectOscillationTimeChart(chart, BENCHMARK_CHART_GROUP);
+  const bindChartRef = (key: BenchmarkChartKey) => (chart: ReactECharts | null): void => {
+    chartRefs.current[key] = chart;
+  };
   const handleBenchmarkPrint = (): void => {
+    const images = BENCHMARK_CHART_KEYS.reduce<BenchmarkPrintChartImages>((captured, key) => {
+      try {
+        const chart = chartRefs.current[key]?.getEchartsInstance();
+        const image = chart?.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+        if (image) captured[key] = image;
+      } catch {
+        // A complete set of snapshots is required before opening the print dialog.
+      }
+      return captured;
+    }, {});
+    if (Object.keys(images).length !== BENCHMARK_CHART_KEYS.length) {
+      setError('Grafikler henüz PDF için hazır değil. Birkaç saniye sonra tekrar deneyin.');
+      return;
+    }
+    setError(null);
+    flushSync(() => setPrintChartImages(images));
     document.body.classList.add('printing-oscillation-benchmark');
     const cleanup = () => document.body.classList.remove('printing-oscillation-benchmark');
     window.addEventListener('afterprint', cleanup, { once: true });
-    window.setTimeout(() => window.print(), 80);
+    window.setTimeout(() => window.print(), 180);
   };
   const primaryEvent = result
     ? result.comparisons.find(comparison => comparison.status === 'match')?.gkcEvent ?? gkcEvents(result)[0]
@@ -297,8 +349,8 @@ export function OscillationBenchmarkPanel({
           <input type="file" accept=".zip,application/zip" style={{ display: 'none' }} disabled={loading} onChange={event => { void handleArchive(event.target.files?.[0]); event.currentTarget.value = ''; }} />
         </label>
         <div className="benchmark-mode-toggle" aria-label="Benchmark karşılaştırma modu">
-          <button className={`btn ${mode === 'same-raw' ? 'btn-primary' : 'btn-outline'}`} disabled={!imported || loading} onClick={() => imported && void runBenchmark(imported, 'same-raw')}>Aynı Ham Veri</button>
-          <button className={`btn ${mode === 'ytbs' ? 'btn-primary' : 'btn-outline'}`} disabled={!imported || loading} onClick={() => imported && void runBenchmark(imported, 'ytbs')}>Mevcut YTBS / GKÇ Analizi</button>
+          <button title="SAS 50 Hz PMU verisini FIR ile 10 Hz'e indirip GKÇ worker'ında yeniden analiz eder." className={`btn ${mode === 'same-raw' ? 'btn-primary' : 'btn-outline'}`} disabled={!imported || loading} onClick={() => imported && void runBenchmark(imported, 'same-raw')}>Aynı Ham Veri</button>
+          <button title="Yüklü gerçek YTBS/GKÇ analizini yeniden çalıştırmadan SAS olaylarıyla eşleştirir." className={`btn ${mode === 'ytbs' ? 'btn-primary' : 'btn-outline'}`} disabled={!imported || loading} onClick={() => imported && void runBenchmark(imported, 'ytbs')}>Mevcut YTBS / GKÇ Analizi</button>
         </div>
         <div className="benchmark-mode-toggle" aria-label="Zaman standardı">
           <button className={`btn ${timeZone === 'local' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTimeZone('local')}>Yerel</button>
@@ -307,32 +359,31 @@ export function OscillationBenchmarkPanel({
         {mode === 'ytbs' && availablePmuIds.length > 0 && <select className="form-control" value={effectivePmuId ?? ''} onChange={event => { setSelectedPmuId(event.target.value); if (imported) void runBenchmark(imported, 'ytbs', event.target.value); }}><option value="" disabled>PMU seçin</option>{availablePmuIds.map(id => <option key={id} value={id}>{id}</option>)}</select>}
         {result && <button className="btn btn-outline" onClick={handleBenchmarkPrint}>Benchmark PDF raporu</button>}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Varsayılan zaman standardı: <strong>{benchmarkTimeZoneLabel(timeZone)}</strong>. ZIP istemci içinde güvenli okunur; YTBS canlı sorgu hattına dokunulmaz.</div>
+      <div className="benchmark-context-line">Zaman: <strong>{benchmarkTimeZoneLabel(timeZone)}</strong> · ZIP yalnızca yerelde işlenir.</div>
       {progress && <div style={{ fontSize: 12, color: 'var(--accent-cyan)' }}>{progress}</div>}
       {error && <div style={{ border: '1px solid var(--accent-red)', borderRadius: 6, padding: 10, color: 'var(--accent-red)', fontSize: 12 }}>{error}</div>}
       {!result && !loading && !error && <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>algo.csv, pmu.csv, merkez_analysis.csv ve merkez_measurement.csv içeren SAS olay ZIP’ini yükleyin.</div>}
       {result && (
         <>
-          <div className="benchmark-decision-card"><strong>Karar özeti</strong><span>{decisionText(result)}</span></div>
+          <div className="benchmark-decision-card"><strong>Kısa sonuç</strong><span>{decisionText(result)}</span></div>
           {result.mode === 'ytbs' && !result.coverage.covered && <div className="benchmark-coverage-warning">Uyarı: SAS zamanı ile mevcut YTBS/GKÇ sorgusu örtüşmüyor; doğrudan fiziksel veri kıyası yapılamaz.</div>}
           <div className="benchmark-kpi-grid">
-            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Kaynak</div><strong className="benchmark-file-name" title={result.imported.archiveName}>{result.imported.archiveName}</strong><small>{result.mode === 'same-raw' ? 'SAS pmu.csv → FIR → GKÇ worker' : `YTBS/GKÇ PMU: ${result.gkcPmuId ?? '—'}`}</small></div></section>
-            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Analiz Ayarı</div><strong>GKÇ analizi: {result.analysisConfig.windowSeconds} sn / {result.analysisConfig.stepSeconds} sn / {formatMetricNumber(result.analysisConfig.amplitudeThresholds.frequencyMhz, 2)} mHz</strong><small>{formatMetricNumber(result.analysisConfig.samplingRateHz, 1)} Hz · {result.analysisConfig.selectedSignals.join(', ') || 'sinyal seçilmedi'}</small></div></section>
-            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Olay Eşleşmesi</div><strong>{result.matchedCount} Match · {result.nearMissCount} Near</strong><small>{result.missedCount} Missed · {result.extraCount} Extra · {result.episodes.length} episode</small></div></section>
-            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Frekans Uyumu</div><strong>SAS hedef {formatHz(primarySas?.targetFrequencyHz)} · GKÇ event {formatHz(primaryEvent?.dominantFrequencyHz)}</strong><small>GKÇ band {formatHz(currentBandMetric?.dominantFrequencyHz)} · Δf {formatSigned(primaryEvent && primarySas?.targetFrequencyHz != null ? (primaryEvent.dominantFrequencyHz ?? 0) - primarySas.targetFrequencyHz : null, 3)} Hz</small></div></section>
-            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Veri Kalitesi</div><strong>SAS {formatMetricNumber(result.imported.quality.pmu.sampleRateHz, 2)} Hz / {formatMetricNumber(result.imported.quality.pmu.medianIntervalMs, 1)} ms</strong><small>{result.imported.quality.findings.filter(item => item.severity !== 'info').length} uyarı/anomali · {result.coverage.covered ? `${formatMetricNumber(result.coverage.overlapSeconds, 1)} sn ortak zaman` : 'ortak zaman yok'}</small></div></section>
+            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Kaynak</div><strong className="benchmark-file-name" title={result.imported.archiveName}>{result.imported.archiveName}</strong><small>{result.mode === 'same-raw' ? 'SAS 50 Hz → FIR → GKÇ 10 Hz' : `YTBS / GKÇ PMU: ${result.gkcPmuId ?? '—'}`}</small></div></section>
+            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">GKÇ Analizi</div><strong>{result.analysisConfig.windowSeconds} sn / {result.analysisConfig.stepSeconds} sn / {Number(result.analysisConfig.amplitudeThresholds.frequencyMhz).toFixed(3)} mHz</strong><small>{Number(result.analysisConfig.samplingRateHz).toFixed(1)} Hz · {result.analysisConfig.selectedSignals.join(', ') || 'sinyal yok'}</small></div></section>
+            <section className="card benchmark-kpi-card"><div className="card-body"><div className="benchmark-card-label">Sonuç</div><strong>{result.matchedCount} MATCH · {result.missedCount} MISSED · {result.extraCount} EXTRA</strong><small>SAS hedef {formatHz(primarySas?.targetFrequencyHz)} · GKÇ {formatHz(primaryEvent?.dominantFrequencyHz)} · Δf {formatSigned(primaryEvent && primarySas?.targetFrequencyHz != null ? (primaryEvent.dominantFrequencyHz ?? 0) - primarySas.targetFrequencyHz : null, 3)} Hz</small></div></section>
           </div>
-          {result.similarity && <div className="benchmark-similarity-card"><strong>Kaynak veri benzerliği ({benchmarkTimeZoneLabel(timeZone)})</strong><span>{result.similarity.matchedSampleCount} eşleşmiş örnek · offset {formatSigned(result.similarity.medianTimeOffsetMs, 1)} ms · bias {formatSigned(result.similarity.meanFrequencyBiasHz, 5)} Hz · RMSE {formatHz(result.similarity.rmseHz, 5)} · korelasyon {formatMetricNumber(result.similarity.correlation, 4)}</span></div>}
+          {result.similarity && <div className="benchmark-similarity-card"><strong>Kaynak veri benzerliği ({benchmarkTimeZoneLabel(timeZone)})</strong><span>{result.similarity.matchedSampleCount} eşleşmiş örnek · offset {formatSigned(result.similarity.medianTimeOffsetMs, 3)} ms · bias {formatSigned(result.similarity.meanFrequencyBiasHz, 3)} Hz · RMSE {formatHz(result.similarity.rmseHz, 3)} · korelasyon {formatMetricNumber(result.similarity.correlation, 3)}</span></div>}
           <div className="benchmark-quality-grid">{result.imported.quality.findings.map(finding => { const appearance = severityAppearance(finding.severity); return <div key={`${finding.code}-${finding.title}`} className="benchmark-quality-card" style={{ borderColor: appearance.color }}><b style={{ color: appearance.color }} aria-hidden="true">{appearance.icon}</b><div><strong>{finding.title}</strong><small>{finding.detail}</small></div></div>; })}</div>
-          <div className="benchmark-table-wrap"><table className="oscillation-table benchmark-comparison-table"><thead><tr><th>Durum</th><th>SAS Event ({benchmarkTimeZoneLabel(timeZone)})</th><th>GKÇ Tespit Penceresi ({benchmarkTimeZoneLabel(timeZone)})</th><th>Overlap</th><th>Freq Δ</th><th>SAS DR</th><th>GKÇ DR</th><th>Ayrıntılar</th></tr></thead><tbody>{result.comparisons.map(comparison => <>
-            <tr key={comparison.id} className={`benchmark-status-${comparison.status}`}><td><b style={{ color: statusColor[comparison.status] }}>{statusText[comparison.status]}</b></td><td>{formatBenchmarkTimestamp(comparison.sasEvent?.startMs, timeZone)}<br />{formatBenchmarkTimestamp(comparison.sasEvent?.endMs, timeZone)}</td><td>{formatBenchmarkTimestamp(comparison.gkcEvent?.startMs, timeZone)}<br />{formatBenchmarkTimestamp(comparison.gkcEvent?.endMs, timeZone)}</td><td>{formatMetricNumber(comparison.overlapDurationSeconds, 1)} sn · IoU {formatMetricNumber(comparison.iouPercent, 1)}%</td><td>{formatSigned(comparison.frequencyDeltaHz, 3)} Hz</td><td>{formatPercent(comparison.sasDampingPercent)}</td><td>Min {formatPercent(comparison.gkcMinDampingPercent)}<br />Avg {formatPercent(comparison.gkcAverageDampingPercent)}</td><td><button className="btn btn-outline btn-compact" onClick={() => setExpandedComparisonId(expandedComparisonId === comparison.id ? null : comparison.id)}>{expandedComparisonId === comparison.id ? 'Kapat' : 'Ayrıntılar'}</button></td></tr>
-            {expandedComparisonId === comparison.id && <tr key={`${comparison.id}-detail`} className="benchmark-detail-row"><td colSpan={8}><div className="benchmark-detail-grid"><span>Başlangıç Δt: {formatSigned(comparison.startDeltaSeconds)} sn</span><span>Bitiş Δt: {formatSigned(comparison.endDeltaSeconds)} sn</span><span>Süre Δ: {formatSigned(comparison.durationDeltaSeconds)} sn</span><span>SAS kapsama: {formatPercent(comparison.sasCoveragePercent)}</span><span>GKÇ kapsama: {formatPercent(comparison.gkcCoveragePercent)}</span><span>SAS peak: {formatHz(comparison.sasPeakMagnitudeHz, 5)} (yöntem bağımlı)</span><span>GKÇ peak: {formatMetricNumber(comparison.gkcPeakAmplitude, 5)}</span><span>Negative damping: {comparison.negativeDampingDirectionMatches === null ? '—' : comparison.negativeDampingDirectionMatches ? 'yön uyumlu' : 'farklı'}</span></div></td></tr>}
+          <div className="benchmark-table-wrap"><table className="oscillation-table benchmark-comparison-table"><thead><tr><th>Durum</th><th>SAS ACTIVE ({benchmarkTimeZoneLabel(timeZone)})</th><th>GKÇ Tespit Penceresi</th><th>Örtüşme</th><th>Δf</th><th>SAS DR</th><th>GKÇ Event DR</th><th>Ayrıntı</th></tr></thead><tbody>{result.comparisons.map(comparison => <>
+            <tr key={comparison.id} className={`benchmark-status-${comparison.status}`}><td><b style={{ color: statusColor[comparison.status] }}>{statusText[comparison.status]}</b></td><td>{formatBenchmarkTimestamp(comparison.sasEvent?.startMs, timeZone)}<br />{formatBenchmarkTimestamp(comparison.sasEvent?.endMs, timeZone)}</td><td>{formatBenchmarkTimestamp(comparison.gkcEvent?.startMs, timeZone)}<br />{formatBenchmarkTimestamp(comparison.gkcEvent?.endMs, timeZone)}</td><td>{formatMetricNumber(comparison.overlapDurationSeconds, 1)} sn · IoU {formatMetricNumber(comparison.iouPercent, 1)}%</td><td>{formatSigned(comparison.frequencyDeltaHz, 3)} Hz</td><td>{formatPercent(comparison.sasDampingPercent)}</td><td>Min {formatPercent(comparison.gkcMinDampingPercent)}<br />Ort. {formatPercent(comparison.gkcAverageDampingPercent)}</td><td><button className="btn btn-outline btn-compact" onClick={() => setExpandedComparisonId(expandedComparisonId === comparison.id ? null : comparison.id)}>{expandedComparisonId === comparison.id ? 'Kapat' : 'Ayrıntı'}</button></td></tr>
+            {expandedComparisonId === comparison.id && <tr key={`${comparison.id}-detail`} className="benchmark-detail-row"><td colSpan={8}><div className="benchmark-detail-grid"><span>Başlangıç Δt: {formatSigned(comparison.startDeltaSeconds, 3)} sn</span><span>Bitiş Δt: {formatSigned(comparison.endDeltaSeconds, 3)} sn</span><span>Süre Δ: {formatSigned(comparison.durationDeltaSeconds, 3)} sn</span><span>SAS kapsama: {formatPercent(comparison.sasCoveragePercent)}</span><span>GKÇ kapsama: {formatPercent(comparison.gkcCoveragePercent)}</span><span>SAS tepe: {formatHz(comparison.sasPeakMagnitudeHz, 3)} (yöntem bağımlı)</span><span>GKÇ tepe: {formatMetricNumber(comparison.gkcPeakAmplitude, 3)}</span><span>Band DR: {formatPercent(currentBandMetric?.dampingRatioPercent)}</span><span>Negatif damping: {comparison.negativeDampingDirectionMatches === null ? '—' : comparison.negativeDampingDirectionMatches ? 'yön uyumlu' : 'farklı'}</span></div></td></tr>}
           </>)}</tbody></table></div>
-          {result.episodes.length > 0 && <div className="benchmark-table-wrap"><table className="oscillation-table benchmark-comparison-table"><thead><tr><th>Episode seviyesi</th><th>SAS ACTIVE burst ({benchmarkTimeZoneLabel(timeZone)})</th><th>GKÇ Tespit Penceresi ({benchmarkTimeZoneLabel(timeZone)})</th><th>Overlap</th><th>Kapsama</th><th>Δf</th><th>Negative damping</th></tr></thead><tbody>{result.episodes.map(episode => <tr key={episode.id}><td>{episode.sasEvents.length} SAS burst ↔ 1 GKÇ detection episode</td><td>{episode.sasEvents.map(event => `${formatBenchmarkTimestamp(event.startMs, timeZone, false)}–${formatBenchmarkTimestamp(event.endMs, timeZone, false)}`).join(', ') || '—'}</td><td>{formatBenchmarkTimestamp(episode.gkcEpisode.startMs, timeZone)}<br />{formatBenchmarkTimestamp(episode.gkcEpisode.endMs, timeZone)}</td><td>{formatMetricNumber(episode.overlapDurationSeconds, 1)} sn</td><td>SAS {formatPercent(episode.sasCoveragePercent)} · GKÇ {formatPercent(episode.gkcCoveragePercent)}</td><td>{formatSigned(episode.dominantFrequencyDeltaHz, 3)} Hz</td><td>{episode.hasNegativeDamping ? 'Var' : 'Yok'}</td></tr>)}</tbody></table></div>}
-          <div className="benchmark-method-note">`f_tgt_hz` yalnızca <strong>Harici Hedef Frekans</strong>tır. SAS `magnitude_hz` ve GKÇ amplitude aynı yöntemle hesaplanmaz; peak kıyası yöntem bağımlıdır. Band DR, Event Min DR ve Event Avg DR ayrı semantiklerle gösterilir.</div>
-          {chartOptions && <div className="benchmark-chart-grid"><section className="benchmark-chart-card"><h4>Frekans — Δf (mHz) · {benchmarkTimeZoneLabel(timeZone)}</h4><ReactECharts option={chartOptions.frequency} onChartReady={chartReady} style={{ height: 270, width: '100%' }} notMerge lazyUpdate /></section><section className="benchmark-chart-card"><h4>SAS magnitude / GKÇ amplitude — doğru eşik · {benchmarkTimeZoneLabel(timeZone)}</h4><ReactECharts option={chartOptions.magnitude} onChartReady={chartReady} style={{ height: 270, width: '100%' }} notMerge lazyUpdate /></section><section className="benchmark-chart-card"><h4>Damping — 0% referansı · {benchmarkTimeZoneLabel(timeZone)}</h4><ReactECharts option={chartOptions.damping} onChartReady={chartReady} style={{ height: 270, width: '100%' }} notMerge lazyUpdate /></section><section className="benchmark-chart-card"><h4>SAS State / ctrl_value ve GKÇ Tespit Penceresi · {benchmarkTimeZoneLabel(timeZone)}</h4><ReactECharts option={chartOptions.state} onChartReady={chartReady} style={{ height: 270, width: '100%' }} notMerge lazyUpdate /></section></div>}
-          <div className="benchmark-table-wrap benchmark-raw-table"><table className="oscillation-table"><thead><tr><th>Zaman ({benchmarkTimeZoneLabel(timeZone)})</th><th>SAS algo F</th><th>SAS raw PMU 50 Hz F</th><th>{result.mode === 'ytbs' ? 'YTBS / GKÇ F' : 'GKÇ input F'}</th><th>Harici Hedef Frekans</th><th>SAS magnitude</th><th>SAS threshold</th><th>State</th><th>ctrl_value</th><th>SAS damping</th><th>time/data</th></tr></thead><tbody>{result.imported.algoRows.slice(0, 500).map((row, index) => { const raw = nearestPmuSampleInSorted(sortedSasPmu, row.timestampMs, sasRawMatchToleranceMs(sortedSasPmu)).sample; const gkc = nearestPmuSampleInSorted(sortedGkcPmu, row.timestampMs, gkcToleranceMs).sample; return <tr key={`${row.timestampMs}-${index}`}><td>{formatBenchmarkTimestamp(row.timestampMs, timeZone)}</td><td>{formatHz(row.frequencyHz, 5)}</td><td>{formatHz(raw?.frequency, 5)}</td><td>{formatHz(gkc?.frequency, 5)}</td><td>{formatHz(row.targetFrequencyHz, 4)}</td><td>{formatHz(row.magnitudeHz, 5)}</td><td>{formatHz(row.startThresholdHz, 5)}</td><td>{row.controlState}</td><td>{row.controlValue ?? '—'}</td><td>{formatPercent(row.dampingRatio === null ? null : row.dampingRatio * 100)}</td><td>{row.timeHealth} / {String(row.dataValid)}</td></tr>; })}</tbody></table>{result.imported.algoRows.length > 500 && <div className="benchmark-table-note">İlk 500 SAS algo satırı gösterilir; PMU eşleştirmesi satır indeksiyle değil timestamp / nearest-neighbour ile yapılır.</div>}</div>
-          <OscillationBenchmarkPrintReport result={result} timeZone={timeZone} />
+          {result.episodes.length > 0 && <div className="benchmark-table-wrap"><table className="oscillation-table benchmark-comparison-table"><thead><tr><th>Episode eşleştirme</th><th>SAS ACTIVE burst</th><th>GKÇ Tespit Penceresi</th><th>Örtüşme</th><th>Kapsama</th><th>Δf</th><th>Negatif damping</th></tr></thead><tbody>{result.episodes.map(episode => <tr key={episode.id}><td>{episode.sasEvents.length} SAS burst ↔ 1 GKÇ episode</td><td>{episode.sasEvents.map(event => `${formatBenchmarkTimestamp(event.startMs, timeZone, false)}–${formatBenchmarkTimestamp(event.endMs, timeZone, false)}`).join(', ') || '—'}</td><td>{formatBenchmarkTimestamp(episode.gkcEpisode.startMs, timeZone)}<br />{formatBenchmarkTimestamp(episode.gkcEpisode.endMs, timeZone)}</td><td>{formatMetricNumber(episode.overlapDurationSeconds, 1)} sn</td><td>SAS {formatPercent(episode.sasCoveragePercent)} · GKÇ {formatPercent(episode.gkcCoveragePercent)}</td><td>{formatSigned(episode.dominantFrequencyDeltaHz, 3)} Hz</td><td>{episode.hasNegativeDamping ? 'Var' : 'Yok'}</td></tr>)}</tbody></table></div>}
+          <div className="benchmark-method-note"><strong>Not:</strong> Harici hedef frekans `f_tgt_hz`dir. SAS genliği ile GKÇ genliği yöntem bağımlıdır; Band DR ile Event Min/Ort. DR farklı ölçümlerdir.</div>
+          {chartOptions && <div className="benchmark-chart-grid"><section className="benchmark-chart-card"><h4>Frekans karşılaştırması — 50 Hz farkı ve GKÇ − SAS</h4><ReactECharts ref={bindChartRef('frequency')} option={chartOptions.frequency} onChartReady={chartReady} style={{ height: 280, width: '100%' }} notMerge lazyUpdate /></section><section className="benchmark-chart-card"><h4>Genlik ve eşikler (mHz)</h4><ReactECharts ref={bindChartRef('magnitude')} option={chartOptions.magnitude} onChartReady={chartReady} style={{ height: 280, width: '100%' }} notMerge lazyUpdate /></section><section className="benchmark-chart-card"><h4>Sönüm oranı (DR, %)</h4><ReactECharts ref={bindChartRef('damping')} option={chartOptions.damping} onChartReady={chartReady} style={{ height: 280, width: '100%' }} notMerge lazyUpdate /></section><section className="benchmark-chart-card"><h4>SAS durum / kontrol ve GKÇ tespit penceresi</h4><ReactECharts ref={bindChartRef('state')} option={chartOptions.state} onChartReady={chartReady} style={{ height: 280, width: '100%' }} notMerge lazyUpdate /></section></div>}
+          <div className="benchmark-raw-heading">Ham zaman hizalaması · ilk 500 SAS algoritma satırı</div>
+          <div className="benchmark-table-wrap benchmark-raw-table"><table className="oscillation-table"><thead><tr><th>Zaman ({benchmarkTimeZoneLabel(timeZone)})</th><th>SAS algoritma F</th><th>SAS PMU 50 Hz F</th><th>{result.mode === 'ytbs' ? 'GKÇ / YTBS F' : 'GKÇ 10 Hz F'}</th><th>GKÇ − SAS</th><th>SAS durum</th><th>SAS DR</th></tr></thead><tbody>{result.imported.algoRows.slice(0, 500).map((row, index) => { const raw = nearestPmuSampleInSorted(sortedSasPmu, row.timestampMs, sasRawMatchToleranceMs(sortedSasPmu)).sample; const gkc = nearestPmuSampleInSorted(sortedGkcPmu, row.timestampMs, gkcToleranceMs).sample; const delta = Number.isFinite(gkc?.frequency) && Number.isFinite(raw?.frequency) ? (gkc?.frequency as number) - (raw?.frequency as number) : null; return <tr key={`${row.timestampMs}-${index}`}><td>{formatBenchmarkTimestamp(row.timestampMs, timeZone)}</td><td>{formatHz(row.frequencyHz, 3)}</td><td>{formatHz(raw?.frequency, 3)}</td><td>{formatHz(gkc?.frequency, 3)}</td><td>{formatSigned(delta, 3)} Hz</td><td>{row.controlState}</td><td>{formatPercent(row.dampingRatio === null ? null : row.dampingRatio * 100)}</td></tr>; })}</tbody></table></div>
+          <OscillationBenchmarkPrintReport result={result} timeZone={timeZone} chartImages={printChartImages} />
         </>
       )}
     </div>
