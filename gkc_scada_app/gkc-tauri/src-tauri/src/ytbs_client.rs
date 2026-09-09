@@ -377,6 +377,50 @@ mod scada_parser_tests {
             "loginSmsForm:btnGiris".to_string()
         )));
     }
+
+    #[test]
+    fn normalizes_current_mgkp_pmu_wire_values() {
+        assert_eq!(YtbsClient::normalize_mgkp_faz_id("").unwrap(), "1");
+        assert_eq!(YtbsClient::normalize_mgkp_faz_id("3").unwrap(), "3");
+        assert!(YtbsClient::normalize_mgkp_faz_id("Üç Faz").is_err());
+        assert_eq!(
+            YtbsClient::normalize_mgkp_device_id("376", "PMU").unwrap(),
+            "M376"
+        );
+        assert_eq!(
+            YtbsClient::normalize_mgkp_device_id("M376", "PMU").unwrap(),
+            "M376"
+        );
+        assert_eq!(
+            YtbsClient::normalize_mgkp_device_id("376", "PQ").unwrap(),
+            "376"
+        );
+    }
+
+    #[test]
+    fn finds_dynamic_goster_button_without_a_hard_coded_component_id() {
+        let response = r#"
+            <button id="form:j_idt3539" name="form:j_idt3539" class="ui-button" type="submit">
+                <span class="ui-button-text">GÖSTER</span>
+            </button>
+        "#;
+
+        assert_eq!(
+            YtbsClient::extract_goster_button_id(response).as_deref(),
+            Some("form:j_idt3539")
+        );
+    }
+
+    #[test]
+    fn malformed_grafik_json_is_reported_instead_of_becoming_empty_data() {
+        let response = r#"
+            <script>var grafik_verisi_json = [{"zaman":"09.09.2026 21:00:02.000","y14":}];</script>
+        "#;
+
+        let error = YtbsClient::parse_grafik_verisi(response).unwrap_err();
+        assert!(error.contains("parse hatası"));
+        assert!(error.contains("blok 1"));
+    }
 }
 
 impl YtbsClient {
@@ -586,6 +630,7 @@ impl YtbsClient {
             return Err("YTBS'ye bağlı değil".into());
         }
 
+        self.goster_button_id = None;
         let view_state = self.view_state.as_ref().ok_or("ViewState bulunamadı")?;
 
         // Menü navigasyonu: formMenu:mgkpOlcumVerileri
@@ -614,26 +659,28 @@ impl YtbsClient {
             self.view_state = Some(vs);
         }
 
-        // GÖSTER butonu ID'sini güncelle
-        if let Some(btn_id) = Self::extract_goster_button_id(&response_text) {
-            self.goster_button_id = Some(btn_id);
+        if Self::is_session_expired_response(&response_text) {
+            self.status = YtbsSessionStatus::SessionExpired;
+            return Err("Oturum süresi dolmuş, yeniden giriş gerekli".into());
         }
 
-        if response_text.contains("MGKP") || response_text.contains("form:cihaz") {
-            self.is_on_mgkp_page = true;
-            self.is_on_scada_page = false;
-            self.last_activity = Some(chrono::Utc::now());
-            Ok(())
-        } else if Self::is_session_expired_response(&response_text) {
-            self.status = YtbsSessionStatus::SessionExpired;
-            Err("Oturum süresi dolmuş, yeniden giriş gerekli".into())
-        } else {
-            // Sayfa yüklendi ama MGKP teyidi yok — yine de devam et
-            self.is_on_mgkp_page = true;
-            self.is_on_scada_page = false;
-            self.last_activity = Some(chrono::Utc::now());
-            Ok(())
+        if !response_text.contains("form:cihaz_input") {
+            return Err(
+                "MGKP Ölçüm Verisi sayfası doğrulanamadı; form:cihaz_input bulunamadı.".to_string(),
+            );
         }
+
+        self.goster_button_id = Self::extract_goster_button_id(&response_text);
+        if self.goster_button_id.is_none() {
+            return Err(
+                "MGKP Ölçüm Verisi sayfasında dinamik GÖSTER butonu bulunamadı.".to_string(),
+            );
+        }
+
+        self.is_on_mgkp_page = true;
+        self.is_on_scada_page = false;
+        self.last_activity = Some(chrono::Utc::now());
+        Ok(())
     }
 
     /// SCADA ölçüm verileri sayfasına navigasyon yap.
@@ -646,6 +693,7 @@ impl YtbsClient {
             return Err("YTBS'ye bağlı değil".into());
         }
 
+        self.goster_button_id = None;
         let view_state = self.view_state.clone().ok_or("ViewState bulunamadı")?;
 
         let form_params = [
@@ -672,9 +720,7 @@ impl YtbsClient {
             self.view_state = Some(vs);
         }
 
-        if let Some(btn_id) = Self::extract_goster_button_id(&response_text) {
-            self.goster_button_id = Some(btn_id);
-        }
+        self.goster_button_id = Self::extract_goster_button_id(&response_text);
 
         if Self::is_session_expired_response(&response_text) {
             self.status = YtbsSessionStatus::SessionExpired;
@@ -690,6 +736,10 @@ impl YtbsClient {
             return Err(
                 "SCADA ölçüm verileri sayfası doğrulanamadı; filtre formu bulunamadı.".into(),
             );
+        }
+
+        if self.goster_button_id.is_none() {
+            return Err("SCADA Ölçüm Verisi sayfasında dinamik GÖSTER butonu bulunamadı.".into());
         }
 
         self.is_on_mgkp_page = false;
@@ -742,10 +792,9 @@ impl YtbsClient {
         self.apply_scada_filter_state(b1, b2, b3).await?;
 
         let view_state = self.view_state.clone().ok_or("ViewState bulunamadı")?;
-        let btn_id = self
-            .goster_button_id
-            .as_deref()
-            .unwrap_or("form:j_idt14326");
+        let btn_id = self.goster_button_id.as_deref().ok_or(
+            "SCADA Ölçüm Verisi sayfasında dinamik GÖSTER butonu bulunamadı; YTBS sayfa şeması değişmiş olabilir.",
+        )?;
 
         let params = Self::build_scada_query_params(
             btn_id,
@@ -919,6 +968,7 @@ impl YtbsClient {
         measurement_type: &str,
         gerilim: &str,
         faz_id: &str,
+        device_id: &str,
     ) -> Result<(), String> {
         self.post_mgkp_filter_change(
             "form:olcumTipi",
@@ -930,15 +980,32 @@ impl YtbsClient {
         )
         .await?;
 
-        self.post_mgkp_filter_change(
-            "form:gerilim",
-            "form:cihaz",
-            "change",
-            gerilim,
-            faz_id,
-            measurement_type,
-        )
-        .await
+        let devices = self
+            .post_mgkp_filter_change(
+                "form:gerilim",
+                "form:cihaz",
+                "change",
+                gerilim,
+                faz_id,
+                measurement_type,
+            )
+            .await?;
+
+        if devices.is_empty() {
+            return Err(
+                "MGKP cihaz listesi ölçüm tipi ve gerilim filtrelerinden sonra güncellenemedi. YTBS PMU cihaz seçenekleri yanıt içinde bulunamadı."
+                    .to_string(),
+            );
+        }
+
+        if !devices.iter().any(|option| option.value == device_id) {
+            return Err(format!(
+                "YTBS PMU cihazı '{}' seçilen ölçüm tipi={}, gerilim={}, faz={} için güncel cihaz listesinde yok. İstek gönderilmedi.",
+                device_id, measurement_type, gerilim, faz_id
+            ));
+        }
+
+        Ok(())
     }
 
     async fn post_mgkp_filter_change(
@@ -949,7 +1016,7 @@ impl YtbsClient {
         gerilim: &str,
         faz_id: &str,
         measurement_type: &str,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<YtbsSelectOption>, String> {
         let view_state = self.view_state.clone().ok_or("ViewState bulunamadı")?;
         let params = Self::build_mgkp_filter_change_params(
             source,
@@ -995,7 +1062,10 @@ impl YtbsClient {
         }
 
         self.last_activity = Some(chrono::Utc::now());
-        Ok(())
+        Ok(Self::extract_select_options(
+            &response_text,
+            "form:cihaz_input",
+        ))
     }
 
     fn build_scada_filter_change_params(
@@ -1090,8 +1160,8 @@ impl YtbsClient {
         measurement_type: &str, // "PQ" veya "PMU"
         start_time: &str,       // "dd.MM.yyyy HH:mm" formatında
         end_time: &str,         // "dd.MM.yyyy HH:mm" formatında
-        gerilim: &str,          // "" = Hepsi, "380", "154", "33", "15"
-        faz_id: &str,           // "1" = Tek Faz, "" = Üç Faz
+        gerilim: &str,          // "" = Hepsi, "GERILIM_400KV", "GERILIM_154KV", "GERILIM_33KV"
+        faz_id: &str,           // "1" = Tek Faz, "3" = Üç Faz
     ) -> Result<(Vec<RmsData>, String), String> {
         if self.status != YtbsSessionStatus::Connected {
             return Err("YTBS'ye bağlı değil".into());
@@ -1103,17 +1173,22 @@ impl YtbsClient {
             "PQ"
         };
 
+        let faz_id = Self::normalize_mgkp_faz_id(faz_id)?;
+        let device_id = Self::normalize_mgkp_device_id(device_id, measurement_type)?;
+
         // MGKP sayfasında değilsek önce navigasyon yap
         if !self.is_on_mgkp_page {
             self.navigate_to_mgkp().await?;
         }
 
-        self.apply_mgkp_filter_state(measurement_type, gerilim, faz_id)
+        self.apply_mgkp_filter_state(measurement_type, gerilim, faz_id, &device_id)
             .await?;
 
         let view_state = self.view_state.as_ref().ok_or("ViewState bulunamadı")?;
 
-        let btn_id = self.goster_button_id.as_deref().unwrap_or("form:j_idt8635");
+        let btn_id = self.goster_button_id.as_deref().ok_or(
+            "MGKP formunda dinamik GÖSTER butonu bulunamadı; YTBS sayfa şeması değişmiş olabilir.",
+        )?;
         let btn_id_encoded = urlencoding_simple(btn_id);
 
         // PrimeFaces AJAX POST parametreleri (jakarta.faces — DOM analizinde doğrulandı)
@@ -1355,27 +1430,23 @@ impl YtbsClient {
 
     /// HTML içerisinden GÖSTER butonunun dinamik PrimeFaces ID'sini çıkarır
     fn extract_goster_button_id(html: &str) -> Option<String> {
-        // Örnek: name="form:j_idt14614" ... >GÖSTER</span>
-        let re =
-            Regex::new(r#"name="(form:j_idt\d+)"[^>]*>[^<]*<span[^>]*>G[ÖO]STER</span>"#).ok()?;
-        if let Some(caps) = re.captures(html) {
-            return Some(caps[1].to_string());
-        }
+        let button_re = Regex::new(r#"(?s)<button\b([^>]*)>(.*?)</button>"#).ok()?;
 
-        // Alternatif (Unicode sorunları için): . karakteri ile G.STER
-        let re2 =
-            Regex::new(r#"name="(form:j_idt\d+)"[^>]*>[^<]*<span[^>]*>G.STER</span>"#).ok()?;
-        if let Some(caps) = re2.captures(html) {
-            return Some(caps[1].to_string());
-        }
+        let button_id = button_re.captures_iter(html).find_map(|caps| {
+            let label = Self::html_unescape(&Self::strip_tags(caps.get(2)?.as_str()))
+                .trim()
+                .to_uppercase();
+            if !matches!(label.as_str(), "GÖSTER" | "GÃ–STER" | "GOSTER") {
+                return None;
+            }
 
-        // Alternatif id araması
-        let re3 = Regex::new(r#"id="(form:j_idt\d+)"[^>]*>[^<]*<span[^>]*>G.STER</span>"#).ok()?;
-        if let Some(caps) = re3.captures(html) {
-            return Some(caps[1].to_string());
-        }
-
-        None
+            let attrs = caps.get(1)?.as_str();
+            ["id", "name"].into_iter().find_map(|attribute| {
+                let id = Self::extract_html_attr(attrs, attribute)?;
+                id.starts_with("form:").then_some(id)
+            })
+        });
+        button_id
     }
 
     /// PrimeFaces partial-response XML'inden grafik_verisi_json çıkar
@@ -1391,97 +1462,110 @@ impl YtbsClient {
             .replace("&quot;", "\"");
 
         let start_time = std::time::Instant::now();
-        let marker = "var grafik_verisi_json = ";
+        let assignment_re = Regex::new(r#"var\s+grafik_verisi_json\s*=\s*"#)
+            .map_err(|e| format!("YTBS grafik ayrıştırıcısı hazırlanamadı: {}", e))?;
         let mut all_data_map: std::collections::HashMap<String, YtbsGrafikVerisi> =
             std::collections::HashMap::new();
 
         let mut search_pos = 0;
-        while let Some(start_idx) = clean_response[search_pos..].find(marker) {
-            let actual_start = search_pos + start_idx;
-            let json_start = clean_response[actual_start + marker.len()..].trim_start();
+        let mut block_index = 0;
+        while let Some(assignment) = assignment_re.find_at(&clean_response, search_pos) {
+            block_index += 1;
+            let (json_content, next_position) = Self::extract_json_array(&clean_response, assignment.end())
+                .ok_or_else(|| format!(
+                    "YTBS grafik verisi şema hatası: grafik_verisi_json blok {} geçerli bir JSON dizisi değil.",
+                    block_index
+                ))?;
+            search_pos = next_position;
 
-            if let Some(end_idx) = json_start.find("];") {
-                let json_content = &json_start[..end_idx + 1];
-                search_pos = actual_start + marker.len() + end_idx;
+            let batch =
+                serde_json::from_str::<Vec<YtbsGrafikVerisi>>(json_content).map_err(|e| {
+                    format!(
+                    "YTBS grafik verisi parse hatası: grafik_verisi_json blok {} çözümlenemedi: {}",
+                    block_index, e
+                )
+                })?;
 
-                if let Ok(batch) = serde_json::from_str::<Vec<YtbsGrafikVerisi>>(json_content) {
-                    for item in batch {
-                        let entry =
-                            all_data_map
-                                .entry(item.zaman.clone())
-                                .or_insert(YtbsGrafikVerisi {
-                                    zaman: item.zaman.clone(),
-                                    y1: None,
-                                    y2: None,
-                                    y3: None,
-                                    y4: None,
-                                    y5: None,
-                                    y6: None,
-                                    y7: None,
-                                    y8: None,
-                                    y9: None,
-                                    y10: None,
-                                    y11: None,
-                                    y12: None,
-                                    y13: None,
-                                    y14: None,
-                                    y15: None,
-                                    y16: None,
-                                });
+            for item in batch {
+                let entry = all_data_map
+                    .entry(item.zaman.clone())
+                    .or_insert(YtbsGrafikVerisi {
+                        zaman: item.zaman.clone(),
+                        y1: None,
+                        y2: None,
+                        y3: None,
+                        y4: None,
+                        y5: None,
+                        y6: None,
+                        y7: None,
+                        y8: None,
+                        y9: None,
+                        y10: None,
+                        y11: None,
+                        y12: None,
+                        y13: None,
+                        y14: None,
+                        y15: None,
+                        y16: None,
+                    });
 
-                        if item.y1.is_some() {
-                            entry.y1 = item.y1;
-                        }
-                        if item.y2.is_some() {
-                            entry.y2 = item.y2;
-                        }
-                        if item.y3.is_some() {
-                            entry.y3 = item.y3;
-                        }
-                        if item.y4.is_some() {
-                            entry.y4 = item.y4;
-                        }
-                        if item.y5.is_some() {
-                            entry.y5 = item.y5;
-                        }
-                        if item.y6.is_some() {
-                            entry.y6 = item.y6;
-                        }
-                        if item.y7.is_some() {
-                            entry.y7 = item.y7;
-                        }
-                        if item.y8.is_some() {
-                            entry.y8 = item.y8;
-                        }
-                        if item.y9.is_some() {
-                            entry.y9 = item.y9;
-                        }
-                        if item.y10.is_some() {
-                            entry.y10 = item.y10;
-                        }
-                        if item.y11.is_some() {
-                            entry.y11 = item.y11;
-                        }
-                        if item.y12.is_some() {
-                            entry.y12 = item.y12;
-                        }
-                        if item.y13.is_some() {
-                            entry.y13 = item.y13;
-                        }
-                        if item.y14.is_some() {
-                            entry.y14 = item.y14;
-                        }
-                        if item.y15.is_some() {
-                            entry.y15 = item.y15;
-                        }
-                        if item.y16.is_some() {
-                            entry.y16 = item.y16;
-                        }
-                    }
+                if item.y1.is_some() {
+                    entry.y1 = item.y1;
                 }
-            } else {
-                break;
+                if item.y2.is_some() {
+                    entry.y2 = item.y2;
+                }
+                if item.y3.is_some() {
+                    entry.y3 = item.y3;
+                }
+                if item.y4.is_some() {
+                    entry.y4 = item.y4;
+                }
+                if item.y5.is_some() {
+                    entry.y5 = item.y5;
+                }
+                if item.y6.is_some() {
+                    entry.y6 = item.y6;
+                }
+                if item.y7.is_some() {
+                    entry.y7 = item.y7;
+                }
+                if item.y8.is_some() {
+                    entry.y8 = item.y8;
+                }
+                if item.y9.is_some() {
+                    entry.y9 = item.y9;
+                }
+                if item.y10.is_some() {
+                    entry.y10 = item.y10;
+                }
+                if item.y11.is_some() {
+                    entry.y11 = item.y11;
+                }
+                if item.y12.is_some() {
+                    entry.y12 = item.y12;
+                }
+                if item.y13.is_some() {
+                    entry.y13 = item.y13;
+                }
+                if item.y14.is_some() {
+                    entry.y14 = item.y14;
+                }
+                if item.y15.is_some() {
+                    entry.y15 = item.y15;
+                }
+                if item.y16.is_some() {
+                    entry.y16 = item.y16;
+                }
             }
+        }
+
+        if block_index == 0
+            && (clean_response.contains("grafik_verisi_json")
+                || clean_response.contains("<error-name>")
+                || clean_response.contains("<error-message>"))
+        {
+            return Err("YTBS yanıtı grafik verisi içermiyor; bu boş veri yanıtı değil, şema veya sunucu hatası olabilir.".to_string());
         }
 
         let duration = start_time.elapsed();
@@ -1500,6 +1584,77 @@ impl YtbsClient {
 
         let merged_json = serde_json::to_string(&verileri).unwrap_or_default();
         Ok((verileri, merged_json))
+    }
+
+    /// `grafik_verisi_json` değerinin sonunu, JSON içindeki diziler ve metinleri güvenli biçimde takip ederek bulur.
+    fn extract_json_array(input: &str, start: usize) -> Option<(&str, usize)> {
+        let array_start = start
+            + input[start..]
+                .char_indices()
+                .find_map(|(index, character)| (!character.is_whitespace()).then_some(index))?;
+        if input[array_start..].chars().next()? != '[' {
+            return None;
+        }
+
+        let mut depth = 0usize;
+        let mut in_string = false;
+        let mut escaped = false;
+        for (offset, character) in input[array_start..].char_indices() {
+            if in_string {
+                if escaped {
+                    escaped = false;
+                } else if character == '\\' {
+                    escaped = true;
+                } else if character == '"' {
+                    in_string = false;
+                }
+                continue;
+            }
+
+            match character {
+                '"' => in_string = true,
+                '[' => depth += 1,
+                ']' => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        let end = array_start + offset + character.len_utf8();
+                        return Some((&input[array_start..end], end));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    fn normalize_mgkp_faz_id(faz_id: &str) -> Result<&str, String> {
+        match faz_id.trim() {
+            "" => Ok("1"), // Eski çağıranlar boş değer gönderiyordu; YTBS'de gerçek varsayılan Tek Faz değeridir.
+            "1" => Ok("1"),
+            "3" => Ok("3"),
+            value => Err(format!(
+                "Geçersiz YTBS PMU faz değeri '{}'. form:fazId_input için yalnızca 1 (Tek Faz) veya 3 (Üç Faz) kullanılabilir.",
+                value
+            )),
+        }
+    }
+
+    fn normalize_mgkp_device_id(device_id: &str, measurement_type: &str) -> Result<String, String> {
+        let device_id = device_id.trim();
+        if device_id.is_empty() || device_id == "-1" {
+            return Err("YTBS cihazı seçilmedi.".to_string());
+        }
+
+        if measurement_type.eq_ignore_ascii_case("PMU")
+            && device_id
+                .bytes()
+                .all(|character| character.is_ascii_digit())
+        {
+            return Ok(format!("M{}", device_id));
+        }
+
+        Ok(device_id.to_string())
     }
 
     fn parse_scada_grafik_verisi(response: &str) -> Result<YtbsScadaQueryResult, String> {

@@ -459,7 +459,9 @@ export const useOscillationStore = create<OscillationStoreState>((set, get) => (
         startIso: state.startTime,
         endIso: state.endTime,
         gerilimByPmuId,
-        fazId: '',
+        // YTBS MGKP PMU formunda boş değer değil gerçek option value gönderilmelidir.
+        // Referans PMU sorgusu Tek Faz için form:fazId_input=1 kullanıyor.
+        fazId: '1',
         onProgress: progress => set({ queryProgress: progress }),
         invokeRange: async (request: RangeRequest) => invoke<string>('ytbs_query_range', { ...request }),
       });

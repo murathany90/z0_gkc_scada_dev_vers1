@@ -158,35 +158,35 @@ pub struct YtbsGrafikVerisi {
     #[serde(default)]
     pub y1: Option<f64>, // Frekans (Hz)
     #[serde(default)]
-    pub y2: Option<f64>,
+    pub y2: Option<f64>, // PMU gerilim büyüklüğü Faz A (kV)
     #[serde(default)]
-    pub y3: Option<f64>, // Gerilim Faz A (kV)
+    pub y3: Option<f64>, // PMU gerilim büyüklüğü Faz B (kV)
     #[serde(default)]
-    pub y4: Option<f64>, // Gerilim Faz B (kV)
+    pub y4: Option<f64>, // PMU gerilim büyüklüğü Faz C (kV)
     #[serde(default)]
-    pub y5: Option<f64>, // Gerilim Faz C (kV)
+    pub y5: Option<f64>, // PMU gerilim fazörü Faz A (°)
     #[serde(default)]
-    pub y6: Option<f64>,
+    pub y6: Option<f64>, // PMU gerilim fazörü Faz B (°)
     #[serde(default)]
-    pub y7: Option<f64>, // Akım Faz A (A)
+    pub y7: Option<f64>, // PMU gerilim fazörü Faz C (°)
     #[serde(default)]
-    pub y8: Option<f64>, // Akım Faz B (A)
+    pub y8: Option<f64>, // PMU akım büyüklüğü Faz A (A)
     #[serde(default)]
-    pub y9: Option<f64>, // Akım Faz C (A)
+    pub y9: Option<f64>, // PMU akım büyüklüğü Faz B (A)
     #[serde(default)]
-    pub y10: Option<f64>,
+    pub y10: Option<f64>, // PMU akım büyüklüğü Faz C (A)
     #[serde(default)]
-    pub y11: Option<f64>, // Aktif Güç (MW)
+    pub y11: Option<f64>, // PMU akım fazörü Faz A (°)
     #[serde(default)]
-    pub y12: Option<f64>, // Reaktif Güç (MVAr)
+    pub y12: Option<f64>, // PMU akım fazörü Faz B (°)
     #[serde(default)]
-    pub y13: Option<f64>, // Görünen Güç (MVA)
+    pub y13: Option<f64>, // PMU akım fazörü Faz C (°)
     #[serde(default)]
-    pub y14: Option<f64>,
+    pub y14: Option<f64>, // PMU aktif güç (MW)
     #[serde(default)]
-    pub y15: Option<f64>,
+    pub y15: Option<f64>, // PMU reaktif güç (MVAr)
     #[serde(default)]
-    pub y16: Option<f64>,
+    pub y16: Option<f64>, // PMU görünür güç (MVA)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
