@@ -3,6 +3,8 @@ import type { OscillationAnalysisResult, PmuFider, PmuSample } from '../types/os
 import type { OscillationDetailsTab } from '../store/oscillationStore.ts';
 import { formatMetricNumber, formatPmuDisplayName, SIGNAL_LABELS } from './chartHelpers.ts';
 import { OscillationReportPanel } from './OscillationReportPanel.tsx';
+import { OscillationBenchmarkPanel } from './OscillationBenchmarkPanel.tsx';
+import type { OscillationThemeMode } from './chartHelpers.ts';
 import {
   buildOscillationEventDetails,
   humanizeBand,
@@ -16,6 +18,7 @@ const tabs: Array<{ id: OscillationDetailsTab; label: string }> = [
   { id: 'modal', label: 'Modal Analiz' },
   { id: 'data', label: 'Veriler / Ayrıntılar' },
   { id: 'report', label: 'Rapor' },
+  { id: 'benchmark', label: 'Karşılaştırma / Benchmark' },
 ];
 
 export function OscillationDetailsTabs({
@@ -25,6 +28,9 @@ export function OscillationDetailsTabs({
   samples,
   pmuDevices,
   reportMarkdown,
+  themeMode,
+  windowSeconds,
+  stepSeconds,
 }: {
   activeTab: OscillationDetailsTab;
   onTabChange: (tab: OscillationDetailsTab) => void;
@@ -32,6 +38,9 @@ export function OscillationDetailsTabs({
   samples: PmuSample[];
   pmuDevices: PmuFider[];
   reportMarkdown: string;
+  themeMode: OscillationThemeMode;
+  windowSeconds: number;
+  stepSeconds: number;
 }) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const pmuName = (pmuId: string): string =>
@@ -241,6 +250,9 @@ export function OscillationDetailsTabs({
         {activeTab === 'report' && (
           <OscillationReportPanel result={result} reportMarkdown={reportMarkdown} pmuDevices={pmuDevices} />
         )}
+        <div style={{ display: activeTab === 'benchmark' ? 'block' : 'none' }}>
+          <OscillationBenchmarkPanel themeMode={themeMode} windowSeconds={windowSeconds} stepSeconds={stepSeconds} />
+        </div>
       </div>
     </div>
   );

@@ -23,7 +23,7 @@ import type {
   SequentialPmuResult,
 } from '../types/oscillationTypes.ts';
 
-export type OscillationDetailsTab = 'summary' | 'signals' | 'modal' | 'data' | 'report';
+export type OscillationDetailsTab = 'summary' | 'signals' | 'modal' | 'data' | 'report' | 'benchmark';
 export type OscillationDataSourceMode = 'none' | 'ytbs' | 'demo';
 export const OSCILLATION_SIGNAL_TABS: PmuSignalKey[] = ['frequency', 'voltage', 'activePower', 'reactivePower'];
 export type RawSignalDisplayModeSignal = Extract<PmuSignalKey, 'frequency' | 'voltage'>;

@@ -19,6 +19,7 @@
     "test:scada-query-chunks": "node scripts/scadaQueryChunks.test.ts",
     "test:ytbs-pmu": "node scripts/ytbsPmu.test.ts",
     "test:oscillation": "node scripts/oscillation.test.ts",
+    "test:benchmark": "node scripts/benchmark.test.ts",
     "test:oscillation-training": "node scripts/oscillationTraining.test.ts",
     "test:scada-quality-report": "node scripts/scadaQualityReport.test.ts",
     "test:scada-details": "node scripts/scadaPointDetails.test.ts"
@@ -29,6 +30,7 @@
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
     "fast-xml-parser": "^5.7.3",
+    "fflate": "0.8.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.15.0",

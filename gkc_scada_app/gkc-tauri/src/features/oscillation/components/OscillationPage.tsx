@@ -66,6 +66,9 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
           samples={store.rawSamples}
           pmuDevices={pmuDevices}
           reportMarkdown={store.reportMarkdown}
+          themeMode={themeMode}
+          windowSeconds={store.windowSeconds}
+          stepSeconds={store.stepSeconds}
         />
       </div>
       <OscillationPrintReport
