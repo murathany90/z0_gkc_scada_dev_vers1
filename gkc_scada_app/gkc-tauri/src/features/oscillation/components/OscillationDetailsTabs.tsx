@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { OscillationAnalysisResult, PmuFider, PmuSample } from '../types/oscillationTypes.ts';
+import type { OscillationAmplitudeThresholds, OscillationAnalysisResult, PmuFider, PmuSample, PmuSignalKey } from '../types/oscillationTypes.ts';
 import type { OscillationDetailsTab } from '../store/oscillationStore.ts';
 import { formatMetricNumber, formatPmuDisplayName, SIGNAL_LABELS } from './chartHelpers.ts';
 import { OscillationReportPanel } from './OscillationReportPanel.tsx';
@@ -29,8 +29,14 @@ export function OscillationDetailsTabs({
   pmuDevices,
   reportMarkdown,
   themeMode,
+  amplitudeThresholds,
   windowSeconds,
   stepSeconds,
+  samplingRateHz,
+  selectedSignals,
+  samplesByPmu,
+  selectedPmuIds,
+  referencePmuId,
 }: {
   activeTab: OscillationDetailsTab;
   onTabChange: (tab: OscillationDetailsTab) => void;
@@ -39,8 +45,14 @@ export function OscillationDetailsTabs({
   pmuDevices: PmuFider[];
   reportMarkdown: string;
   themeMode: OscillationThemeMode;
+  amplitudeThresholds: OscillationAmplitudeThresholds;
   windowSeconds: number;
   stepSeconds: number;
+  samplingRateHz: number;
+  selectedSignals: PmuSignalKey[];
+  samplesByPmu: Record<string, PmuSample[]>;
+  selectedPmuIds: string[];
+  referencePmuId?: string;
 }) {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const pmuName = (pmuId: string): string =>
@@ -251,7 +263,18 @@ export function OscillationDetailsTabs({
           <OscillationReportPanel result={result} reportMarkdown={reportMarkdown} pmuDevices={pmuDevices} />
         )}
         <div style={{ display: activeTab === 'benchmark' ? 'block' : 'none' }}>
-          <OscillationBenchmarkPanel themeMode={themeMode} windowSeconds={windowSeconds} stepSeconds={stepSeconds} />
+          <OscillationBenchmarkPanel
+            themeMode={themeMode}
+            amplitudeThresholds={amplitudeThresholds}
+            windowSeconds={windowSeconds}
+            stepSeconds={stepSeconds}
+            samplingRateHz={samplingRateHz}
+            selectedSignals={selectedSignals}
+            analysisResult={result}
+            samplesByPmu={samplesByPmu}
+            selectedPmuIds={selectedPmuIds}
+            referencePmuId={referencePmuId}
+          />
         </div>
       </div>
     </div>

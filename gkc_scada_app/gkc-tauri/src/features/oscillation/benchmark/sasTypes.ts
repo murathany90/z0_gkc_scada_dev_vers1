@@ -1,8 +1,16 @@
-import type { OscillationAnalysisResult, OscillationEvent, PmuSample } from '../types/oscillationTypes.ts';
+import type {
+  OscillationAnalysisResult,
+  OscillationAmplitudeThresholds,
+  OscillationEvent,
+  PmuSample,
+  PmuSignalKey,
+} from '../types/oscillationTypes.ts';
 
 export type SasControlState = 'IDLE' | 'INTERMEDIATE' | 'ACTIVE' | string;
 export type SasDampingType = 'NEGATIVE' | 'CRITICAL' | 'POOR' | string;
-export type BenchmarkFindingSeverity = 'info' | 'warning' | 'error';
+export type BenchmarkFindingSeverity = 'info' | 'warning' | 'critical';
+export type BenchmarkMode = 'same-raw' | 'ytbs';
+export type BenchmarkTimeZone = 'local' | 'utc';
 
 export interface SasAlgoRow {
   timestamp: string;
@@ -96,7 +104,42 @@ export interface PmuResampleResult {
   firTapCount: number;
 }
 
-export type BenchmarkMatchStatus = 'match' | 'missed' | 'extra';
+export type BenchmarkMatchStatus = 'match' | 'near-miss' | 'missed' | 'extra';
+
+export interface BenchmarkAnalysisConfig {
+  samplingRateHz: number;
+  windowSeconds: number;
+  stepSeconds: number;
+  amplitudeThresholds: OscillationAmplitudeThresholds;
+  selectedSignals: PmuSignalKey[];
+  pmuId: string | null;
+}
+
+export interface BenchmarkTimeCoverage {
+  sasStartMs: number | null;
+  sasEndMs: number | null;
+  gkcStartMs: number | null;
+  gkcEndMs: number | null;
+  overlapStartMs: number | null;
+  overlapEndMs: number | null;
+  overlapSeconds: number;
+  covered: boolean;
+}
+
+export interface BenchmarkFrequencySimilarity {
+  matchedSampleCount: number;
+  toleranceMs: number;
+  medianTimeOffsetMs: number | null;
+  meanFrequencyBiasHz: number | null;
+  rmseHz: number | null;
+  correlation: number | null;
+}
+
+export interface BenchmarkPmuTimestampMatch {
+  sample: PmuSample | null;
+  offsetMs: number | null;
+  exact: boolean;
+}
 
 export interface BenchmarkEventComparison {
   id: string;
@@ -106,7 +149,10 @@ export interface BenchmarkEventComparison {
   startDeltaSeconds: number | null;
   endDeltaSeconds: number | null;
   durationDeltaSeconds: number | null;
-  overlapPercent: number | null;
+  overlapDurationSeconds: number | null;
+  iouPercent: number | null;
+  sasCoveragePercent: number | null;
+  gkcCoveragePercent: number | null;
   targetFrequencyHz: number | null;
   gkcDominantFrequencyHz: number | null;
   frequencyDeltaHz: number | null;
@@ -118,12 +164,31 @@ export interface BenchmarkEventComparison {
   negativeDampingDirectionMatches: boolean | null;
 }
 
+export interface BenchmarkEpisodeComparison {
+  id: string;
+  gkcEpisode: OscillationEvent;
+  sasEvents: SasExternalEvent[];
+  overlapDurationSeconds: number;
+  sasCoveragePercent: number;
+  gkcCoveragePercent: number;
+  dominantFrequencyDeltaHz: number | null;
+  hasNegativeDamping: boolean;
+}
+
 export interface OscillationBenchmarkResult {
   imported: SasImportResult;
-  resample: PmuResampleResult;
+  mode: BenchmarkMode;
+  analysisConfig: BenchmarkAnalysisConfig;
+  resample: PmuResampleResult | null;
   gkcAnalysis: OscillationAnalysisResult;
+  gkcInputSamples: PmuSample[];
+  gkcPmuId: string | null;
+  coverage: BenchmarkTimeCoverage;
+  similarity: BenchmarkFrequencySimilarity | null;
   comparisons: BenchmarkEventComparison[];
+  episodes: BenchmarkEpisodeComparison[];
   matchedCount: number;
+  nearMissCount: number;
   missedCount: number;
   extraCount: number;
 }

@@ -6,6 +6,7 @@ import { OscillationSignalTabs } from './OscillationSignalTabs.tsx';
 import { RawDataCharts } from './RawDataCharts.tsx';
 import { EnergyAmplitudeCharts, ModeDampingChart } from './WindowMetricsCharts.tsx';
 import type { OscillationThemeMode } from './chartHelpers.ts';
+import { SAMPLING_RATE_HZ } from '../utils/bands.ts';
 
 export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode }) {
   const store = useOscillationStore();
@@ -67,8 +68,14 @@ export function OscillationPage({ themeMode }: { themeMode: OscillationThemeMode
           pmuDevices={pmuDevices}
           reportMarkdown={store.reportMarkdown}
           themeMode={themeMode}
+          amplitudeThresholds={store.amplitudeThresholds}
           windowSeconds={store.windowSeconds}
           stepSeconds={store.stepSeconds}
+          samplingRateHz={store.analysisResult?.query.samplingRateHz ?? SAMPLING_RATE_HZ}
+          selectedSignals={store.selectedSignals}
+          samplesByPmu={store.samplesByPmu}
+          selectedPmuIds={store.selectedPmuIds}
+          referencePmuId={store.referencePmuId}
         />
       </div>
       <OscillationPrintReport
